@@ -1,0 +1,111 @@
+/* Ona Bages Play — estils de la interfície */
+
+:root {
+  --obp-bg: #121417;
+  --obp-topbar-h: 64px;
+  --obp-ok: #2fb36b;
+  --obp-warn: #e0a526;
+  --obp-error: #e5484d;
+}
+
+html, body {
+  height: 100%;
+}
+
+body {
+  background: var(--obp-bg);
+  overflow: hidden;
+  user-select: none;
+}
+
+/* Barra superior ------------------------------------------------------- */
+
+.topbar {
+  height: var(--obp-topbar-h);
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  padding: 0 1rem;
+  border-bottom: 1px solid var(--bs-border-color);
+  background: var(--bs-tertiary-bg);
+}
+
+.brand {
+  font-weight: 600;
+  font-size: 1.1rem;
+  white-space: nowrap;
+}
+
+.clock {
+  font-size: 2.2rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+}
+
+.engine {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.engine .details {
+  color: var(--bs-secondary-color);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Estat: sempre color + icona + text */
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.7rem;
+  border-radius: 0.4rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: #fff;
+}
+
+.status-connecting { background: #6c5a1e; }
+.status-connected  { background: #1f6b43; }
+.status-error      { background: var(--obp-error); animation: obp-blink 1s steps(2, start) infinite; }
+
+@keyframes obp-blink {
+  50% { opacity: 0.55; }
+}
+
+/* Distribució -------------------------------------------------------- */
+
+.layout {
+  height: calc(100% - var(--obp-topbar-h));
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  grid-template-rows: 1fr 240px;
+  gap: 0.75rem;
+  padding: 0.75rem;
+}
+
+.players {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+  min-height: 0;
+}
+
+.card {
+  min-height: 0;
+}
+
+.card-header {
+  font-weight: 600;
+}
+
+.placeholder-text {
+  color: var(--bs-secondary-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-style: italic;
+}

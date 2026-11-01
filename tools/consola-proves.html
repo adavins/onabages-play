@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="ca">
+<head>
+  <meta charset="utf-8">
+  <title>Ona Bages Play — consola de proves del motor</title>
+  <style>
+    :root { color-scheme: dark; }
+    body { font-family: system-ui, sans-serif; margin: 0; background: #121417; color: #e6e6e6; }
+    header { padding: 12px 16px; background: #1c1f24; border-bottom: 1px solid #333; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    h1 { font-size: 16px; margin: 0 16px 0 0; }
+    label { font-size: 13px; color: #aaa; }
+    input, textarea, button { font: inherit; background: #23272e; color: #e6e6e6; border: 1px solid #444; border-radius: 4px; padding: 6px 8px; }
+    button { cursor: pointer; }
+    button:hover { border-color: #888; }
+    .status { padding: 4px 10px; border-radius: 4px; font-weight: 600; }
+    .off { background: #5a1e1e; }
+    .on { background: #1f6b43; }
+    main { display: grid; grid-template-columns: 380px 1fr; gap: 16px; padding: 16px; height: calc(100vh - 90px); box-sizing: border-box; }
+    .side { display: flex; flex-direction: column; gap: 8px; }
+    .quick { display: flex; flex-wrap: wrap; gap: 6px; }
+    textarea { width: 100%; height: 180px; font-family: Consolas, monospace; font-size: 13px; box-sizing: border-box; }
+    #log { background: #0b0c0e; border: 1px solid #333; border-radius: 4px; padding: 8px; overflow: auto; font-family: Consolas, monospace; font-size: 12.5px; white-space: pre-wrap; }
+    .out { color: #8ab4ff; }
+    .in { color: #9be39b; }
+    .ev { color: #888; }
+    .err { color: #ff7b7b; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Consola de proves del motor</h1>
+    <label>Port <input id="port" value="47800" size="6"></label>
+    <label>Testimoni <input id="token" size="52" placeholder="el que mostra la consola del motor"></label>
+    <button id="connect">Connectar</button>
+    <button id="disconnect">Desconnectar</button>
+    <span id="status" class="status off">✖ Desconnectat</span>
+  </header>
+
+  <main>
+    <div class="side">
+      <strong>Ordres ràpides</strong>
+      <div class="quick">
+        <button data-cmd="engine.hello">engine.hello</button>
+        <button data-cmd="engine.ping">engine.ping</button>
+        <button data-cmd="state.get">state.get</button>
+        <button data-cmd="engine.shutdown">engine.shutdown</button>
+      </div>
+
+      <strong>Missatge lliure (JSON)</strong>
+      <textarea id="custom">{ "v": 1, "id": 100, "cmd": "engine.hello" }</textarea>
+      <button id="send">Enviar</button>
+
+      <label><input type="checkbox" id="hide-status" checked> Amagar els esdeveniments engine.status</label>
+      <button id="clear">Netejar el registre</button>
+    </div>
+
+    <div id="log"></div>
+  </main>
+
+  <script>
+    // Consola independent: obre aquest fitxer al navegador amb el motor en marxa.
+    // Arrenca el motor amb: dotnet run --project engine/OnaBages.Engine
+    // i copia aquí el testimoni que mostra.
+
+    let socket = null;
+    let nextId = 1;
+    const $ = (id) => document.getElementById(id);
+
+    function log(text, cls) {
+      const line = document.createElement('div');
+      line.className = cls;
+      line.textContent = `${new Date().toLocaleTimeString('ca-ES', { hour12: false })}  ${text}`;
+      $('log').appendChild(line);
+      $('log').scrollTop = $('log').scrollHeight;
+    }
+
+    function setConnected(on) {
+      $('status').className = `status ${on ? 'on' : 'off'}`;
+      $('status').textContent = on ? '✔ Connectat' : '✖ Desconnectat';
+    }
+
+    $('connect').onclick = () => {
+      socket?.close();
+      const url = `ws://127.0.0.1:${$('port').value}/ws?token=${encodeURIComponent($('token').value.trim())}`;
+      socket = new WebSocket(url);
+      socket.onopen = () => { setConnected(true); log('Connectat', 'in'); };
+      socket.onclose = (e) => { setConnected(false); log(`Desconnectat (codi ${e.code})`, 'err'); };
+      socket.onerror = () => log('Error de connexió (testimoni incorrecte o motor aturat?)', 'err');
+      socket.onmessage = (e) => {
+        let msg;
+        try { msg = JSON.parse(e.data); } catch { log(`← ${e.data}`, 'err'); return; }
+        if (msg.ev === 'engine.status' && $('hide-status').checked) return;
+        log(`← ${JSON.stringify(msg)}`, msg.ev ? 'ev' : (msg.ok ? 'in' : 'err'));
+      };
+    };
+
+    $('disconnect').onclick = () => socket?.close();
+
+    function send(text) {
+      if (!socket || socket.readyState !== WebSocket.OPEN) { log('No hi ha connexió', 'err'); return; }
+      socket.send(text);
+      log(`→ ${text}`, 'out');
+    }
+
+    document.querySelectorAll('[data-cmd]').forEach((btn) => {
+      btn.onclick = () => send(JSON.stringify({ v: 1, id: nextId++, cmd: btn.dataset.cmd }));
+    });
+
+    $('send').onclick = () => send($('custom').value.trim());
+    $('clear').onclick = () => { $('log').textContent = ''; };
+  </script>
+</body>
+</html>

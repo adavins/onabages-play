@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Biblioteca d'àudio: dispositius, reproductors, enregistradors i DSP.
+    A la fase 1 s'hi afegirà NAudio i el TargetFramework passarà a net10.0-windows.
+  -->
+  <PropertyGroup>
+    <RootNamespace>OnaBages.Audio</RootNamespace>
+  </PropertyGroup>
+</Project>

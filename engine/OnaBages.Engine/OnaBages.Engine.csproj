@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <!--
+    Procés del motor: servidor WebSocket local, ordres i estat.
+    Fa servir només el que ja inclou .NET (ASP.NET Core / Kestrel), sense paquets externs.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>OnaBages.Engine</RootNamespace>
+    <AssemblyName>OnaBages.Engine</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OnaBages.Audio\OnaBages.Audio.csproj" />
+  </ItemGroup>
+</Project>

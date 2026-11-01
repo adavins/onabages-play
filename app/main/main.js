@@ -1,0 +1,191 @@
+'use strict';
+
+// Procés principal d'Electron.
+// Responsabilitats: obrir la finestra, assegurar que el motor està en marxa
+// i passar-ne la informació de connexió (port i testimoni) a la interfície.
+// Aquí NO hi ha àudio: tot l'àudio és al motor .NET.
+
+const { app, BrowserWindow, ipcMain } = require('electron');
+const path = require('node:path');
+const fs = require('node:fs');
+const crypto = require('node:crypto');
+const { spawn } = require('node:child_process');
+
+const DEFAULT_PORT = 47800;
+const ENGINE_START_TIMEOUT_MS = 60_000; // "dotnet run" pot trigar la primera vegada
+const REPO_ROOT = path.resolve(__dirname, '..', '..');
+const RUNTIME_FILE = path.join(app.getPath('appData'), 'OnaBages', 'engine.json');
+
+/** @type {BrowserWindow | null} */
+let mainWindow = null;
+/** @type {{ port: number, token: string } | null} */
+let engineInfo = null;
+let closeConfirmed = false;
+
+// Només una finestra de l'aplicació alhora.
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+  });
+  app.whenReady().then(createWindow);
+}
+
+app.on('window-all-closed', () => app.quit());
+
+function createWindow() {
+  mainWindow = new BrowserWindow({
+    width: 1600,
+    height: 900,
+    minWidth: 1024,
+    minHeight: 680,
+    title: 'Ona Bages Play',
+    backgroundColor: '#121417',
+    autoHideMenuBar: true,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  });
+
+  mainWindow.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
+
+  // En tancar, primer avisem la interfície perquè decideixi què cal fer
+  // (fase 0: aturar el motor; fase 2: comprovar operacions actives i demanar confirmació).
+  mainWindow.on('close', (event) => {
+    if (closeConfirmed) return;
+    event.preventDefault();
+    mainWindow?.webContents.send('app:close-requested');
+
+    // Xarxa de seguretat només per a la fase 0: si la interfície no respon, tanquem igualment.
+    // A la fase 2 aquest temporitzador s'ha de treure (la interfície pot estar mostrant una confirmació).
+    setTimeout(() => {
+      if (!closeConfirmed) {
+        closeConfirmed = true;
+        mainWindow?.close();
+      }
+    }, 5000);
+  });
+
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Motor
+// ---------------------------------------------------------------------------
+
+/** Llegeix el fitxer d'execució que escriu el motor quan arrenca. */
+function readRuntimeFile() {
+  try {
+    const data = JSON.parse(fs.readFileSync(RUNTIME_FILE, 'utf8'));
+    if (data && typeof data.port === 'number' && typeof data.token === 'string') {
+      return { port: data.port, token: data.token };
+    }
+  } catch {
+    // No existeix o no es pot llegir: el motor no està en marxa.
+  }
+  return null;
+}
+
+/** Comprova si hi ha un motor responent en aquest port. */
+async function isEngineAlive(port) {
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(1000) });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/** Decideix com s'arrenca el motor: executable compilat o, si no n'hi ha, "dotnet run". */
+function engineCommand(port, token) {
+  const engineArgs = ['--port', String(port), '--token', token];
+
+  if (process.env.ONABAGES_ENGINE) {
+    return { command: process.env.ONABAGES_ENGINE, args: engineArgs };
+  }
+
+  const exeName = process.platform === 'win32' ? 'OnaBages.Engine.exe' : 'OnaBages.Engine';
+  const candidates = [
+    // Aplicació instal·lada (fase 2: l'instal·lador hi copiarà el motor).
+    path.join(process.resourcesPath || '', 'engine', exeName),
+    // Desenvolupament: després de "dotnet build".
+    path.join(REPO_ROOT, 'engine', 'OnaBages.Engine', 'bin', 'Debug', 'net10.0', exeName),
+  ];
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) return { command: candidate, args: engineArgs };
+  }
+
+  return {
+    command: 'dotnet',
+    args: ['run', '--project', path.join(REPO_ROOT, 'engine', 'OnaBages.Engine'), '--', ...engineArgs],
+  };
+}
+
+/**
+ * Retorna la informació d'un motor en marxa. Si no n'hi ha cap, l'arrenca.
+ * El motor s'arrenca com a procés independent: continua funcionant encara que
+ * la interfície es tanqui de manera inesperada.
+ */
+async function ensureEngine() {
+  const existing = readRuntimeFile();
+  if (existing && (await isEngineAlive(existing.port))) {
+    engineInfo = existing;
+    return engineInfo;
+  }
+
+  const port = DEFAULT_PORT;
+  const token = crypto.randomBytes(24).toString('hex');
+  const { command, args } = engineCommand(port, token);
+
+  let spawnError = null;
+  const child = spawn(command, args, {
+    cwd: REPO_ROOT,
+    detached: true,
+    stdio: 'ignore',
+    windowsHide: true,
+  });
+  child.on('error', (err) => {
+    spawnError = err;
+  });
+  child.unref();
+
+  const deadline = Date.now() + ENGINE_START_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    if (spawnError) {
+      throw new Error(`No s'ha pogut arrencar el motor (${command}): ${spawnError.message}`);
+    }
+    if (await isEngineAlive(port)) {
+      engineInfo = { port, token };
+      return engineInfo;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+
+  throw new Error(`El motor no ha respost en ${ENGINE_START_TIMEOUT_MS / 1000} s. Prova d'executar "dotnet build" a la carpeta engine.`);
+}
+
+// ---------------------------------------------------------------------------
+// Comunicació amb la interfície (via preload.js)
+// ---------------------------------------------------------------------------
+
+ipcMain.handle('engine:get-info', async () => engineInfo ?? ensureEngine());
+
+ipcMain.handle('engine:ensure', async () => {
+  engineInfo = null;
+  return ensureEngine();
+});
+
+ipcMain.on('app:close-confirmed', () => {
+  closeConfirmed = true;
+  mainWindow?.close();
+});

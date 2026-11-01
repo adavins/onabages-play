@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Utilitat independent de recuperació d'enregistraments interromputs.
+    Funciona sense obrir l'aplicació principal. S'implementa a la fase 2.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>OnaBages.Recovery</RootNamespace>
+    <AssemblyName>OnaBages.Recovery</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OnaBages.Audio\OnaBages.Audio.csproj" />
+  </ItemGroup>
+</Project>

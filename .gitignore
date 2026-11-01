@@ -1,0 +1,19 @@
+# .NET
+bin/
+obj/
+*.user
+.vs/
+TestResults/
+
+# Node / Electron
+node_modules/
+dist/
+out/
+
+# Sistema
+Thumbs.db
+.DS_Store
+
+# Fitxers de proves d'àudio locals
+test-audio/
+*.rec

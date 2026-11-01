@@ -1,0 +1,18 @@
+{
+  "name": "ona-bages-play",
+  "productName": "Ona Bages Play",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Producció de programes de ràdio en directe: reproductors, preescolta, enregistradors i editor.",
+  "main": "main/main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "dependencies": {
+    "bootstrap": "^5.3.3",
+    "bootstrap-icons": "^1.11.3"
+  },
+  "devDependencies": {
+    "electron": ">=38.0.0"
+  }
+}

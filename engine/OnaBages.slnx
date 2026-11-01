@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="OnaBages.Audio/OnaBages.Audio.csproj" />
+  <Project Path="OnaBages.Engine/OnaBages.Engine.csproj" />
+  <Project Path="OnaBages.Recovery/OnaBages.Recovery.csproj" />
+  <Project Path="OnaBages.Tests/OnaBages.Tests.csproj" />
+</Solution>

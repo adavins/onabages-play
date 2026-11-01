@@ -29,7 +29,7 @@ Tauler de control → So (o `mmsys.cpl`), pestanyes **Reproducció** i **Enregis
 
 ## 2. Inventari del maquinari
 
-Una taula per ordinador. Aquesta informació és necessària per a la fase 1.
+Una taula per ordinador. Per al desenvolupament, cal omplir-la per als **ordinadors de proves** (és necessària per a la fase 1). Cada emissora la pot fer servir com a plantilla per documentar els seus equips; l'aplicació no depèn de cap targeta concreta i funciona com a mínim amb l'àudio integrat de la placa base.
 
 ### Ordinador: _______________ (estudi / ubicació: _______________)
 

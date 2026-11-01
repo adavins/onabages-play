@@ -95,6 +95,14 @@ Dispositius estèreo separats, de gamma de consum:
 
 Taula de mescles de referència: AEQ Capitol IP12. L'aplicació no ha de dependre de cap model concret.
 
+El maquinari **varia segons l'emissora**. L'únic que es pot donar per segur és l'**àudio integrat a la placa base** (una entrada i una sortida). Per tant:
+
+- **Configuració mínima garantida:** l'aplicació ha de funcionar amb només la targeta integrada.
+- Diversos reproductors poden compartir una mateixa sortida: cada un manté el seu flux independent i Windows els barreja (mode compartit).
+- Si la **preescolta comparteix sortida** amb algun reproductor, es permet, però la interfície mostra un avís clar i permanent: «La preescolta surt per antena».
+- La llista anterior és el maquinari de l'emissora de referència i de les proves, no un requisit.
+- Els ordinadors són **domèstics, sovint amb recursos limitats**, i s'hi poden afegir o treure targetes en qualsevol moment. L'aplicació detecta el maquinari a cada arrencada i avisa dels canvis (vegeu 5.6).
+
 Conseqüències per al disseny:
 
 - Es treballa en **mode compartit de WASAPI**, que és el més compatible amb controladors de consum. El mode exclusiu i ASIO queden fora de l'abast inicial.
@@ -255,6 +263,28 @@ Cap funció de l'aplicació barreja àudio de dispositius diferents: cada reprod
 - Cada flux s'obre amb el format que té el dispositiu a Windows (mode compartit).
 - La descodificació es remostreja, si cal, a la freqüència del dispositiu de sortida.
 - Els enregistradors codifiquen a la freqüència de l'entrada (44,1 kHz o 48 kHz), sense remostrejar.
+
+## 5.6. Detecció del maquinari en arrencar
+
+Els ordinadors són domèstics i el maquinari **no és fix**: s'hi poden posar i treure targetes i dispositius USB entre una sessió i l'altra. L'aplicació no pot suposar que troba el mateix que la vegada anterior.
+
+**En arrencar**, el motor enumera totes les entrades i sortides actives i les compara amb les assignacions desades. Per a cada reproductor, la preescolta i cada enregistrador:
+
+| Situació | Què fa l'aplicació |
+|---|---|
+| El dispositiu hi és (mateix identificador) | Res. |
+| L'identificador ha canviat però hi ha **un sol** dispositiu amb el mateix nom (per exemple, un USB en un altre port) | Es considera el mateix dispositiu: s'actualitza l'identificador i es mostra un avís informatiu. |
+| Hi ha **diversos** dispositius amb el mateix nom (per exemple, dues targetes USB iguals) | No es tria cap: l'element queda `Sense dispositiu` i l'operador n'ha de triar un. |
+| El dispositiu no hi és | L'element queda en estat `Sense dispositiu`, amb un avís. Conserva la llista, la pista i la resta de configuració. |
+
+- **L'aplicació no reassigna mai automàticament** un element a un altre dispositiu. Un element `Sense dispositiu` no es pot reproduir ni enregistrar fins que l'operador en tria un a la configuració.
+- **Dispositius nous** que no estaven assignats a res: avís informatiu («Dispositiu nou disponible: …»).
+- **Format canviat** a Windows (per exemple, de 44,1 a 48 kHz): avís informatiu; el flux s'adapta sol (5.5).
+- **Resum en arrencar:** si hi ha hagut algun canvi, la interfície mostra una finestra «Canvis en el maquinari» amb una línia per element (abans, ara, què ha passat) i un botó per anar a la configuració de dispositius. Si no hi ha canvis, no es mostra res.
+- **Primera arrencada** (o sense configuració): s'obre la configuració de dispositius amb una proposta d'assignació a partir del que s'ha detectat. Amb un sol dispositiu de sortida, la proposta ho posa tot a la mateixa sortida, amb l'avís de preescolta de 3.2. **No s'aplica res fins que l'operador ho confirma.**
+- **Durant l'execució**, s'apliquen les polítiques de 5.3. Quan un dispositiu que faltava torna (mateix identificador o nom únic), es torna a associar al seu element, però un reproductor **no reprèn sol**.
+- Tots els avisos de maquinari queden al registre tècnic i a una llista d'avisos que es pot consultar a la interfície.
+- La detecció es fa al motor (fase 1); el resum, la configuració i la llista d'avisos, a la interfície (fase 2). Les ordres i els esdeveniments corresponents s'afegiran a `docs/protocol.md` quan s'implementin.
 
 # 6. Reproductors
 
@@ -554,13 +584,13 @@ No calen Visual Studio Build Tools, MSVC ni CMake.
 ### Fase 0 — Preparació
 - Crear el repositori, l'estructura de carpetes i `CLAUDE.md`.
 - Esquelet mínim: el motor arrenca i accepta connexions WebSocket; la interfície s'hi connecta i mostra l'estat.
-- Fer l'inventari del maquinari de cada ordinador de l'emissora: dispositius, controladors, formats.
+- Fer l'inventari del maquinari dels ordinadors de proves (els que es faran servir a la fase 1): dispositius, controladors, formats. A cada emissora, els dispositius es trien des de la configuració de l'aplicació.
 - Aplicar la preparació de Windows (3.3).
 
 **Criteri:** el projecte compila, la interfície mostra «Motor connectat», i el maquinari està documentat.
 
 ### Fase 1 — Prototip del motor (sense interfície)
-- Enumerar dispositius.
+- Enumerar dispositius i, en arrencar, comparar-los amb les assignacions desades (5.6).
 - Reproduir MP3 i WAV per un dispositiu triat.
 - Reproduir dues pistes simultànies per dues sortides diferents.
 - Enregistrar una entrada directament a MP3 320 CBR, amb bolcat periòdic.
@@ -619,6 +649,12 @@ Candidates: botonera de talls (cartwall), detector de silenci, punts cue d'inici
 
 **Rendiment**
 - Mesurar CPU i memòria del motor i de la interfície en una sessió de 4 hores. Les xifres objectiu es fixaran després de la fase 1.
+- Les proves de rendiment es fan sempre també a l'**ordinador de proves més modest** (ordinador domèstic amb recursos limitats). Les xifres objectiu s'han de complir en aquest ordinador.
+- Per no carregar els ordinadors modestos: els fitxers d'àudio no es carreguen sencers a la memòria (es llegeixen a trossos), les formes d'ona es calculen en segon pla i es desen a la memòria cau, i la freqüència d'actualització dels mesuradors es pot reduir a la configuració.
+
+**Maquinari**
+- Arrencar després de treure una targeta, d'afegir-ne una, de canviar un USB de port i amb dues targetes USB iguals: es mostra el resum correcte i no es reassigna res automàticament (5.6).
+- Arrencar amb només l'àudio integrat de la placa base.
 
 # 16. Riscos
 
@@ -630,6 +666,8 @@ Candidates: botonera de talls (cartwall), detector de silenci, punts cue d'inici
 | Precisió dels talls MP3 (~25 ms) | Talls poc precisos | Suficient per a la parla; igual que mp3DirectCut |
 | Abast massa ampli per a una sola persona | Projecte que no s'acaba | MVP estricte; fases amb criteri de validació; ampliacions només després de l'ús real |
 | Dispositius USB que canvien d'identificador | Reproductor sense sortida en arrencar | Identificació per id i per nom; avís clar |
+| Maquinari que canvia entre sessions (targetes afegides o tretes) | Elements sense dispositiu; so per una sortida inesperada | Detecció en arrencar, resum de canvis, cap reassignació automàtica (5.6) |
+| Ordinadors domèstics amb pocs recursos | Talls, interfície lenta | Proves a l'ordinador més modest; lectura a trossos; mesuradors amb freqüència configurable |
 | Port WebSocket local accessible per altres programes | Control no autoritzat | Només `127.0.0.1` + testimoni per sessió |
 
 # 17. Decisions acordades

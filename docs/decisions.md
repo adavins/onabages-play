@@ -17,3 +17,4 @@ Una línia per decisió. Les decisions noves van al final. Si una decisió en su
 | D-011 | 2026-11-01 | Motor amb ASP.NET Core (Kestrel) mínim per al WebSocket, sense paquets NuGet externs | Inclòs a .NET; robust i ben documentat |
 | D-012 | 2026-11-01 | Proves amb xUnit al projecte `OnaBages.Tests` | Estàndard a .NET, integrat amb `dotnet test` |
 | D-013 | 2026-11-02 | Electron fixat a `^45.2.1` (abans `>=38.0.0`) i `app/package-lock.json` al repositori | Evita que una versió major nova d'Electron entri sense voler; tots els ordinadors instal·len les mateixes versions |
+| D-014 | 2026-11-02 | Escala de la interfície configurable amb el zoom d'Electron (fase 2) | Adaptar l'aplicació a pantalles de baixa resolució sense redissenyar-la; sense dependències noves |

@@ -491,6 +491,7 @@ Les dues opcions poden conviure: configuració i perfils en JSON (fàcils de cop
 
 - Tema fosc per defecte (Bootstrap 5, mode de color fosc), amb tema clar opcional.
 - Pensada per a una pantalla de 1920 × 1080; usable també a 1366 × 768.
+- **Escala de la interfície (zoom)** configurable (per exemple del 70 % al 150 %): fa més grans o més petits tots els elements alhora (lletra, icones, botons). Es fa amb el zoom d'Electron (`setZoomFactor`), amb dreceres Ctrl+/Ctrl−/Ctrl+0, i el valor es desa a la configuració. El CSS fa servir `rem` en lloc de píxels fixos. Fase 2.
 - Elements grans per a les accions de directe: Play, Stop, Enregistrar i temps restant.
 - Estats amb color, icona i text.
 - Confirmació per a les accions que interrompen: Stop d'un reproductor que sona (configurable), aturar un enregistrament, tancar l'aplicació.

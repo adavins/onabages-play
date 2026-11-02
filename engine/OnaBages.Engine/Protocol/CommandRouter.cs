@@ -61,6 +61,12 @@ public sealed class CommandRouter
                 "state.get" => StateGet(),
                 "engine.shutdown" => Shutdown(),
                 "devices.list" => DevicesList(msg),
+                "player.setDevice" => PlayerSetDevice(msg),
+                "player.load" => PlayerLoad(msg),
+                "player.play" => PlayerCommand(msg, p => p.Play()),
+                "player.pause" => PlayerCommand(msg, p => p.Pause()),
+                "player.stop" => PlayerCommand(msg, p => p.Stop()),
+                "player.retry" => PlayerCommand(msg, p => p.Retry()),
                 _ => null,
             };
 
@@ -71,6 +77,14 @@ public sealed class CommandRouter
         catch (BadParamsException ex)
         {
             return Messages.Error(id, "bad_params", ex.Message);
+        }
+        catch (PlayerCommandException ex)
+        {
+            return Messages.Error(id, "bad_state", ex.Message);
+        }
+        catch (PlayerFailedException ex)
+        {
+            return Messages.Error(id, "player_error", ex.Message);
         }
         catch (Exception ex)
         {
@@ -95,7 +109,63 @@ public sealed class CommandRouter
     private JsonObject StateGet() => new()
     {
         ["engine"] = _state.ToJson(),
+        ["players"] = PlayerJson.All(_state.Players),
     };
+
+    // -----------------------------------------------------------------------
+    // Reproductors
+    // -----------------------------------------------------------------------
+
+    private Player GetPlayer(JsonObject msg)
+    {
+        string? id = ReadString(msg["player"]);
+        if (string.IsNullOrWhiteSpace(id))
+            throw new BadParamsException("Falta el camp 'player' (identificador del reproductor).");
+        return _state.FindPlayer(id) ?? throw new BadParamsException($"No existeix el reproductor '{id}'.");
+    }
+
+    private static string RequireString(JsonObject msg, string field)
+    {
+        string? value = ReadString(msg[field]);
+        if (string.IsNullOrWhiteSpace(value))
+            throw new BadParamsException($"Falta el camp '{field}'.");
+        return value;
+    }
+
+    private JsonObject PlayerSetDevice(JsonObject msg)
+    {
+        var player = GetPlayer(msg);
+        player.SetDevice(RequireString(msg, "deviceId"));
+        return PlayerResult(player);
+    }
+
+    private JsonObject PlayerLoad(JsonObject msg)
+    {
+        var player = GetPlayer(msg);
+        player.Load(RequireString(msg, "path"));
+        return PlayerResult(player);
+    }
+
+    private JsonObject PlayerCommand(JsonObject msg, Action<Player> action)
+    {
+        var player = GetPlayer(msg);
+        action(player);
+        return PlayerResult(player);
+    }
+
+    /// <summary>
+    /// Resposta d'una ordre de reproductor. Si l'ordre l'ha deixat en Error
+    /// (dispositiu no disponible, fitxer il·legible), la resposta és un error amb el motiu.
+    /// </summary>
+    private static JsonObject PlayerResult(Player player)
+    {
+        if (player.State == PlayerState.Error)
+            throw new PlayerFailedException(player.ErrorMessage ?? "Error del reproductor.");
+        return new JsonObject { ["player"] = PlayerJson.Player(player) };
+    }
+
+    /// <summary>L'ordre ha deixat el reproductor en estat d'error: es respon amb "player_error".</summary>
+    private sealed class PlayerFailedException(string message) : Exception(message);
 
     private JsonObject Shutdown()
     {

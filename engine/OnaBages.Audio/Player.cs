@@ -47,7 +47,10 @@ public sealed class Player : IDisposable
     private volatile Exception? _readerError;
     private volatile Exception? _outputError;
     private int _underrunsBefore; // talls de pistes anteriors (cada càrrega crea un PlayerStream nou)
-    private TimeSpan _keptPosition; // posició conservada quan hi ha un error
+    private TimeSpan _keptPosition; // posició conservada quan no hi ha sortida oberta (p. ex. en error)
+    private TimeSpan _startOffset;  // on ha començat a llegir la pista actual (0, o la posició en reintentar)
+
+    private const string DeviceLostMessage = "Dispositiu no disponible: s'ha desconnectat o Windows l'ha reconfigurat.";
 
     /// <param name="id">Identificador del reproductor ("1", "2"...).</param>
     /// <param name="openOutput">Obre una sortida per identificador de dispositiu. Per defecte, WASAPI.</param>
@@ -62,20 +65,17 @@ public sealed class Player : IDisposable
     public string? DeviceId { get; private set; }
     public string? FilePath { get; private set; }
     public TimeSpan Duration { get; private set; }
+
+    /// <summary>Motiu de l'error, en català, per a l'operador.</summary>
     public string? ErrorMessage { get; private set; }
+
+    /// <summary>Detall tècnic de l'error (sovint en anglès, de Windows). Només per al registre del motor.</summary>
+    public string? ErrorDetail { get; private set; }
 
     /// <summary>Posició actual (el que ja s'ha enviat a la targeta).</summary>
     public TimeSpan Position
     {
-        get
-        {
-            lock (_sync)
-            {
-                if (_stream is null || _output is null) return _keptPosition;
-                var position = TimeSpan.FromSeconds((double)_stream.FramesPlayed / _output.SampleRate);
-                return position > Duration ? Duration : position;
-            }
-        }
+        get { lock (_sync) return CurrentPosition(); }
     }
 
     /// <summary>Talls des que es va crear el reproductor (la sortida va demanar dades i no n'hi havia).</summary>
@@ -99,12 +99,13 @@ public sealed class Player : IDisposable
             if (State == PlayerState.Playing)
                 throw new PlayerCommandException("No es pot canviar la sortida mentre sona. Atura'l primer.");
 
+            // En pausa o en error es continua des del mateix punt; si no, des de l'inici.
+            var resumeAt = State is PlayerState.Paused or PlayerState.Error ? CurrentPosition() : TimeSpan.Zero;
             DeviceId = deviceId;
-            ErrorMessage = null;
 
-            // Si hi havia una pista, es torna a preparar per la sortida nova (des de l'inici).
+            // Si hi havia una pista, es torna a preparar per la sortida nova.
             if (FilePath is not null)
-                Prepare(FilePath);
+                Prepare(FilePath, resumeAt);
             else
                 SetState(PlayerState.Empty);
         }
@@ -122,7 +123,23 @@ public sealed class Player : IDisposable
                 throw new PlayerCommandException("Cal triar abans una sortida per a aquest reproductor.");
 
             FilePath = path;
-            Prepare(path);
+            Prepare(path, TimeSpan.Zero);
+        }
+        RaiseStateChanged();
+    }
+
+    /// <summary>
+    /// Després d'un error, torna a obrir la sortida i el fitxer i deixa el reproductor
+    /// preparat a la <b>mateixa posició</b>. No torna a sonar sol: cal prémer Play.
+    /// </summary>
+    public void Retry()
+    {
+        lock (_sync)
+        {
+            if (State != PlayerState.Error || FilePath is null)
+                throw new PlayerCommandException("Només es pot reintentar quan el reproductor té un error.");
+
+            Prepare(FilePath, _keptPosition);
         }
         RaiseStateChanged();
     }
@@ -138,9 +155,9 @@ public sealed class Player : IDisposable
                 case PlayerState.Empty:
                     throw new PlayerCommandException("No hi ha cap pista carregada.");
                 case PlayerState.Error:
-                    throw new PlayerCommandException($"El reproductor té un error: {ErrorMessage} Torna a carregar la pista o tria una altra sortida.");
+                    throw new PlayerCommandException($"El reproductor té un error: {ErrorMessage} Prem Reintentar o tria una altra sortida.");
                 case PlayerState.Ended:
-                    Prepare(FilePath!);
+                    Prepare(FilePath!, TimeSpan.Zero);
                     if (State == PlayerState.Error) break;
                     goto default;
                 default:
@@ -152,7 +169,7 @@ public sealed class Player : IDisposable
                     }
                     catch (Exception ex)
                     {
-                        FailKeepingTrack($"Dispositiu no disponible: {ex.Message}");
+                        FailKeepingTrack(DeviceLostMessage, ex.Message);
                     }
                     break;
             }
@@ -174,7 +191,7 @@ public sealed class Player : IDisposable
             }
             catch (Exception ex)
             {
-                FailKeepingTrack($"Dispositiu no disponible: {ex.Message}");
+                FailKeepingTrack(DeviceLostMessage, ex.Message);
             }
         }
         RaiseStateChanged();
@@ -188,9 +205,9 @@ public sealed class Player : IDisposable
             if (State is PlayerState.Empty or PlayerState.Ready)
                 return;
             if (State == PlayerState.Error)
-                throw new PlayerCommandException($"El reproductor té un error: {ErrorMessage}");
+                throw new PlayerCommandException($"El reproductor té un error: {ErrorMessage} Prem Reintentar o tria una altra sortida.");
 
-            Prepare(FilePath!);
+            Prepare(FilePath!, TimeSpan.Zero);
         }
         RaiseStateChanged();
     }
@@ -206,12 +223,12 @@ public sealed class Player : IDisposable
             if (_outputError is { } outputError && State is not (PlayerState.Error or PlayerState.Empty))
             {
                 _outputError = null;
-                FailKeepingTrack($"Dispositiu no disponible: {outputError.Message}");
+                FailKeepingTrack(DeviceLostMessage, outputError.Message);
             }
             else if (_readerError is { } readerError && State is not (PlayerState.Error or PlayerState.Empty))
             {
                 _readerError = null;
-                FailKeepingTrack($"No s'ha pogut llegir el fitxer: {readerError.Message}");
+                FailKeepingTrack("No s'ha pogut continuar llegint el fitxer: és malmès o ja no és accessible.", readerError.Message);
             }
             else if (State == PlayerState.Playing && _stream!.EndReached)
             {
@@ -235,26 +252,36 @@ public sealed class Player : IDisposable
     // Interns (sempre dins de _sync)
     // -----------------------------------------------------------------------
 
+    /// <summary>Posició sense bloqueig (qui la crida ja és dins de _sync).</summary>
+    private TimeSpan CurrentPosition()
+    {
+        if (_stream is null || _output is null) return _keptPosition;
+        var position = _startOffset + TimeSpan.FromSeconds((double)_stream.FramesPlayed / _output.SampleRate);
+        return position > Duration ? Duration : position;
+    }
+
     /// <summary>
-    /// Obre la sortida i el fitxer des de zero i comença a omplir la memòria.
-    /// Si alguna cosa falla, el reproductor queda en Error amb la pista conservada.
+    /// Obre la sortida i el fitxer, a partir de <paramref name="startAt"/>, i comença a omplir la memòria.
+    /// Si alguna cosa falla, el reproductor queda en Error amb la pista i la posició conservades.
     /// </summary>
-    private void Prepare(string path)
+    private void Prepare(string path, TimeSpan startAt)
     {
         ReleaseTrack();
         ErrorMessage = null;
-        _keptPosition = TimeSpan.Zero;
+        ErrorDetail = null;
+        _keptPosition = startAt;
+        _startOffset = startAt;
 
         AudioFileSource? source = null;
         try
         {
             _output = _openOutput(DeviceId!);
-            source = AudioFileSource.Open(path, _output.SampleRate);
+            source = AudioFileSource.Open(path, _output.SampleRate, startAt);
         }
         catch (Exception ex) when (ex is AudioDeviceException or AudioFileException)
         {
             ReleaseTrack();
-            Fail(ex.Message);
+            Fail(ex.Message, ex.InnerException?.Message);
             return;
         }
 
@@ -363,17 +390,17 @@ public sealed class Player : IDisposable
     }
 
     /// <summary>Error: s'atura tot, però es conserva la pista per poder reintentar.</summary>
-    private void FailKeepingTrack(string message)
+    private void FailKeepingTrack(string message, string? detail)
     {
-        if (_stream is not null && _output is not null)
-            _keptPosition = TimeSpan.FromSeconds((double)_stream.FramesPlayed / _output.SampleRate);
+        _keptPosition = CurrentPosition();
         ReleaseTrack();
-        Fail(message);
+        Fail(message, detail);
     }
 
-    private void Fail(string message)
+    private void Fail(string message, string? detail)
     {
         ErrorMessage = message;
+        ErrorDetail = detail;
         SetState(PlayerState.Error);
     }
 

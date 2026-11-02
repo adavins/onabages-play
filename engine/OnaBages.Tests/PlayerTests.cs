@@ -142,6 +142,8 @@ public class PlayerTests
 
         Assert.Equal(PlayerState.Error, player.State);
         Assert.Contains("Dispositiu no disponible", player.ErrorMessage);
+        Assert.DoesNotContain("dispositiu desconnectat", player.ErrorMessage); // el text tècnic no va a l'operador...
+        Assert.Equal("dispositiu desconnectat", player.ErrorDetail);            // ...sinó al detall
         Assert.Equal(file, player.FilePath);
         Assert.Equal(0.1, player.Position.TotalSeconds, 3);
         Assert.Throws<PlayerCommandException>(() => player.Play()); // no reprèn sol
@@ -150,6 +152,62 @@ public class PlayerTests
         player.Load(file);
         Assert.Equal(PlayerState.Ready, player.State);
         Assert.Null(player.ErrorMessage);
+    }
+
+    [Fact]
+    public void Reintentar_continua_des_de_la_mateixa_posicio()
+    {
+        using var player = ReadyPlayer(1.0);
+        player.Play();
+        Thread.Sleep(100);
+        _lastOutput!.Pump(12000); // 0,25 s
+        _lastOutput.Fail("dispositiu desconnectat");
+        player.Tick();
+        Assert.Equal(PlayerState.Error, player.State);
+
+        player.Retry();
+
+        Assert.Equal(PlayerState.Ready, player.State);
+        Assert.Equal(0.25, player.Position.TotalSeconds, 3);
+        Assert.Null(player.ErrorMessage);
+
+        // Continua des d'aquí fins al final: el que queda són 0,75 s.
+        player.Play();
+        long framesAfterRetry = 0;
+        Thread.Sleep(100);
+        while (player.State == PlayerState.Playing)
+        {
+            _lastOutput!.Pump(480);
+            framesAfterRetry += 480;
+            player.Tick();
+        }
+        Assert.Equal(PlayerState.Ended, player.State);
+        Assert.Equal(TimeSpan.FromSeconds(1), player.Position);
+        Assert.InRange(framesAfterRetry, 36000, 36000 + 960); // 0,75 s (+ els blocs del final)
+    }
+
+    [Fact]
+    public void Reintentar_sense_error_no_es_permet()
+    {
+        using var player = ReadyPlayer();
+
+        Assert.Throws<PlayerCommandException>(() => player.Retry());
+    }
+
+    [Fact]
+    public void Canviar_de_sortida_despres_d_un_error_conserva_la_posicio()
+    {
+        using var player = ReadyPlayer(1.0);
+        player.Play();
+        Thread.Sleep(100);
+        _lastOutput!.Pump(24000); // 0,5 s
+        _lastOutput.Fail("dispositiu desconnectat");
+        player.Tick();
+
+        player.SetDevice("{0.0.0.00000000}.{una-altra}");
+
+        Assert.Equal(PlayerState.Ready, player.State);
+        Assert.Equal(0.5, player.Position.TotalSeconds, 3);
     }
 
     [Fact]

@@ -117,6 +117,18 @@ public class AudioChainTests
     }
 
     [Fact]
+    public void Es_pot_començar_a_llegir_a_mig_fitxer()
+    {
+        string path = TestAudio.CreateWav(48000, 2, 1.0);
+        using var source = AudioFileSource.Open(path, 48000, TimeSpan.FromSeconds(0.25));
+
+        int frames = TestAudio.ReadAll(source).Length / 2;
+
+        Assert.Equal(36000, frames); // en queden 0,75 s
+        Assert.Equal(TimeSpan.FromSeconds(1), source.Duration);
+    }
+
+    [Fact]
     public void Fitxer_inexistent_dona_error_clar()
     {
         var ex = Assert.Throws<AudioFileException>(() => AudioFileSource.Open(@"C:\no\existeix.mp3", 48000));

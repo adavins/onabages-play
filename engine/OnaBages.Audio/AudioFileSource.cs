@@ -20,10 +20,15 @@ public sealed class AudioFileSource : IDisposable
     private readonly WaveStream _reader;
     private readonly ISampleProvider _output;
 
-    private AudioFileSource(WaveStream reader, int targetSampleRate)
+    private AudioFileSource(WaveStream reader, int targetSampleRate, TimeSpan startAt)
     {
         _reader = reader;
         Duration = reader.TotalTime;
+
+        // Començar a mig fitxer (p. ex. en reintentar després d'un error). Es fa abans de
+        // muntar el remostrejador perquè aquest comenci net.
+        if (startAt > TimeSpan.Zero)
+            reader.CurrentTime = startAt < Duration ? startAt : Duration;
 
         ISampleProvider samples = ToStereo(reader.ToSampleProvider());
         if (samples.WaveFormat.SampleRate != targetSampleRate)
@@ -42,8 +47,9 @@ public sealed class AudioFileSource : IDisposable
     /// Obre un fitxer. Els WAV es llegeixen directament; la resta de formats (MP3, AAC/M4A,
     /// FLAC, WMA...) amb Media Foundation de Windows.
     /// </summary>
+    /// <param name="startAt">Punt on comença la lectura (per defecte, l'inici).</param>
     /// <exception cref="AudioFileException">Si el fitxer no existeix o no es pot llegir.</exception>
-    public static AudioFileSource Open(string path, int targetSampleRate)
+    public static AudioFileSource Open(string path, int targetSampleRate, TimeSpan startAt = default)
     {
         if (!File.Exists(path))
             throw new AudioFileException($"No es troba el fitxer: {path}");
@@ -55,7 +61,7 @@ public sealed class AudioFileSource : IDisposable
                 reader = TryOpenWave(path);
 
             reader ??= new MediaFoundationReader(path);
-            return new AudioFileSource(reader, targetSampleRate);
+            return new AudioFileSource(reader, targetSampleRate, startAt);
         }
         catch (Exception ex) when (ex is not AudioFileException)
         {

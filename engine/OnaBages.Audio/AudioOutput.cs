@@ -91,8 +91,10 @@ public sealed class WasapiAudioOutput : IAudioOutput
         }
         catch (Exception ex)
         {
+            string name;
+            try { name = device.FriendlyName; } catch { name = "de sortida"; } // el dispositiu pot estar malmès
             device.Dispose();
-            throw new AudioDeviceException($"No s'ha pogut obrir el dispositiu: {ex.Message}", ex);
+            throw new AudioDeviceException($"No s'ha pogut obrir el dispositiu {name}.", ex);
         }
     }
 

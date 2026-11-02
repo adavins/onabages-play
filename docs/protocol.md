@@ -54,7 +54,9 @@ Tots els missatges són objectes JSON amb el camp `"v": 1`.
 | `bad_json` | El missatge no és JSON vàlid o no és un objecte |
 | `protocol_version` | El camp `v` falta o no és compatible |
 | `missing_cmd` | Falta el camp `cmd` |
-| `bad_params` | Un paràmetre de l'ordre té un valor no vàlid |
+| `bad_params` | Falta un paràmetre o té un valor no vàlid (p. ex. un reproductor que no existeix) |
+| `bad_state` | L'ordre no es pot fer en l'estat actual (p. ex. Play sense pista carregada). No canvia res |
+| `player_error` | L'ordre s'ha fet, però el reproductor ha quedat en estat `error` (dispositiu no disponible, fitxer il·legible). El missatge n'explica el motiu |
 | `unknown_command` | L'ordre no existeix |
 | `internal` | Error inesperat del motor (el motor continua funcionant) |
 
@@ -64,7 +66,7 @@ Tots els missatges són objectes JSON amb el camp `"v": 1`.
 |---|---|---|---|
 | `engine.hello` | — | `{ name, version, protocol }` | fase 0 |
 | `engine.ping` | — | `{ pong: true, time }` | fase 0 |
-| `state.get` | — | `{ engine: { version, uptime, clients } }` (s'ampliarà amb reproductors i enregistradors) | fase 0 |
+| `state.get` | — | `{ engine: { version, uptime, clients }, players: [ … ] }` (vegeu 4.2; s'ampliarà amb els enregistradors) | fase 0 (`players`: fase 1) |
 | `engine.shutdown` | — | `{ stopping: true }` i el motor es tanca. A partir de la fase 1, es rebutjarà si hi ha enregistraments actius, tret de `force: true` | fase 0 |
 | `devices.list` | `kind`: `"output"`, `"input"` o `"all"` (per defecte); `includeInactive`: `true` per incloure també els desactivats i desconnectats (per defecte, `false`) | `{ devices: [ … ] }` (vegeu 4.1) | fase 1 |
 
@@ -85,12 +87,42 @@ Tots els missatges són objectes JSON amb el camp `"v": 1`.
 - `format`: el format triat a Windows (o el del fabricant, si no se n'ha triat cap); `null` si no se sap.
 - Els dispositius que Windows recorda però que ja no hi són no s'inclouen mai.
 
+### 4.2. Reproductors
+
+Fase 1: hi ha dos reproductors fixos, `"1"` i `"2"`. Encara no hi ha llistes ni es desa res.
+
+| Ordre | Paràmetres | Estats en què es pot fer | Resultat |
+|---|---|---|---|
+| `player.setDevice` | `player`, `deviceId` | tots menys `playing`. Si hi ha pista, es torna a preparar: des del mateix punt si era a `paused` o `error`; des de l'inici en els altres casos | `{ player }` |
+| `player.load` | `player`, `path` (ruta completa) | tots menys `playing`. Cal haver triat la sortida | `{ player }` |
+| `player.play` | `player` | `ready`, `paused`, `ended` (torna a començar) | `{ player }` |
+| `player.pause` | `player` | `playing` | `{ player }` |
+| `player.stop` | `player` | tots menys `error`. Torna a l'inici (`ready`) | `{ player }` |
+| `player.retry` | `player` | `error`. Torna a obrir la sortida i el fitxer i queda `ready` **a la mateixa posició**. No torna a sonar sol: cal `player.play` | `{ player }` |
+
+Objecte `player` (també a `state.get` i a l'esdeveniment `player.state`):
+
+```json
+{ "id": "1", "state": "playing",
+  "deviceId": "{0.0.0.00000000}.{f2d6376b-…}",
+  "file": "D:\\Musica\\prova.mp3",
+  "duration": 183.512, "position": 12.300,
+  "error": null, "underruns": 0 }
+```
+
+- `state`: `empty` (sense pista), `ready` (preparat), `playing`, `paused`, `ended` (ha acabat la pista), `error`.
+- `duration` i `position`: en segons, amb tres decimals.
+- `error`: el motiu, en català, quan `state` és `error`. La pista i la posició es conserven. Per continuar: `player.retry` (mateixa sortida) o `player.setDevice` (una altra), i després `player.play`. El reproductor **no reprèn mai sol**. El detall tècnic de Windows no s'envia: només queda al registre del motor.
+- `underruns`: talls des que es va obrir el reproductor (la targeta ha demanat so i no n'hi havia de preparat). Ha de ser 0; serveix per a les proves llargues.
+
 ## 5. Esdeveniments
 
 | Esdeveniment | Camps | Freqüència | Des de |
 |---|---|---|---|
 | `engine.status` | `uptime` (s), `clients` | cada segon | fase 0 |
 | `devices.changed` | `changes`: llista de canvis (vegeu 5.1) | quan Windows avisa d'un canvi real, agrupat (0,5 s sense avisos nous) | fase 1 |
+| `player.state` | `player`: objecte complet (vegeu 4.2) | quan canvia l'estat, el fitxer, la sortida o l'error d'un reproductor | fase 1 |
+| `player.position` | `players`: `[ { id, position, duration } ]` de tots els reproductors | 10 per segon, només mentre algun reproductor sona | fase 1 |
 
 ### 5.1. Canvis de dispositius
 

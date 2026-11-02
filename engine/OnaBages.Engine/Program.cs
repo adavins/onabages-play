@@ -36,8 +36,28 @@ builder.Logging.AddFilter("Microsoft", LogLevel.Warning);
 var app = builder.Build();
 var log = app.Logger;
 
-var state = new EngineState();
+// Fase 1: dos reproductors fixos. Més endavant, el nombre sortirà de la configuració.
+var state = new EngineState([new Player("1"), new Player("2")]);
 var hub = new ClientHub(state, log);
+
+// Envia un esdeveniment a tots els clients sense esperar (no pot bloquejar qui el crida).
+void Broadcast(System.Text.Json.Nodes.JsonObject ev) => _ = Task.Run(async () =>
+{
+    try { await hub.BroadcastAsync(ev, app.Lifetime.ApplicationStopping); }
+    catch (OperationCanceledException) { /* el motor s'està aturant */ }
+});
+
+foreach (var player in state.Players)
+{
+    player.StateChanged += p =>
+    {
+        if (p.State == PlayerState.Error)
+            log.LogWarning("Reproductor {Id}: error — {Message} (detall: {Detail})", p.Id, p.ErrorMessage, p.ErrorDetail ?? "cap");
+        else
+            log.LogInformation("Reproductor {Id}: {State} {File}", p.Id, PlayerJson.State(p.State), Path.GetFileName(p.FilePath) ?? "");
+        Broadcast(PlayerJson.StateEvent(p));
+    };
+}
 var router = new CommandRouter(state, () => app.Lifetime.StopApplication());
 
 // Vigilant de dispositius: avisa els clients quan es connecta o desconnecta alguna cosa.
@@ -47,12 +67,7 @@ watcher.Changed += changes =>
     foreach (var change in changes)
         log.LogInformation("Dispositiu: {Change}", DescribeChange(change));
 
-    var ev = DeviceJson.ChangedEvent(changes);
-    _ = Task.Run(async () =>
-    {
-        try { await hub.BroadcastAsync(ev, app.Lifetime.ApplicationStopping); }
-        catch (OperationCanceledException) { /* el motor s'està aturant */ }
-    });
+    Broadcast(DeviceJson.ChangedEvent(changes));
 };
 watcher.Error += ex => log.LogWarning("Error en llegir els dispositius: {Message}", ex.Message);
 try
@@ -103,6 +118,8 @@ app.Lifetime.ApplicationStopping.Register(() =>
 {
     log.LogInformation("Aturant el motor");
     watcher.Dispose();
+    foreach (var player in state.Players)
+        player.Dispose();
     RuntimeFile.DeleteIfOwned();
 });
 
@@ -119,6 +136,32 @@ _ = Task.Run(async () =>
             ev["uptime"] = state.UptimeSeconds;
             ev["clients"] = state.Clients;
             await hub.BroadcastAsync(ev, stopping);
+        }
+    }
+    catch (OperationCanceledException)
+    {
+        // El motor s'està aturant.
+    }
+});
+
+// Revisió dels reproductors (final de pista, errors) i posició, 10 vegades per segon.
+// Cada reproductor es revisa per separat: un error en un no afecta els altres.
+_ = Task.Run(async () =>
+{
+    var stopping = app.Lifetime.ApplicationStopping;
+    using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(100));
+    try
+    {
+        while (await timer.WaitForNextTickAsync(stopping))
+        {
+            foreach (var player in state.Players)
+            {
+                try { player.Tick(); }
+                catch (Exception ex) { log.LogError("Reproductor {Id}: error en revisar-lo: {Message}", player.Id, ex.Message); }
+            }
+
+            if (state.Players.Any(p => p.State == PlayerState.Playing))
+                await hub.BroadcastAsync(PlayerJson.PositionEvent(state.Players), stopping);
         }
     }
     catch (OperationCanceledException)

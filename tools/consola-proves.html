@@ -24,6 +24,10 @@
     .in { color: #9be39b; }
     .ev { color: #888; }
     .err { color: #ff7b7b; }
+    select { font: inherit; background: #23272e; color: #e6e6e6; border: 1px solid #444; border-radius: 4px; padding: 6px 8px; max-width: 100%; }
+    .row { display: flex; gap: 6px; align-items: center; }
+    .row > input, .row > select { flex: 1; min-width: 0; }
+    #players-status { font-family: Consolas, monospace; font-size: 13px; background: #0b0c0e; border: 1px solid #333; border-radius: 4px; padding: 6px 8px; white-space: pre; }
   </style>
 </head>
 <body>
@@ -52,11 +56,34 @@
         <button data-cmd="devices.list" data-params='{ "includeInactive": true }'>devices.list (tots)</button>
       </div>
 
+      <strong>Reproductors</strong>
+      <div class="row">
+        <label>Reproductor</label>
+        <select id="pl-id"><option>1</option><option>2</option></select>
+      </div>
+      <div class="row">
+        <select id="pl-device" title="Sortida"><option value="">(connecta't per veure les sortides)</option></select>
+        <button id="pl-refresh" title="Tornar a llegir les sortides">↻</button>
+        <button id="pl-setdevice">Assignar</button>
+      </div>
+      <div class="row">
+        <input id="pl-path" placeholder="Ruta del fitxer, p. ex. D:\Musica\prova.mp3">
+        <button id="pl-load">Carregar</button>
+      </div>
+      <div class="quick">
+        <button data-player-cmd="player.play">▶ Play</button>
+        <button data-player-cmd="player.pause">⏸ Pausa</button>
+        <button data-player-cmd="player.stop">⏹ Stop</button>
+        <button data-player-cmd="player.retry" title="Després d'un error: torna a obrir la sortida i continua des del mateix punt">↻ Reintentar</button>
+      </div>
+      <div id="players-status">(sense dades)</div>
+
       <strong>Missatge lliure (JSON)</strong>
       <textarea id="custom">{ "v": 1, "id": 100, "cmd": "engine.hello" }</textarea>
       <button id="send">Enviar</button>
 
       <label><input type="checkbox" id="hide-status" checked> Amagar els esdeveniments engine.status</label>
+      <label><input type="checkbox" id="hide-position" checked> Amagar els esdeveniments player.position</label>
       <button id="clear">Netejar el registre</button>
     </div>
 
@@ -89,13 +116,21 @@
       socket?.close();
       const url = `ws://127.0.0.1:${$('port').value}/ws?token=${encodeURIComponent($('token').value.trim())}`;
       socket = new WebSocket(url);
-      socket.onopen = () => { setConnected(true); log('Connectat', 'in'); };
+      socket.onopen = () => {
+        setConnected(true);
+        log('Connectat', 'in');
+        sendCmd('devices.list', { kind: 'output' }); // omple la llista de sortides
+        sendCmd('state.get');                        // estat inicial dels reproductors
+      };
       socket.onclose = (e) => { setConnected(false); log(`Desconnectat (codi ${e.code})`, 'err'); };
       socket.onerror = () => log('Error de connexió (testimoni incorrecte o motor aturat?)', 'err');
       socket.onmessage = (e) => {
         let msg;
         try { msg = JSON.parse(e.data); } catch { log(`← ${e.data}`, 'err'); return; }
+        updatePlayers(msg);
+        if (msg.result?.devices) fillDevices(msg.result.devices);
         if (msg.ev === 'engine.status' && $('hide-status').checked) return;
+        if (msg.ev === 'player.position' && $('hide-position').checked) return;
         log(`← ${JSON.stringify(msg)}`, msg.ev ? 'ev' : (msg.ok ? 'in' : 'err'));
       };
     };
@@ -115,6 +150,59 @@
     });
 
     $('send').onclick = () => send($('custom').value.trim());
+
+    function sendCmd(cmd, params = {}) {
+      send(JSON.stringify({ v: 1, id: nextId++, cmd, ...params }));
+    }
+
+    // --- Reproductors ---
+
+    const players = {}; // id -> { state, file, position, duration, error }
+
+    function fillDevices(devices) {
+      const select = $('pl-device');
+      const previous = select.value;
+      select.innerHTML = '';
+      for (const d of devices.filter((d) => d.kind === 'output')) {
+        const option = document.createElement('option');
+        option.value = d.id;
+        option.textContent = d.name + (d.status === 'active' ? '' : ` (${d.status})`);
+        select.appendChild(option);
+      }
+      if (previous) select.value = previous;
+    }
+
+    function updatePlayers(msg) {
+      const list = msg.ev === 'player.position' ? msg.players
+        : msg.ev === 'player.state' ? [msg.player]
+        : msg.result?.players ?? (msg.result?.player ? [msg.result.player] : null);
+      if (!list) return;
+      for (const p of list) players[p.id] = { ...players[p.id], ...p };
+      renderPlayers();
+    }
+
+    const time = (s) => {
+      if (s == null) return '--:--.-';
+      const m = Math.floor(s / 60);
+      return `${String(m).padStart(2, '0')}:${(s - m * 60).toFixed(1).padStart(4, '0')}`;
+    };
+
+    function renderPlayers() {
+      $('players-status').textContent = Object.keys(players).sort().map((id) => {
+        const p = players[id];
+        const file = p.file ? p.file.split('\\').pop() : '—';
+        const line = `${id}: ${String(p.state ?? '?').padEnd(8)} ${time(p.position)} / ${time(p.duration)}  ${file}`;
+        return p.state === 'error' ? `${line}\n   ⚠ ${p.error}` : line;
+      }).join('\n');
+    }
+
+    const playerId = () => $('pl-id').value;
+    $('pl-refresh').onclick = () => sendCmd('devices.list', { kind: 'output' });
+    $('pl-setdevice').onclick = () => sendCmd('player.setDevice', { player: playerId(), deviceId: $('pl-device').value });
+    $('pl-load').onclick = () => sendCmd('player.load', { player: playerId(), path: $('pl-path').value.trim().replace(/^"|"$/g, '') });
+    document.querySelectorAll('[data-player-cmd]').forEach((btn) => {
+      btn.onclick = () => sendCmd(btn.dataset.playerCmd, { player: playerId() });
+    });
     $('clear').onclick = () => { $('log').textContent = ''; };
   </script>
 </body>

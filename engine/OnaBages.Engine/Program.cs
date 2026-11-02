@@ -36,8 +36,8 @@ builder.Logging.AddFilter("Microsoft", LogLevel.Warning);
 var app = builder.Build();
 var log = app.Logger;
 
-// Fase 1: dos reproductors fixos. Més endavant, el nombre sortirà de la configuració.
-var state = new EngineState([new Player("1"), new Player("2")]);
+// Fase 1: dos reproductors i dos enregistradors fixos. Més endavant, el nombre sortirà de la configuració.
+var state = new EngineState([new Player("1"), new Player("2")], [new Recorder("1"), new Recorder("2")]);
 var hub = new ClientHub(state, log);
 
 // Envia un esdeveniment a tots els clients sense esperar (no pot bloquejar qui el crida).
@@ -58,6 +58,18 @@ foreach (var player in state.Players)
         Broadcast(PlayerJson.StateEvent(p));
     };
 }
+foreach (var recorder in state.Recorders)
+{
+    recorder.StateChanged += r =>
+    {
+        if (r.State == RecorderState.Error)
+            log.LogWarning("Enregistrador {Id}: error — {Message} (detall: {Detail})", r.Id, r.ErrorMessage, r.ErrorDetail ?? "cap");
+        else
+            log.LogInformation("Enregistrador {Id}: {State} {File}", r.Id, RecorderJson.State(r.State), r.FilePath ?? "");
+        Broadcast(RecorderJson.StateEvent(r));
+    };
+}
+
 var router = new CommandRouter(state, () => app.Lifetime.StopApplication());
 
 // Vigilant de dispositius: avisa els clients quan es connecta o desconnecta alguna cosa.
@@ -118,6 +130,13 @@ app.Lifetime.ApplicationStopping.Register(() =>
 {
     log.LogInformation("Aturant el motor");
     watcher.Dispose();
+    // Primer els enregistradors: tanquen els fitxers correctament (i esborren el marcador .rec).
+    foreach (var recorder in state.Recorders)
+    {
+        if (recorder.State == RecorderState.Recording)
+            log.LogInformation("Enregistrador {Id}: tancant {File}", recorder.Id, recorder.FilePath);
+        recorder.Dispose();
+    }
     foreach (var player in state.Players)
         player.Dispose();
     RuntimeFile.DeleteIfOwned();
@@ -144,16 +163,28 @@ _ = Task.Run(async () =>
     }
 });
 
-// Revisió dels reproductors (final de pista, errors) i posició, 10 vegades per segon.
-// Cada reproductor es revisa per separat: un error en un no afecta els altres.
+// Revisió dels reproductors i enregistradors (final de pista, errors), 10 vegades per segon,
+// posició dels reproductors (10/s mentre sonen) i progrés dels enregistraments (1/s).
+// Cada element es revisa per separat: un error en un no afecta els altres.
 _ = Task.Run(async () =>
 {
     var stopping = app.Lifetime.ApplicationStopping;
     using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(100));
+    int tick = 0;
     try
     {
         while (await timer.WaitForNextTickAsync(stopping))
         {
+            tick++;
+            foreach (var recorder in state.Recorders)
+            {
+                try { recorder.Tick(); }
+                catch (Exception ex) { log.LogError("Enregistrador {Id}: error en revisar-lo: {Message}", recorder.Id, ex.Message); }
+            }
+
+            if (tick % 10 == 0 && state.IsRecording)
+                await hub.BroadcastAsync(RecorderJson.ProgressEvent(state.Recorders), stopping);
+
             foreach (var player in state.Players)
             {
                 try { player.Tick(); }

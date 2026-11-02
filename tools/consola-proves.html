@@ -27,7 +27,8 @@
     select { font: inherit; background: #23272e; color: #e6e6e6; border: 1px solid #444; border-radius: 4px; padding: 6px 8px; max-width: 100%; }
     .row { display: flex; gap: 6px; align-items: center; }
     .row > input, .row > select { flex: 1; min-width: 0; }
-    #players-status { font-family: Consolas, monospace; font-size: 13px; background: #0b0c0e; border: 1px solid #333; border-radius: 4px; padding: 6px 8px; white-space: pre; }
+    #players-status, #recorders-status { font-family: Consolas, monospace; font-size: 13px; background: #0b0c0e; border: 1px solid #333; border-radius: 4px; padding: 6px 8px; white-space: pre; overflow-x: auto; }
+    .side { overflow-y: auto; }
   </style>
 </head>
 <body>
@@ -78,12 +79,34 @@
       </div>
       <div id="players-status">(sense dades)</div>
 
+      <strong>Enregistradors</strong>
+      <div class="row">
+        <label>Enregistrador</label>
+        <select id="rec-id"><option>1</option><option>2</option></select>
+      </div>
+      <div class="row">
+        <select id="rec-device" title="Entrada"><option value="">(connecta't per veure les entrades)</option></select>
+        <button id="rec-setdevice">Assignar</button>
+      </div>
+      <div class="row">
+        <input id="rec-name" placeholder="Nom (p. ex. Programa)">
+      </div>
+      <div class="row">
+        <input id="rec-folder" placeholder="Carpeta (buit = Documents\Ona Bages Play\Enregistraments)">
+      </div>
+      <div class="quick">
+        <button id="rec-start">⏺ Enregistrar</button>
+        <button id="rec-stop">⏹ Aturar</button>
+      </div>
+      <div id="recorders-status">(sense dades)</div>
+
       <strong>Missatge lliure (JSON)</strong>
       <textarea id="custom">{ "v": 1, "id": 100, "cmd": "engine.hello" }</textarea>
       <button id="send">Enviar</button>
 
       <label><input type="checkbox" id="hide-status" checked> Amagar els esdeveniments engine.status</label>
       <label><input type="checkbox" id="hide-position" checked> Amagar els esdeveniments player.position</label>
+      <label><input type="checkbox" id="hide-progress" checked> Amagar els esdeveniments recorder.progress</label>
       <button id="clear">Netejar el registre</button>
     </div>
 
@@ -119,7 +142,7 @@
       socket.onopen = () => {
         setConnected(true);
         log('Connectat', 'in');
-        sendCmd('devices.list', { kind: 'output' }); // omple la llista de sortides
+        sendCmd('devices.list');                     // omple les llistes de sortides i d'entrades
         sendCmd('state.get');                        // estat inicial dels reproductors
       };
       socket.onclose = (e) => { setConnected(false); log(`Desconnectat (codi ${e.code})`, 'err'); };
@@ -128,9 +151,11 @@
         let msg;
         try { msg = JSON.parse(e.data); } catch { log(`← ${e.data}`, 'err'); return; }
         updatePlayers(msg);
+        updateRecorders(msg);
         if (msg.result?.devices) fillDevices(msg.result.devices);
         if (msg.ev === 'engine.status' && $('hide-status').checked) return;
         if (msg.ev === 'player.position' && $('hide-position').checked) return;
+        if (msg.ev === 'recorder.progress' && $('hide-progress').checked) return;
         log(`← ${JSON.stringify(msg)}`, msg.ev ? 'ev' : (msg.ok ? 'in' : 'err'));
       };
     };
@@ -160,10 +185,15 @@
     const players = {}; // id -> { state, file, position, duration, error }
 
     function fillDevices(devices) {
-      const select = $('pl-device');
+      fillSelect($('pl-device'), devices.filter((d) => d.kind === 'output'));
+      fillSelect($('rec-device'), devices.filter((d) => d.kind === 'input'));
+    }
+
+    function fillSelect(select, devices) {
+      if (devices.length === 0) return; // p. ex. una resposta només de sortides: no esborrem les entrades
       const previous = select.value;
       select.innerHTML = '';
-      for (const d of devices.filter((d) => d.kind === 'output')) {
+      for (const d of devices) {
         const option = document.createElement('option');
         option.value = d.id;
         option.textContent = d.name + (d.status === 'active' ? '' : ` (${d.status})`);
@@ -197,12 +227,55 @@
     }
 
     const playerId = () => $('pl-id').value;
-    $('pl-refresh').onclick = () => sendCmd('devices.list', { kind: 'output' });
+    $('pl-refresh').onclick = () => sendCmd('devices.list');
     $('pl-setdevice').onclick = () => sendCmd('player.setDevice', { player: playerId(), deviceId: $('pl-device').value });
     $('pl-load').onclick = () => sendCmd('player.load', { player: playerId(), path: $('pl-path').value.trim().replace(/^"|"$/g, '') });
     document.querySelectorAll('[data-player-cmd]').forEach((btn) => {
       btn.onclick = () => sendCmd(btn.dataset.playerCmd, { player: playerId() });
     });
+
+    // --- Enregistradors ---
+
+    const recorders = {}; // id -> { state, file, elapsed, fileSize, freeDiskBytes, ... }
+
+    function updateRecorders(msg) {
+      const list = msg.ev === 'recorder.progress' ? msg.recorders
+        : msg.ev === 'recorder.state' ? [msg.recorder]
+        : msg.result?.recorders ?? (msg.result?.recorder ? [msg.result.recorder] : null);
+      if (!list) return;
+      for (const r of list) recorders[r.id] = { ...recorders[r.id], ...r };
+      renderRecorders();
+    }
+
+    const mb = (bytes) => (bytes == null ? '?' : `${(bytes / 1048576).toFixed(1)} MB`);
+    const gb = (bytes) => (bytes == null ? '?' : `${(bytes / 1073741824).toFixed(1)} GB`);
+
+    function renderRecorders() {
+      $('recorders-status').textContent = Object.keys(recorders).sort().map((id) => {
+        const r = recorders[id];
+        const file = r.file ? r.file.split('\\').pop() : '—';
+        let line = `${id}: ${String(r.state ?? '?').padEnd(9)} ${time(r.elapsed)}  ${mb(r.fileSize)}  lliure ${gb(r.freeDiskBytes)}\n   ${file}`;
+        if (r.samplesLost || r.captureGlitches) line += `\n   ⚠ mostres perdudes ${r.samplesLost}, talls de captura ${r.captureGlitches}`;
+        if (r.state === 'error') line += `\n   ⚠ ${r.error}`;
+        return line;
+      }).join('\n');
+    }
+
+    const recorderId = () => $('rec-id').value;
+    $('rec-setdevice').onclick = () => sendCmd('recorder.setDevice', { recorder: recorderId(), deviceId: $('rec-device').value });
+    $('rec-start').onclick = () => {
+      const params = { recorder: recorderId() };
+      const name = $('rec-name').value.trim();
+      const folder = $('rec-folder').value.trim().replace(/^"|"$/g, '');
+      if (name) params.name = name;
+      if (folder) params.folder = folder;
+      sendCmd('recorder.start', params);
+    };
+    $('rec-stop').onclick = () => {
+      // Aturar un enregistrament sempre demana confirmació.
+      if (confirm(`Segur que vols aturar l'enregistrador ${recorderId()}?`))
+        sendCmd('recorder.stop', { recorder: recorderId() });
+    };
     $('clear').onclick = () => { $('log').textContent = ''; };
   </script>
 </body>

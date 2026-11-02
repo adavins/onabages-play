@@ -59,7 +59,7 @@ public sealed class CommandRouter
                 "engine.hello" => Hello(),
                 "engine.ping" => Ping(),
                 "state.get" => StateGet(),
-                "engine.shutdown" => Shutdown(),
+                "engine.shutdown" => Shutdown(msg),
                 "devices.list" => DevicesList(msg),
                 "player.setDevice" => PlayerSetDevice(msg),
                 "player.load" => PlayerLoad(msg),
@@ -67,6 +67,9 @@ public sealed class CommandRouter
                 "player.pause" => PlayerCommand(msg, p => p.Pause()),
                 "player.stop" => PlayerCommand(msg, p => p.Stop()),
                 "player.retry" => PlayerCommand(msg, p => p.Retry()),
+                "recorder.setDevice" => RecorderSetDevice(msg),
+                "recorder.start" => RecorderStart(msg),
+                "recorder.stop" => RecorderCommand(msg, r => r.Stop()),
                 _ => null,
             };
 
@@ -78,9 +81,17 @@ public sealed class CommandRouter
         {
             return Messages.Error(id, "bad_params", ex.Message);
         }
-        catch (PlayerCommandException ex)
+        catch (Exception ex) when (ex is PlayerCommandException or RecorderCommandException)
         {
             return Messages.Error(id, "bad_state", ex.Message);
+        }
+        catch (RecordingActiveException ex)
+        {
+            return Messages.Error(id, "recording_active", ex.Message);
+        }
+        catch (RecorderFailedException ex)
+        {
+            return Messages.Error(id, "recorder_error", ex.Message);
         }
         catch (PlayerFailedException ex)
         {
@@ -110,6 +121,7 @@ public sealed class CommandRouter
     {
         ["engine"] = _state.ToJson(),
         ["players"] = PlayerJson.All(_state.Players),
+        ["recorders"] = RecorderJson.All(_state.Recorders),
     };
 
     // -----------------------------------------------------------------------
@@ -167,9 +179,69 @@ public sealed class CommandRouter
     /// <summary>L'ordre ha deixat el reproductor en estat d'error: es respon amb "player_error".</summary>
     private sealed class PlayerFailedException(string message) : Exception(message);
 
-    private JsonObject Shutdown()
+    // -----------------------------------------------------------------------
+    // Enregistradors
+    // -----------------------------------------------------------------------
+
+    private Recorder GetRecorder(JsonObject msg)
     {
-        // Fase 1+: rebutjar si hi ha enregistraments actius, tret de "force": true.
+        string? id = ReadString(msg["recorder"]);
+        if (string.IsNullOrWhiteSpace(id))
+            throw new BadParamsException("Falta el camp 'recorder' (identificador de l'enregistrador).");
+        return _state.FindRecorder(id) ?? throw new BadParamsException($"No existeix l'enregistrador '{id}'.");
+    }
+
+    private JsonObject RecorderSetDevice(JsonObject msg)
+    {
+        var recorder = GetRecorder(msg);
+        recorder.SetDevice(RequireString(msg, "deviceId"));
+        // Canviar l'entrada sempre funciona, encara que l'enregistrador tingui un error anterior.
+        return new JsonObject { ["recorder"] = RecorderJson.Recorder(recorder) };
+    }
+
+    /// <summary>Paràmetres opcionals: "folder" (carpeta de treball) i "name" (per al nom del fitxer).</summary>
+    private JsonObject RecorderStart(JsonObject msg)
+    {
+        var recorder = GetRecorder(msg);
+        string? folder = ReadString(msg["folder"]);
+        string? name = ReadString(msg["name"]);
+        if (folder is not null && !Path.IsPathFullyQualified(folder))
+            throw new BadParamsException("'folder' ha de ser una ruta completa (p. ex. D:\\Enregistraments).");
+
+        recorder.Start(string.IsNullOrWhiteSpace(folder) ? null : folder, string.IsNullOrWhiteSpace(name) ? null : name);
+        return RecorderResult(recorder);
+    }
+
+    private JsonObject RecorderCommand(JsonObject msg, Action<Recorder> action)
+    {
+        var recorder = GetRecorder(msg);
+        action(recorder);
+        return RecorderResult(recorder);
+    }
+
+    /// <summary>Si l'ordre ha deixat l'enregistrador en Error, la resposta és un error amb el motiu.</summary>
+    private static JsonObject RecorderResult(Recorder recorder)
+    {
+        if (recorder.State == RecorderState.Error)
+            throw new RecorderFailedException(recorder.ErrorMessage ?? "Error de l'enregistrador.");
+        return new JsonObject { ["recorder"] = RecorderJson.Recorder(recorder) };
+    }
+
+    private sealed class RecorderFailedException(string message) : Exception(message);
+
+    private sealed class RecordingActiveException(string message) : Exception(message);
+
+    /// <summary>
+    /// Atura el motor. Si hi ha enregistraments en curs es rebutja, tret que es demani
+    /// amb "force": true (llavors els fitxers es tanquen correctament abans d'aturar-se).
+    /// </summary>
+    private JsonObject Shutdown(JsonObject msg)
+    {
+        bool force = msg["force"] is JsonValue v && v.TryGetValue(out bool b) && b;
+        if (_state.IsRecording && !force)
+            throw new RecordingActiveException(
+                "Hi ha enregistraments en curs. Atura'ls primer (o envia \"force\": true per tancar-los i aturar el motor).");
+
         _ = Task.Run(async () =>
         {
             await Task.Delay(200); // deixa temps perquè la resposta arribi al client

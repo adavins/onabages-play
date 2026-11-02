@@ -1,7 +1,7 @@
 # Protocol interfície ↔ motor
 
 **Versió del protocol:** 1
-**Estat:** fase 1 (ordres bàsiques del motor, llista de dispositius i avisos de canvis)
+**Estat:** fase 1 (motor, dispositius, reproductors i enregistradors)
 
 Qualsevol canvi en aquest protocol s'ha d'anotar aquí en el mateix commit que el canvi de codi.
 
@@ -57,6 +57,8 @@ Tots els missatges són objectes JSON amb el camp `"v": 1`.
 | `bad_params` | Falta un paràmetre o té un valor no vàlid (p. ex. un reproductor que no existeix) |
 | `bad_state` | L'ordre no es pot fer en l'estat actual (p. ex. Play sense pista carregada). No canvia res |
 | `player_error` | L'ordre s'ha fet, però el reproductor ha quedat en estat `error` (dispositiu no disponible, fitxer il·legible). El missatge n'explica el motiu |
+| `recorder_error` | L'ordre s'ha fet, però l'enregistrador ha quedat en estat `error` (entrada no disponible, carpeta sense permís...). El missatge n'explica el motiu |
+| `recording_active` | `engine.shutdown` sense `force`, amb enregistraments en curs. No s'atura res |
 | `unknown_command` | L'ordre no existeix |
 | `internal` | Error inesperat del motor (el motor continua funcionant) |
 
@@ -66,8 +68,8 @@ Tots els missatges són objectes JSON amb el camp `"v": 1`.
 |---|---|---|---|
 | `engine.hello` | — | `{ name, version, protocol }` | fase 0 |
 | `engine.ping` | — | `{ pong: true, time }` | fase 0 |
-| `state.get` | — | `{ engine: { version, uptime, clients }, players: [ … ] }` (vegeu 4.2; s'ampliarà amb els enregistradors) | fase 0 (`players`: fase 1) |
-| `engine.shutdown` | — | `{ stopping: true }` i el motor es tanca. A partir de la fase 1, es rebutjarà si hi ha enregistraments actius, tret de `force: true` | fase 0 |
+| `state.get` | — | `{ engine: { version, uptime, clients }, players: [ … ], recorders: [ … ] }` (vegeu 4.2 i 4.3) | fase 0 (`players`, `recorders`: fase 1) |
+| `engine.shutdown` | `force` (opcional, `true`) | `{ stopping: true }` i el motor es tanca. Si hi ha enregistraments en curs, es rebutja amb `recording_active`, tret que s'enviï `force: true`: llavors es tanquen correctament (fitxers vàlids, sense marcador `.rec`) abans d'aturar-se | fase 0 (`force`: fase 1) |
 | `devices.list` | `kind`: `"output"`, `"input"` o `"all"` (per defecte); `includeInactive`: `true` per incloure també els desactivats i desconnectats (per defecte, `false`) | `{ devices: [ … ] }` (vegeu 4.1) | fase 1 |
 
 ### 4.1. Dispositius
@@ -115,6 +117,36 @@ Objecte `player` (també a `state.get` i a l'esdeveniment `player.state`):
 - `error`: el motiu, en català, quan `state` és `error`. La pista i la posició es conserven. Per continuar: `player.retry` (mateixa sortida) o `player.setDevice` (una altra), i després `player.play`. El reproductor **no reprèn mai sol**. El detall tècnic de Windows no s'envia: només queda al registre del motor.
 - `underruns`: talls des que es va obrir el reproductor (la targeta ha demanat so i no n'hi havia de preparat). Ha de ser 0; serveix per a les proves llargues.
 
+### 4.3. Enregistradors
+
+Fase 1: hi ha dos enregistradors fixos, `"1"` i `"2"`. Encara no hi ha Desar, Descartar ni Editar (fase 2).
+
+| Ordre | Paràmetres | Estats en què es pot fer | Resultat |
+|---|---|---|---|
+| `recorder.setDevice` | `recorder`, `deviceId` (una **entrada**) | tots menys `recording` | `{ recorder }` |
+| `recorder.start` | `recorder`; opcionals: `folder` (ruta completa; per defecte `Documents\Ona Bages Play\Enregistraments`) i `name` (per al nom del fitxer; per defecte `Enregistrador N`) | `idle`, `pending`, `error` (l'enregistrament anterior es queda on és) | `{ recorder }` |
+| `recorder.stop` | `recorder` | `recording`. La interfície **sempre** ha de demanar confirmació abans d'enviar-la | `{ recorder }` |
+
+Fitxer: `<carpeta>\<nom>_AAAA-MM-DD_HH-MM-SS.mp3` (si ja existeix, s'hi afegeix `_2`, `_3`...). MP3 320 kbps CBR estèreo, a la freqüència de l'entrada. Mentre s'enregistra hi ha un marcador `<fitxer>.mp3.rec` (JSON) que s'esborra en aturar correctament.
+
+Objecte `recorder` (també a `state.get` i a l'esdeveniment `recorder.state`):
+
+```json
+{ "id": "1", "state": "recording",
+  "deviceId": "{0.0.1.00000000}.{1942b38d-…}",
+  "file": "C:\\Users\\…\\Enregistraments\\Programa_2026-11-02_17-30-00.mp3",
+  "startedAt": "2026-11-02T17:30:00.123+01:00",
+  "elapsed": 125.4, "fileSize": 5017600, "freeDiskBytes": 146028888064,
+  "sampleRate": 48000, "bitrateKbps": 320,
+  "samplesLost": 0, "captureGlitches": 0,
+  "error": null }
+```
+
+- `state`: `idle` (inactiu), `recording`, `pending` (fitxer acabat, a `file`), `error`.
+- `elapsed`: segons enregistrats. `fileSize`: bytes escrits. `freeDiskBytes`: espai lliure a la unitat del fitxer (`null` si no se sap, p. ex. en una unitat de xarxa).
+- `samplesLost`: mostres perdudes perquè el disc no ha anat prou ràpid. `captureGlitches`: vegades que Windows ha avisat que s'han perdut dades de captura. Tots dos han de ser 0.
+- `error`: el motiu, en català, quan `state` és `error`. Si l'entrada es desconnecta mentre s'enregistra, el fitxer es tanca correctament (vàlid fins a aquell moment) i `file` hi continua apuntant. Per continuar, `recorder.start` en fa un de nou.
+
 ## 5. Esdeveniments
 
 | Esdeveniment | Camps | Freqüència | Des de |
@@ -123,6 +155,8 @@ Objecte `player` (també a `state.get` i a l'esdeveniment `player.state`):
 | `devices.changed` | `changes`: llista de canvis (vegeu 5.1) | quan Windows avisa d'un canvi real, agrupat (0,5 s sense avisos nous) | fase 1 |
 | `player.state` | `player`: objecte complet (vegeu 4.2) | quan canvia l'estat, el fitxer, la sortida o l'error d'un reproductor | fase 1 |
 | `player.position` | `players`: `[ { id, position, duration } ]` de tots els reproductors | 10 per segon, només mentre algun reproductor sona | fase 1 |
+| `recorder.state` | `recorder`: objecte complet (vegeu 4.3) | quan canvia l'estat, el fitxer, l'entrada o l'error d'un enregistrador | fase 1 |
+| `recorder.progress` | `recorders`: `[ { id, elapsed, fileSize, freeDiskBytes, samplesLost, captureGlitches } ]` dels que enregistren | cada segon, només mentre algun enregistra | fase 1 |
 
 ### 5.1. Canvis de dispositius
 
@@ -149,7 +183,7 @@ Objecte `player` (també a `state.get` i a l'esdeveniment `player.state`):
 
 ## 6. Previst (no implementat)
 
-- `player.*`, `player.state` (fase 1–2)
-- `recorder.*`, `recorder.state` (fase 1–2)
+- Reproductors: llistes, volum, salts de posició (fase 2)
+- Enregistradors: desar, descartar, editar, recents, recuperació (fase 2)
 - `cue.*` (preescolta, fase 2)
 - `meters` (agrupat, 20–30 per segon, fase 1)

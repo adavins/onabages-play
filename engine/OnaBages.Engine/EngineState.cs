@@ -7,7 +7,7 @@ namespace OnaBages.Engine;
 /// <summary>
 /// Estat global del motor. El motor és la font de veritat: la interfície
 /// el demana amb <c>state.get</c> en connectar-se.
-/// Fase 1: reproductors (fixos, sense configuració desada). Després: enregistradors.
+/// Fase 1: reproductors i enregistradors fixos, sense configuració desada.
 /// </summary>
 public sealed class EngineState
 {
@@ -15,10 +15,21 @@ public sealed class EngineState
     private int _clients;
 
     /// <param name="players">Reproductors del motor. Les proves en poden passar de falsos, o cap.</param>
-    public EngineState(IEnumerable<Player>? players = null)
+    /// <param name="recorders">Enregistradors del motor. Igual.</param>
+    public EngineState(IEnumerable<Player>? players = null, IEnumerable<Recorder>? recorders = null)
     {
         Players = (players ?? []).ToList();
+        Recorders = (recorders ?? []).ToList();
     }
+
+    /// <summary>Enregistradors, en ordre ("1", "2"...).</summary>
+    public IReadOnlyList<Recorder> Recorders { get; }
+
+    /// <summary>Enregistrador amb aquest identificador, o null si no existeix.</summary>
+    public Recorder? FindRecorder(string? id) => Recorders.FirstOrDefault(r => r.Id == id);
+
+    /// <summary>Hi ha algun enregistrament en curs?</summary>
+    public bool IsRecording => Recorders.Any(r => r.State == RecorderState.Recording);
 
     /// <summary>Reproductors, en ordre ("1", "2"...).</summary>
     public IReadOnlyList<Player> Players { get; }

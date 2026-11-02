@@ -71,7 +71,7 @@ public class DeviceWatcherTests
     {
         IReadOnlyList<AudioDevice> current = [Antena()];
         int reads = 0;
-        using var watcher = new DeviceWatcher(() => { reads++; return current; }, TimeSpan.FromMilliseconds(100));
+        using var watcher = new DeviceWatcher(() => { reads++; return current; }, TimeSpan.FromMilliseconds(300));
 
         var events = new List<IReadOnlyList<DeviceChange>>();
         var received = new TaskCompletionSource();
@@ -80,15 +80,13 @@ public class DeviceWatcherTests
         watcher.ReadInitialList();
         current = [Antena(DeviceStatus.Unplugged)];
 
-        // Com Windows: diversos avisos per a una sola acció.
+        // Com Windows: diversos avisos seguits per a una sola acció. (Sense pauses entre
+        // avisos, perquè la prova no depengui de la càrrega de l'ordinador.)
         for (int i = 0; i < 10; i++)
-        {
             watcher.Poke();
-            await Task.Delay(10);
-        }
 
         await received.Task.WaitAsync(TimeSpan.FromSeconds(3));
-        await Task.Delay(300); // per si n'arribés un altre
+        await Task.Delay(600); // per si n'arribés un altre
 
         var only = Assert.Single(events);
         Assert.Equal(DeviceChangeType.StatusChanged, Assert.Single(only).Type);

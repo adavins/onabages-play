@@ -10,4 +10,10 @@
   <ItemGroup>
     <PackageReference Include="NAudio.Wasapi" Version="3.3.0" />
   </ItemGroup>
+
+  <!-- LAME 3.100 x64 (LGPL, enllaç dinàmic): vegeu native/LLEGEIX-ME.md -->
+  <ItemGroup>
+    <None Include="native\libmp3lame.dll" Link="libmp3lame.dll" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="native\COPYING-LGPL-2.0.txt" Link="LAME-COPYING-LGPL-2.0.txt" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

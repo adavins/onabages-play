@@ -48,6 +48,55 @@ internal static class TestAudio
 }
 
 /// <summary>
+/// Entrada falsa: <see cref="Push"/> fa el paper del fil de captura de Windows.
+/// </summary>
+internal sealed class FakeInput(int sampleRate = 48000, int channels = 2) : IAudioInput
+{
+    public int SampleRate => sampleRate;
+    public int Channels => channels;
+    public bool IsRunning { get; private set; }
+    public bool Disposed { get; private set; }
+    public event SamplesCapturedHandler? DataAvailable;
+    public event Action<Exception?>? Stopped;
+
+    /// <summary>Si és cert, Start() falla amb un error inesperat (per provar la neteja).</summary>
+    public bool ThrowOnStart { get; init; }
+
+    public void Start()
+    {
+        if (ThrowOnStart) throw new InvalidOperationException("error inesperat del controlador");
+        IsRunning = true;
+    }
+
+    public void Stop() => IsRunning = false;
+    public void Dispose() => Disposed = true;
+
+    /// <summary>Envia mostres com si arribessin de la targeta.</summary>
+    public void Push(float[] samples, bool silent = false, bool discontinuity = false) =>
+        DataAvailable?.Invoke(samples, silent, discontinuity);
+
+    /// <summary>Envia <paramref name="seconds"/> d'un to de 440 Hz, en paquets de 10 ms.</summary>
+    public void PushTone(double seconds)
+    {
+        int packet = sampleRate / 100;
+        int total = (int)(sampleRate * seconds);
+        var buffer = new float[packet * channels];
+        for (int start = 0; start < total; start += packet)
+        {
+            for (int i = 0; i < packet; i++)
+            {
+                float v = 0.3f * (float)Math.Sin(2 * Math.PI * 440 * (start + i) / sampleRate);
+                for (int c = 0; c < channels; c++) buffer[i * channels + c] = v;
+            }
+            Push(buffer);
+        }
+    }
+
+    /// <summary>Simula que l'entrada s'ha desconnectat.</summary>
+    public void Fail(string message) => Stopped?.Invoke(new IOException(message));
+}
+
+/// <summary>
 /// Sortida falsa: no fa so. <see cref="Pump"/> fa el paper del fil d'àudio de Windows
 /// i demana mostres a la font.
 /// </summary>

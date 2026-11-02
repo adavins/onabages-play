@@ -118,7 +118,7 @@ function engineCommand(port, token) {
     // Aplicació instal·lada (fase 2: l'instal·lador hi copiarà el motor).
     path.join(process.resourcesPath || '', 'engine', exeName),
     // Desenvolupament: després de "dotnet build".
-    path.join(REPO_ROOT, 'engine', 'OnaBages.Engine', 'bin', 'Debug', 'net10.0', exeName),
+    path.join(REPO_ROOT, 'engine', 'OnaBages.Engine', 'bin', 'Debug', 'net10.0-windows', exeName),
   ];
 
   for (const candidate of candidates) {

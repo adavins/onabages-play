@@ -42,6 +42,8 @@ $FORM_FACTORS = @{
 }
 
 function Get-StateText([int]$state) {
+  # Windows marca amb aquest bit els dispositius desactivats per l'usuari (els bits baixos no canvien).
+  if ($state -band 0x10000000) { return 'desactivat' }
   switch ($state -band 0x0F) {
     1 { 'actiu' }
     2 { 'desactivat' }
@@ -124,7 +126,7 @@ function Get-Endpoints([string]$flow) {
       Name       = $name
       Type       = $type
       State      = Get-StateText $state
-      Active     = (($state -band 0x0F) -eq 1)
+      Active     = (($state -band 0x0F) -eq 1) -and -not ($state -band 0x10000000)
       Card       = $interface
       Connection = Get-ConnectionText ([string]$props.GetValue($KEY_PARENT_DEVICE))
       Format     = $format

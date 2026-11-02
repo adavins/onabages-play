@@ -1,7 +1,7 @@
 # Protocol interfície ↔ motor
 
 **Versió del protocol:** 1
-**Estat:** fase 0 (només ordres bàsiques del motor)
+**Estat:** fase 1 (ordres bàsiques del motor i llista de dispositius)
 
 Qualsevol canvi en aquest protocol s'ha d'anotar aquí en el mateix commit que el canvi de codi.
 
@@ -54,6 +54,7 @@ Tots els missatges són objectes JSON amb el camp `"v": 1`.
 | `bad_json` | El missatge no és JSON vàlid o no és un objecte |
 | `protocol_version` | El camp `v` falta o no és compatible |
 | `missing_cmd` | Falta el camp `cmd` |
+| `bad_params` | Un paràmetre de l'ordre té un valor no vàlid |
 | `unknown_command` | L'ordre no existeix |
 | `internal` | Error inesperat del motor (el motor continua funcionant) |
 
@@ -65,6 +66,24 @@ Tots els missatges són objectes JSON amb el camp `"v": 1`.
 | `engine.ping` | — | `{ pong: true, time }` | fase 0 |
 | `state.get` | — | `{ engine: { version, uptime, clients } }` (s'ampliarà amb reproductors i enregistradors) | fase 0 |
 | `engine.shutdown` | — | `{ stopping: true }` i el motor es tanca. A partir de la fase 1, es rebutjarà si hi ha enregistraments actius, tret de `force: true` | fase 0 |
+| `devices.list` | `kind`: `"output"`, `"input"` o `"all"` (per defecte); `includeInactive`: `true` per incloure també els desactivats i desconnectats (per defecte, `false`) | `{ devices: [ … ] }` (vegeu 4.1) | fase 1 |
+
+### 4.1. Dispositius
+
+```json
+{ "id": "{0.0.0.00000000}.{f2d6376b-71c4-4ffc-a362-a446ddd885a8}",
+  "name": "Altavoces - Sound Blaster Z (Sound Blaster Z)",
+  "kind": "output",
+  "status": "active",
+  "format": { "sampleRate": 48000, "bits": 24, "channels": 2 } }
+```
+
+- `id`: identificador estable de Windows. És el que es desa a la configuració.
+- `name`: nom complet tal com el mostra Windows. Canvia si l'usuari reanomena el dispositiu; l'`id`, no.
+- `kind`: `output` (sortida) o `input` (entrada).
+- `status`: `active`, `disabled` (desactivat a Windows) o `unplugged` (la targeta hi és però no hi ha res connectat).
+- `format`: el format triat a Windows (o el del fabricant, si no se n'ha triat cap); `null` si no se sap.
+- Els dispositius que Windows recorda però que ja no hi són no s'inclouen mai.
 
 ## 5. Esdeveniments
 
@@ -74,7 +93,7 @@ Tots els missatges són objectes JSON amb el camp `"v": 1`.
 
 ## 6. Previst (no implementat)
 
-- `devices.list`, `devices.changed` (fase 1)
+- `devices.changed` (fase 1)
 - `player.*`, `player.state` (fase 1–2)
 - `recorder.*`, `recorder.state` (fase 1–2)
 - `cue.*` (preescolta, fase 2)

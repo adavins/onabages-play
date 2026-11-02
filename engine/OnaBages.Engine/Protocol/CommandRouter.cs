@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using OnaBages.Audio;
 
 namespace OnaBages.Engine.Protocol;
 
@@ -11,13 +12,19 @@ public sealed class CommandRouter
 {
     private readonly EngineState _state;
     private readonly Action _requestShutdown;
+    private readonly Func<IReadOnlyList<AudioDevice>> _listDevices;
 
     /// <param name="state">Estat del motor.</param>
     /// <param name="requestShutdown">Acció que atura el motor (s'executa poc després de respondre).</param>
-    public CommandRouter(EngineState state, Action requestShutdown)
+    /// <param name="listDevices">
+    /// Funció que retorna els dispositius d'àudio. Per defecte, els reals de Windows;
+    /// les proves hi passen una llista inventada.
+    /// </param>
+    public CommandRouter(EngineState state, Action requestShutdown, Func<IReadOnlyList<AudioDevice>>? listDevices = null)
     {
         _state = state;
         _requestShutdown = requestShutdown;
+        _listDevices = listDevices ?? DeviceList.GetAll;
     }
 
     public JsonObject Handle(string text)
@@ -53,12 +60,17 @@ public sealed class CommandRouter
                 "engine.ping" => Ping(),
                 "state.get" => StateGet(),
                 "engine.shutdown" => Shutdown(),
+                "devices.list" => DevicesList(msg),
                 _ => null,
             };
 
             return result is null
                 ? Messages.Error(id, "unknown_command", $"Ordre desconeguda: {cmd}")
                 : Messages.Ok(id, result);
+        }
+        catch (BadParamsException ex)
+        {
+            return Messages.Error(id, "bad_params", ex.Message);
         }
         catch (Exception ex)
         {
@@ -96,6 +108,53 @@ public sealed class CommandRouter
 
         return new JsonObject { ["stopping"] = true };
     }
+
+    /// <summary>
+    /// Llista de dispositius d'àudio.
+    /// Paràmetres opcionals: "kind" ("output", "input" o "all") i "includeInactive" (bool).
+    /// </summary>
+    private JsonObject DevicesList(JsonObject msg)
+    {
+        string kind = ReadString(msg["kind"]) ?? "all";
+        if (kind is not ("all" or "output" or "input"))
+            throw new BadParamsException("'kind' ha de ser \"output\", \"input\" o \"all\".");
+
+        bool includeInactive = msg["includeInactive"] is JsonValue v && v.TryGetValue(out bool b) && b;
+
+        var list = new JsonArray();
+        foreach (var device in _listDevices())
+        {
+            if (kind == "output" && device.Kind != DeviceKind.Output) continue;
+            if (kind == "input" && device.Kind != DeviceKind.Input) continue;
+            if (!includeInactive && device.Status != DeviceStatus.Active) continue;
+
+            list.Add(DeviceToJson(device));
+        }
+
+        return new JsonObject { ["devices"] = list };
+    }
+
+    private static JsonObject DeviceToJson(AudioDevice device) => new()
+    {
+        ["id"] = device.Id,
+        ["name"] = device.Name,
+        ["kind"] = device.Kind == DeviceKind.Output ? "output" : "input",
+        ["status"] = device.Status switch
+        {
+            DeviceStatus.Active => "active",
+            DeviceStatus.Disabled => "disabled",
+            _ => "unplugged",
+        },
+        ["format"] = device.Format is null ? null : new JsonObject
+        {
+            ["sampleRate"] = device.Format.SampleRate,
+            ["bits"] = device.Format.Bits,
+            ["channels"] = device.Format.Channels,
+        },
+    };
+
+    /// <summary>Error en els paràmetres d'una ordre: es respon amb el codi "bad_params".</summary>
+    private sealed class BadParamsException(string message) : Exception(message);
 
     private static int? ReadInt(JsonNode? node) =>
         node is JsonValue value && value.TryGetValue(out int i) ? i : null;

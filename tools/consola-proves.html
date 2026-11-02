@@ -46,6 +46,12 @@
         <button data-cmd="engine.shutdown">engine.shutdown</button>
       </div>
 
+      <strong>Dispositius</strong>
+      <div class="quick">
+        <button data-cmd="devices.list">devices.list (actius)</button>
+        <button data-cmd="devices.list" data-params='{ "includeInactive": true }'>devices.list (tots)</button>
+      </div>
+
       <strong>Missatge lliure (JSON)</strong>
       <textarea id="custom">{ "v": 1, "id": 100, "cmd": "engine.hello" }</textarea>
       <button id="send">Enviar</button>
@@ -103,7 +109,9 @@
     }
 
     document.querySelectorAll('[data-cmd]').forEach((btn) => {
-      btn.onclick = () => send(JSON.stringify({ v: 1, id: nextId++, cmd: btn.dataset.cmd }));
+      // data-params (opcional): paràmetres addicionals de l'ordre, en JSON.
+      const params = btn.dataset.params ? JSON.parse(btn.dataset.params) : {};
+      btn.onclick = () => send(JSON.stringify({ v: 1, id: nextId++, cmd: btn.dataset.cmd, ...params }));
     });
 
     $('send').onclick = () => send($('custom').value.trim());

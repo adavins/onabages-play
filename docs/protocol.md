@@ -1,7 +1,7 @@
 # Protocol interfície ↔ motor
 
 **Versió del protocol:** 1
-**Estat:** fase 1 (ordres bàsiques del motor i llista de dispositius)
+**Estat:** fase 1 (ordres bàsiques del motor, llista de dispositius i avisos de canvis)
 
 Qualsevol canvi en aquest protocol s'ha d'anotar aquí en el mateix commit que el canvi de codi.
 
@@ -90,10 +90,33 @@ Tots els missatges són objectes JSON amb el camp `"v": 1`.
 | Esdeveniment | Camps | Freqüència | Des de |
 |---|---|---|---|
 | `engine.status` | `uptime` (s), `clients` | cada segon | fase 0 |
+| `devices.changed` | `changes`: llista de canvis (vegeu 5.1) | quan Windows avisa d'un canvi real, agrupat (0,5 s sense avisos nous) | fase 1 |
+
+### 5.1. Canvis de dispositius
+
+```json
+{ "v": 1, "ev": "devices.changed",
+  "changes": [
+    { "change": "status", "device": { "id": "…", "name": "Altavoces - Realtek (…)", "kind": "output", "status": "unplugged", "format": { … } },
+      "previousStatus": "active" }
+  ] }
+```
+
+| `change` | Què ha passat | Camp addicional |
+|---|---|---|
+| `added` | Apareix un dispositiu nou (p. ex. s'ha connectat un USB) | — |
+| `removed` | El dispositiu ja no hi és (s'ha tret el USB o la targeta) | — (`device` és com era abans) |
+| `status` | Ha canviat d'estat (`active`, `disabled`, `unplugged`) | `previousStatus` |
+| `renamed` | L'usuari l'ha reanomenat a Windows | `previousName` |
+| `format` | Ha canviat el format a Windows | `previousFormat` |
+
+- `device` té el mateix format que a `devices.list` (4.1).
+- Un mateix dispositiu pot aparèixer més d'una vegada si li han canviat diverses coses alhora.
+- Windows envia molts avisos per a una sola acció (i també quan algú mou el volum). El motor els agrupa i **només envia l'esdeveniment si la llista ha canviat de debò**.
+- Els dispositius «no presents» no s'hi tenen en compte: un USB que es treu dona `removed` o `status` → `unplugged`, segons el controlador.
 
 ## 6. Previst (no implementat)
 
-- `devices.changed` (fase 1)
 - `player.*`, `player.state` (fase 1–2)
 - `recorder.*`, `recorder.state` (fase 1–2)
 - `cue.*` (preescolta, fase 2)

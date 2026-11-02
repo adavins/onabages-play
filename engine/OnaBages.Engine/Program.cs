@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using OnaBages.Audio;
 using OnaBages.Engine;
 using OnaBages.Engine.Protocol;
 
@@ -39,6 +40,31 @@ var state = new EngineState();
 var hub = new ClientHub(state, log);
 var router = new CommandRouter(state, () => app.Lifetime.StopApplication());
 
+// Vigilant de dispositius: avisa els clients quan es connecta o desconnecta alguna cosa.
+var watcher = new DeviceWatcher();
+watcher.Changed += changes =>
+{
+    foreach (var change in changes)
+        log.LogInformation("Dispositiu: {Change}", DescribeChange(change));
+
+    var ev = DeviceJson.ChangedEvent(changes);
+    _ = Task.Run(async () =>
+    {
+        try { await hub.BroadcastAsync(ev, app.Lifetime.ApplicationStopping); }
+        catch (OperationCanceledException) { /* el motor s'està aturant */ }
+    });
+};
+watcher.Error += ex => log.LogWarning("Error en llegir els dispositius: {Message}", ex.Message);
+try
+{
+    watcher.Start();
+}
+catch (Exception ex)
+{
+    // Sense avisos de dispositius el motor pot continuar; només ho deixem escrit.
+    log.LogError("No s'han pogut activar els avisos de dispositius: {Message}", ex.Message);
+}
+
 app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TimeSpan.FromSeconds(15) });
 
 // Comprovació de vida (sense testimoni): la fa servir Electron per saber si el motor ja funciona.
@@ -76,6 +102,7 @@ app.Lifetime.ApplicationStarted.Register(() =>
 app.Lifetime.ApplicationStopping.Register(() =>
 {
     log.LogInformation("Aturant el motor");
+    watcher.Dispose();
     RuntimeFile.DeleteIfOwned();
 });
 
@@ -111,3 +138,25 @@ catch (IOException ex)
 }
 
 return 0;
+
+// Text breu d'un canvi de dispositiu, per al registre del motor.
+static string DescribeChange(DeviceChange change)
+{
+    string name = change.Device.Name;
+    return change.Type switch
+    {
+        DeviceChangeType.Added => $"nou: {name}",
+        DeviceChangeType.Removed => $"ja no hi és: {name}",
+        DeviceChangeType.StatusChanged => $"{name}: {StatusText(change.PreviousStatus)} → {StatusText(change.Device.Status)}",
+        DeviceChangeType.Renamed => $"reanomenat: «{change.PreviousName}» → «{name}»",
+        _ => $"{name}: format canviat",
+    };
+
+    static string StatusText(DeviceStatus? status) => status switch
+    {
+        DeviceStatus.Active => "actiu",
+        DeviceStatus.Disabled => "desactivat",
+        DeviceStatus.Unplugged => "desconnectat",
+        _ => "?",
+    };
+}

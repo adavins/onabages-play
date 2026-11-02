@@ -128,30 +128,11 @@ public sealed class CommandRouter
             if (kind == "input" && device.Kind != DeviceKind.Input) continue;
             if (!includeInactive && device.Status != DeviceStatus.Active) continue;
 
-            list.Add(DeviceToJson(device));
+            list.Add(DeviceJson.Device(device));
         }
 
         return new JsonObject { ["devices"] = list };
     }
-
-    private static JsonObject DeviceToJson(AudioDevice device) => new()
-    {
-        ["id"] = device.Id,
-        ["name"] = device.Name,
-        ["kind"] = device.Kind == DeviceKind.Output ? "output" : "input",
-        ["status"] = device.Status switch
-        {
-            DeviceStatus.Active => "active",
-            DeviceStatus.Disabled => "disabled",
-            _ => "unplugged",
-        },
-        ["format"] = device.Format is null ? null : new JsonObject
-        {
-            ["sampleRate"] = device.Format.SampleRate,
-            ["bits"] = device.Format.Bits,
-            ["channels"] = device.Format.Channels,
-        },
-    };
 
     /// <summary>Error en els paràmetres d'una ordre: es respon amb el codi "bad_params".</summary>
     private sealed class BadParamsException(string message) : Exception(message);

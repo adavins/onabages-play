@@ -10,7 +10,8 @@ L'especificació completa és a `docs/especificacio.md`. Llegeix-ne la secció c
 
 ## Fase actual
 
-**Fase 0 — Preparació** (vegeu `docs/especificacio.md`, secció 14.3).
+**Fase 1 — Prototip del motor (sense interfície)** (vegeu `docs/especificacio.md`, secció 14.3).
+Ordinador de proves i repartiment de dispositius: `docs/inventari/`.
 Quan una fase s'acabi, actualitza aquesta línia i afegeix una entrada a `docs/decisions.md`.
 
 ## Com treballem

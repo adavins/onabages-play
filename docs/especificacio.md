@@ -666,6 +666,7 @@ Candidates: botonera de talls (cartwall), detector de silenci, punts cue d'inici
 | Precisió dels talls MP3 (~25 ms) | Talls poc precisos | Suficient per a la parla; igual que mp3DirectCut |
 | Abast massa ampli per a una sola persona | Projecte que no s'acaba | MVP estricte; fases amb criteri de validació; ampliacions només després de l'ús real |
 | Dispositius USB que canvien d'identificador | Reproductor sense sortida en arrencar | Identificació per id i per nom; avís clar |
+| Targetes integrades (Realtek) que fan desaparèixer el dispositiu en desendollar un cable | Reproductor o enregistrador sense dispositiu durant el directe | Desactivar la detecció de connectors (`docs/installacio-windows.md`); polítiques de 5.3; l'inventari ho detecta |
 | Maquinari que canvia entre sessions (targetes afegides o tretes) | Elements sense dispositiu; so per una sortida inesperada | Detecció en arrencar, resum de canvis, cap reassignació automàtica (5.6) |
 | Ordinadors domèstics amb pocs recursos | Talls, interfície lenta | Proves a l'ordinador més modest; lectura a trossos; mesuradors amb freqüència configurable |
 | Port WebSocket local accessible per altres programes | Control no autoritzat | Només `127.0.0.1` + testimoni per sessió |

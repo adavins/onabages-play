@@ -9,13 +9,18 @@ Tauler de control → So (o `mmsys.cpl`), pestanyes **Reproducció** i **Enregis
 
 - [ ] **Propietats → Millores** (o «Mejoras de audio»): desactivar-les totes.
 - [ ] **Propietats → Opcions avançades → Format predeterminat:** el mateix a tots (per exemple, 24 bits, 48000 Hz). Anota'l a l'inventari.
+- [ ] **Propietats → Àudio espacial** («Sonido espacial»): desactivat.
 - [ ] **Propietats → Opcions avançades → Mode exclusiu:** es pot deixar com està (l'aplicació fa servir el mode compartit).
 - [ ] **Sound Blaster (Creative):** al programari de Creative, desactivar SBX, Crystalizer, ecualitzadors i altres efectes a les sortides d'antena.
+- [ ] **Realtek (àudio integrat):** a la consola de Realtek (Realtek Audio Console o «Administrador de sonido HD Realtek»), desactivar la **detecció de connectors** (sovint «Deshabilitar detección de conector del panel frontal» o similar), si l'opció hi és. A les versions personalitzades pel fabricant de la placa (ASUS, MSI…), acostuma a ser a la roda dentada (⚙) de dalt a la dreta; en algunes versions no existeix. Aquesta opció només afecta els connectors del davant: als del darrere, en treure o moure un cable Windows fa desaparèixer el dispositiu i el reproductor es queda sense sortida. **No toquis els cables de la targeta integrada mentre l'aplicació funciona.**
+  - Al gestor de Realtek, una sortida o entrada només apareix si hi ha alguna cosa connectada al seu connector (el connector s'il·lumina a la part de baix de la finestra).
 - [ ] Posar un **nom clar** a cada dispositiu (clic dret → Propietats → nom), per exemple «Antena 1», «Antena 2», «Auriculars preescolta», «Taula PGM». Això facilita molt la configuració.
 
 ### Sons del sistema
 - [ ] Tauler de control → So → pestanya **Sons** → esquema «Sense sons».
 - [ ] El dispositiu predeterminat de Windows ha de ser un que **no vagi a antena**.
+- [ ] Tauler de control → So → pestanya **Comunicacions**: «**No fer res**». Si no, Windows abaixa el volum de tot quan detecta una trucada (Teams, Skype, DroidCam…).
+- [ ] Desactivar (clic dret → Desactivar) les entrades de «bucle» que no es facin servir, com «Mescla estèreo» o «Lo que se oye»: enregistren el que surt per l'ordinador i és fàcil triar-les per error.
 
 ### Energia i USB
 - [ ] Pla d'energia **Alt rendiment** (o «Rendiment màxim»).
@@ -30,6 +35,24 @@ Tauler de control → So (o `mmsys.cpl`), pestanyes **Reproducció** i **Enregis
 ## 2. Inventari del maquinari
 
 Una taula per ordinador. Per al desenvolupament, cal omplir-la per als **ordinadors de proves** (és necessària per a la fase 1). Cada emissora la pot fer servir com a plantilla per documentar els seus equips; l'aplicació no depèn de cap targeta concreta i funciona com a mínim amb l'àudio integrat de la placa base.
+
+**Generar-lo automàticament.** L'script `tools/inventari.ps1` llegeix del registre de Windows tots els dispositius d'àudio i les dades del sistema, i escriu un fitxer `inventari-<ORDINADOR>-<data>.md` amb la taula ja omplerta. Només llegeix; no canvia res de l'ordinador i no cal ser administrador. Des de la carpeta del projecte:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\inventari.ps1 -Sortida docs\inventari
+```
+
+(La carpeta `docs\inventari` ha d'existir. Sense `-Sortida`, el fitxer es desa a la carpeta actual. Amb `-Tots` s'hi inclouen també els dispositius que Windows recorda però que ja no hi són.)
+
+Després, revisa el fitxer i completa a mà: la ubicació, el disc d'enregistrament, la columna «Ús previst» i la taula de mescles.
+
+Tingues en compte que:
+
+- Moltes targetes integrades (Realtek) **només mostren una sortida o entrada com a activa si hi ha alguna cosa connectada al connector**. Si surt «desconnectat», connecta-hi el cable abans de fer l'inventari. Si s'hi desconnecta el cable mentre l'aplicació funciona, per a l'aplicació és com si la targeta desaparegués.
+- «Format a Windows» és el que hi ha a *Propietats → Opcions avançades*. Si diu «predeterminat del fabricant», vol dir que no s'ha triat mai explícitament: tria'l a mà (punt 1) i torna a generar l'inventari.
+- «HD Audio» inclou tant l'àudio integrat com algunes targetes PCIe (per exemple, la Sound Blaster Z). Corregeix-ho a mà si cal.
+
+Plantilla, per omplir-la a mà:
 
 ### Ordinador: _______________ (estudi / ubicació: _______________)
 

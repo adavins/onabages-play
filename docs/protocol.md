@@ -68,9 +68,10 @@ Tots els missatges són objectes JSON amb el camp `"v": 1`.
 |---|---|---|---|
 | `engine.hello` | — | `{ name, version, protocol }` | fase 0 |
 | `engine.ping` | — | `{ pong: true, time }` | fase 0 |
-| `state.get` | — | `{ engine: { version, uptime, clients }, players: [ … ], recorders: [ … ] }` (vegeu 4.2 i 4.3) | fase 0 (`players`, `recorders`: fase 1) |
+| `state.get` | — | `{ engine: { version, uptime, clients }, players: [ … ], recorders: [ … ], hardware: { … } }` (vegeu 4.2, 4.3 i 4.4) | fase 0 (`players`, `recorders`, `hardware`: fase 1) |
 | `engine.shutdown` | `force` (opcional, `true`) | `{ stopping: true }` i el motor es tanca. Si hi ha enregistraments en curs, es rebutja amb `recording_active`, tret que s'enviï `force: true`: llavors es tanquen correctament (fitxers vàlids, sense marcador `.rec`) abans d'aturar-se | fase 0 (`force`: fase 1) |
 | `devices.list` | `kind`: `"output"`, `"input"` o `"all"` (per defecte); `includeInactive`: `true` per incloure també els desactivats i desconnectats (per defecte, `false`) | `{ devices: [ … ] }` (vegeu 4.1) | fase 1 |
+| `hardware.report` | — | `{ report: { … } }`: resum de l'arrencada (vegeu 4.4) | fase 1 |
 
 ### 4.1. Dispositius
 
@@ -147,6 +148,37 @@ Objecte `recorder` (també a `state.get` i a l'esdeveniment `recorder.state`):
 - `samplesLost`: mostres perdudes perquè el disc no ha anat prou ràpid. `captureGlitches`: vegades que Windows ha avisat que s'han perdut dades de captura. Tots dos han de ser 0.
 - `error`: el motiu, en català, quan `state` és `error`. Si l'entrada es desconnecta mentre s'enregistra, el fitxer es tanca correctament (vàlid fins a aquell moment) i `file` hi continua apuntant. Per continuar, `recorder.start` en fa un de nou.
 
+### 4.4. Maquinari en arrencar
+
+El motor desa el dispositiu de cada reproductor i enregistrador a `%APPDATA%\OnaBages\config.json` cada vegada que s'envia `player.setDevice` o `recorder.setDevice` (encara que la sortida falli en obrir-se: és la que ha triat l'operador). En arrencar, el compara amb el maquinari present (especificació 5.6). El resultat és a `hardware.report` i a `state.get` (camp `hardware`):
+
+```json
+{ "hasChanges": true, "firstRun": false, "configProblem": null,
+  "elements": [
+    { "element": "player", "id": "1", "result": "missing",
+      "saved": { "id": "{0.0.0.00000000}.{f2d6…}", "name": "Altavoces (Sound Blaster Z)" },
+      "device": null }
+  ],
+  "newDevices": [ { …dispositiu… } ],
+  "formatChanges": [ { "device": { … }, "previousFormat": { "sampleRate": 44100, "bits": 16, "channels": 2 } } ] }
+```
+
+| `result` | Què ha passat | S'assigna? |
+|---|---|---|
+| `ok` | Hi és, amb el mateix identificador | Sí |
+| `unplugged` | Hi és, però sense cable | Sí (funcionarà quan es connecti) |
+| `disabled` | Hi és, però desactivat a Windows | Sí (cal activar-lo) |
+| `idChanged` | L'identificador ha canviat, però hi ha **un sol** dispositiu amb el mateix nom (p. ex. un USB en un altre port). Es desa l'identificador nou | Sí |
+| `ambiguous` | Hi ha diversos dispositius amb el mateix nom | **No**: l'operador n'ha de triar un |
+| `missing` | No hi és | **No**. Si torna mentre el motor funciona, s'hi assigna sol (`hardware.reassigned`) |
+
+- `hasChanges`: `false` si no hi ha res a explicar (la interfície no mostra la finestra «Canvis en el maquinari»).
+- `firstRun`: no hi ha cap dispositiu desat (primera arrencada o configuració perduda). La interfície proposarà una assignació (fase 2).
+- `configProblem`: si `config.json` no s'ha pogut llegir, el motiu. El motor arrenca sense assignacions i en desa una còpia a `config.json.malmes`.
+- `elements`: només els elements que tenien un dispositiu desat. `device` és el dispositiu trobat ara (format de 4.1) o `null`.
+- `newDevices`: dispositius actius que no hi eren l'última vegada i no són de cap element. `formatChanges`: dispositius amb el format canviat a Windows.
+- El motor **mai no assigna un dispositiu diferent** del que s'havia triat (D-016). El resum és el de l'arrencada: no canvia fins que el motor es reinicia.
+
 ## 5. Esdeveniments
 
 | Esdeveniment | Camps | Freqüència | Des de |
@@ -157,6 +189,7 @@ Objecte `recorder` (també a `state.get` i a l'esdeveniment `recorder.state`):
 | `player.position` | `players`: `[ { id, position, duration } ]` de tots els reproductors | 10 per segon, només mentre algun reproductor sona | fase 1 |
 | `recorder.state` | `recorder`: objecte complet (vegeu 4.3) | quan canvia l'estat, el fitxer, l'entrada o l'error d'un enregistrador | fase 1 |
 | `recorder.progress` | `recorders`: `[ { id, elapsed, fileSize, freeDiskBytes, samplesLost, captureGlitches } ]` dels que enregistren | cada segon, només mentre algun enregistra | fase 1 |
+| `hardware.reassigned` | `element`: una línia com les de `elements` de 4.4, amb el dispositiu ja assignat | quan torna el dispositiu d'un element que en arrencar era `missing`. El reproductor **no es posa a sonar**; després arriba també el seu `player.state` o `recorder.state` | fase 1 |
 
 ### 5.1. Canvis de dispositius
 

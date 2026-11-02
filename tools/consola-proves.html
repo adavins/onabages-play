@@ -55,6 +55,7 @@
       <div class="quick">
         <button data-cmd="devices.list">devices.list (actius)</button>
         <button data-cmd="devices.list" data-params='{ "includeInactive": true }'>devices.list (tots)</button>
+        <button data-cmd="hardware.report">hardware.report</button>
       </div>
 
       <strong>Reproductors</strong>
@@ -153,6 +154,7 @@
         updatePlayers(msg);
         updateRecorders(msg);
         if (msg.result?.devices) fillDevices(msg.result.devices);
+        if (msg.ev === 'devices.changed') sendCmd('devices.list'); // torna a omplir les llistes
         if (msg.ev === 'engine.status' && $('hide-status').checked) return;
         if (msg.ev === 'player.position' && $('hide-position').checked) return;
         if (msg.ev === 'recorder.progress' && $('hide-progress').checked) return;

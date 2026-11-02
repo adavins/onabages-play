@@ -13,6 +13,7 @@ public sealed class CommandRouter
     private readonly EngineState _state;
     private readonly Action _requestShutdown;
     private readonly Func<IReadOnlyList<AudioDevice>> _listDevices;
+    private readonly HardwareAssignments? _hardware;
 
     /// <param name="state">Estat del motor.</param>
     /// <param name="requestShutdown">Acció que atura el motor (s'executa poc després de respondre).</param>
@@ -20,11 +21,17 @@ public sealed class CommandRouter
     /// Funció que retorna els dispositius d'àudio. Per defecte, els reals de Windows;
     /// les proves hi passen una llista inventada.
     /// </param>
-    public CommandRouter(EngineState state, Action requestShutdown, Func<IReadOnlyList<AudioDevice>>? listDevices = null)
+    /// <param name="hardware">Assignacions desades (config.json). Les proves que no en necessiten hi poden passar null.</param>
+    public CommandRouter(
+        EngineState state,
+        Action requestShutdown,
+        Func<IReadOnlyList<AudioDevice>>? listDevices = null,
+        HardwareAssignments? hardware = null)
     {
         _state = state;
         _requestShutdown = requestShutdown;
         _listDevices = listDevices ?? DeviceList.GetAll;
+        _hardware = hardware;
     }
 
     public JsonObject Handle(string text)
@@ -61,6 +68,7 @@ public sealed class CommandRouter
                 "state.get" => StateGet(),
                 "engine.shutdown" => Shutdown(msg),
                 "devices.list" => DevicesList(msg),
+                "hardware.report" => HardwareReportGet(),
                 "player.setDevice" => PlayerSetDevice(msg),
                 "player.load" => PlayerLoad(msg),
                 "player.play" => PlayerCommand(msg, p => p.Play()),
@@ -122,6 +130,13 @@ public sealed class CommandRouter
         ["engine"] = _state.ToJson(),
         ["players"] = PlayerJson.All(_state.Players),
         ["recorders"] = RecorderJson.All(_state.Recorders),
+        ["hardware"] = HardwareJson.Report(_hardware?.Report ?? HardwareReport.Empty),
+    };
+
+    /// <summary>Resum de l'arrencada: què ha passat amb els dispositius desats (especificació 5.6).</summary>
+    private JsonObject HardwareReportGet() => new()
+    {
+        ["report"] = HardwareJson.Report(_hardware?.Report ?? HardwareReport.Empty),
     };
 
     // -----------------------------------------------------------------------
@@ -147,7 +162,10 @@ public sealed class CommandRouter
     private JsonObject PlayerSetDevice(JsonObject msg)
     {
         var player = GetPlayer(msg);
-        player.SetDevice(RequireString(msg, "deviceId"));
+        string deviceId = RequireString(msg, "deviceId");
+        player.SetDevice(deviceId);
+        // Es desa encara que la sortida falli en obrir-se: és la que ha triat l'operador.
+        _hardware?.Remember(ElementKind.Player, player.Id, deviceId, _listDevices());
         return PlayerResult(player);
     }
 
@@ -194,7 +212,9 @@ public sealed class CommandRouter
     private JsonObject RecorderSetDevice(JsonObject msg)
     {
         var recorder = GetRecorder(msg);
-        recorder.SetDevice(RequireString(msg, "deviceId"));
+        string deviceId = RequireString(msg, "deviceId");
+        recorder.SetDevice(deviceId);
+        _hardware?.Remember(ElementKind.Recorder, recorder.Id, deviceId, _listDevices());
         // Canviar l'entrada sempre funciona, encara que l'enregistrador tingui un error anterior.
         return new JsonObject { ["recorder"] = RecorderJson.Recorder(recorder) };
     }

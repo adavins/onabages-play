@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using OnaBages.Audio;
 using OnaBages.Engine;
+using OnaBages.Engine.Data;
 using OnaBages.Engine.Protocol;
 
 // Punt d'entrada del motor d'Ona Bages Play.
@@ -70,7 +71,11 @@ foreach (var recorder in state.Recorders)
     };
 }
 
-var router = new CommandRouter(state, () => app.Lifetime.StopApplication());
+// Dispositiu desat de cada reproductor i enregistrador (config.json).
+var hardware = new HardwareAssignments(state, new ConfigRepository());
+hardware.Warning += message => log.LogWarning("Configuració: {Message}", message);
+
+var router = new CommandRouter(state, () => app.Lifetime.StopApplication(), hardware: hardware);
 
 // Vigilant de dispositius: avisa els clients quan es connecta o desconnecta alguna cosa.
 var watcher = new DeviceWatcher();
@@ -80,17 +85,33 @@ watcher.Changed += changes =>
         log.LogInformation("Dispositiu: {Change}", DescribeChange(change));
 
     Broadcast(DeviceJson.ChangedEvent(changes));
+
+    // Si ha tornat el dispositiu d'un element que l'esperava, s'hi torna a assignar.
+    foreach (var check in hardware.DevicesChanged(watcher.Current))
+    {
+        log.LogInformation("{Element}: ha tornat «{Device}»; s'hi torna a assignar",
+            HardwareAssignments.ElementName(check.Kind, check.ElementId), check.Device!.Name);
+        Broadcast(HardwareJson.ReassignedEvent(check));
+    }
 };
 watcher.Error += ex => log.LogWarning("Error en llegir els dispositius: {Message}", ex.Message);
+
+IReadOnlyList<AudioDevice> devicesAtStart = [];
 try
 {
     watcher.Start();
+    devicesAtStart = watcher.Current;
 }
 catch (Exception ex)
 {
     // Sense avisos de dispositius el motor pot continuar; només ho deixem escrit.
     log.LogError("No s'han pogut activar els avisos de dispositius: {Message}", ex.Message);
+    try { devicesAtStart = DeviceList.GetAll(); }
+    catch (Exception ex2) { log.LogError("No s'han pogut llegir els dispositius: {Message}", ex2.Message); }
 }
+
+// Comparació del maquinari amb la configuració desada (especificació 5.6).
+LogHardwareReport(hardware.Start(devicesAtStart));
 
 app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TimeSpan.FromSeconds(15) });
 
@@ -212,6 +233,48 @@ catch (IOException ex)
 }
 
 return 0;
+
+// Escriu al registre el resum de l'arrencada: una línia per element i per avís.
+void LogHardwareReport(HardwareReport report)
+{
+    if (report.FirstRun)
+        log.LogInformation("Maquinari: no hi ha cap dispositiu assignat (primera arrencada o configuració nova)");
+
+    foreach (var check in report.Elements)
+    {
+        string element = HardwareAssignments.ElementName(check.Kind, check.ElementId);
+        string saved = check.Saved.Name;
+        switch (check.Result)
+        {
+            case CheckResult.Ok:
+                log.LogInformation("{Element}: {Device}", element, check.Device!.Name);
+                break;
+            case CheckResult.Unplugged:
+                log.LogWarning("{Element}: {Device} — desconnectat (sense cable); assignat igualment", element, check.Device!.Name);
+                break;
+            case CheckResult.Disabled:
+                log.LogWarning("{Element}: {Device} — desactivat a Windows; assignat igualment", element, check.Device!.Name);
+                break;
+            case CheckResult.IdChanged:
+                log.LogInformation("{Element}: {Device} — ha canviat d'identificador (p. ex. un USB en un altre port); és el mateix dispositiu", element, check.Device!.Name);
+                break;
+            case CheckResult.Ambiguous:
+                log.LogWarning("{Element}: hi ha diversos dispositius «{Device}»; cal triar-ne un. Queda sense dispositiu", element, saved);
+                break;
+            default:
+                log.LogWarning("{Element}: «{Device}» no hi és. Queda sense dispositiu fins que torni o se'n triï un altre", element, saved);
+                break;
+        }
+    }
+
+    foreach (var device in report.NewDevices)
+        log.LogInformation("Maquinari: dispositiu nou disponible: {Device}", device.Name);
+    foreach (var change in report.FormatChanges)
+        log.LogInformation("Maquinari: {Device}: format canviat a Windows ({Before} → {After})",
+            change.Device.Name, FormatText(change.PreviousFormat!), FormatText(change.Device.Format!));
+
+    static string FormatText(DeviceFormat f) => $"{f.SampleRate} Hz, {f.Bits} bits, {f.Channels} canals";
+}
 
 // Text breu d'un canvi de dispositiu, per al registre del motor.
 static string DescribeChange(DeviceChange change)

@@ -7,7 +7,7 @@ namespace OnaBages.Engine;
 /// <summary>
 /// Estat global del motor. El motor és la font de veritat: la interfície
 /// el demana amb <c>state.get</c> en connectar-se.
-/// Fase 1: reproductors i enregistradors fixos, sense configuració desada.
+/// Fase 1: reproductors i enregistradors fixos; el dispositiu de cada un es desa a config.json.
 /// </summary>
 public sealed class EngineState
 {

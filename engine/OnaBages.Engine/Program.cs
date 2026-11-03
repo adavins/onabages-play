@@ -192,6 +192,12 @@ _ = Task.Run(async () =>
     var stopping = app.Lifetime.ApplicationStopping;
     using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(100));
     int tick = 0;
+
+    // Últim valor vist dels comptadors de problemes, per escriure al registre quan i on passa cada un.
+    var lastGlitches = new Dictionary<Recorder, int>();
+    var lastLost = new Dictionary<Recorder, long>();
+    var lastUnderruns = new Dictionary<Player, int>();
+
     try
     {
         while (await timer.WaitForNextTickAsync(stopping))
@@ -201,6 +207,20 @@ _ = Task.Run(async () =>
             {
                 try { recorder.Tick(); }
                 catch (Exception ex) { log.LogError("Enregistrador {Id}: error en revisar-lo: {Message}", recorder.Id, ex.Message); }
+
+                int glitches = recorder.CaptureGlitches;
+                int glitchesBefore = lastGlitches.GetValueOrDefault(recorder);
+                if (glitches > glitchesBefore)
+                    log.LogWarning("Enregistrador {Id}: Windows avisa que s'han perdut dades de captura (a {Elapsed} de l'enregistrament; {Total} en total)",
+                        recorder.Id, recorder.Elapsed.ToString(@"hh\:mm\:ss\.f"), glitches);
+                lastGlitches[recorder] = glitches; // també quan baixa: un enregistrament nou torna a començar de zero
+
+                long lost = recorder.SamplesLost;
+                long lostBefore = lastLost.GetValueOrDefault(recorder);
+                if (lost > lostBefore)
+                    log.LogWarning("Enregistrador {Id}: s'han perdut {Count} mostres perquè el disc no ha anat prou ràpid (a {Elapsed} de l'enregistrament)",
+                        recorder.Id, lost - lostBefore, recorder.Elapsed.ToString(@"hh\:mm\:ss\.f"));
+                lastLost[recorder] = lost;
             }
 
             if (tick % 10 == 0 && state.IsRecording)
@@ -210,6 +230,12 @@ _ = Task.Run(async () =>
             {
                 try { player.Tick(); }
                 catch (Exception ex) { log.LogError("Reproductor {Id}: error en revisar-lo: {Message}", player.Id, ex.Message); }
+
+                int underruns = player.Underruns;
+                if (underruns > lastUnderruns.GetValueOrDefault(player))
+                    log.LogWarning("Reproductor {Id}: tall, sense dades a temps (a {Position} de la pista; {Total} en total)",
+                        player.Id, player.Position.ToString(@"hh\:mm\:ss\.f"), underruns);
+                lastUnderruns[player] = underruns;
             }
 
             if (state.Players.Any(p => p.State == PlayerState.Playing))

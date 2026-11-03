@@ -669,6 +669,7 @@ Candidates: botonera de talls (cartwall), detector de silenci, punts cue d'inici
 | Targetes integrades (Realtek) que fan desaparèixer el dispositiu en desendollar un cable | Reproductor o enregistrador sense dispositiu durant el directe | Desactivar la detecció de connectors (`docs/installacio-windows.md`); polítiques de 5.3; l'inventari ho detecta |
 | Maquinari que canvia entre sessions (targetes afegides o tretes) | Elements sense dispositiu; so per una sortida inesperada | Detecció en arrencar, resum de canvis, cap reassignació automàtica (5.6) |
 | Ordinadors domèstics amb pocs recursos | Talls, interfície lenta | Proves a l'ordinador més modest; lectura a trossos; mesuradors amb freqüència configurable |
+| Encendre o apagar un monitor HDMI/DisplayPort (Windows torna a crear el seu dispositiu de so) | Uns ms d'àudio perduts a totes les targetes | Desactivar el so dels monitors a l'Administrador de dispositius; no tocar el monitor durant els programes (`docs/installacio-windows.md`); el motor registra cada pèrdua amb el moment exacte |
 | Port WebSocket local accessible per altres programes | Control no autoritzat | Només `127.0.0.1` + testimoni per sessió |
 
 # 17. Decisions acordades

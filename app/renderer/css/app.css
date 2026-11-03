@@ -29,6 +29,7 @@
   --obp-side-w: calc(19rem * var(--obp-ui-scale));          /* columna dreta: preescolta i recents */
   --obp-player-min-w: calc(16rem * var(--obp-ui-scale));    /* més estret, els reproductors passen a una altra fila */
   --obp-recorder-min-w: calc(15rem * var(--obp-ui-scale));
+  --obp-recorders-per-row: 2;   /* p. ex. 4 enregistradors = 2 files de 2 (configurable al pas 9) */
   --obp-gap: calc(0.75rem * var(--obp-ui-scale));
   --obp-pad: calc(0.75rem * var(--obp-ui-scale));           /* marge interior dels panells */
 
@@ -190,9 +191,11 @@ body.engine-offline .layout {
   min-height: 0;
 }
 
+/* Com a molt --obp-recorders-per-row per fila (si no hi caben, menys). La resta, a la fila següent. */
 .recorders {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(var(--obp-recorder-min-w), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(max(var(--obp-recorder-min-w),
+    calc((100% - (var(--obp-recorders-per-row) - 1) * var(--obp-gap)) / var(--obp-recorders-per-row))), 1fr));
   gap: var(--obp-gap);
 }
 

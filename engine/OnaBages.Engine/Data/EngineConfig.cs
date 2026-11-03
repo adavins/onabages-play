@@ -18,4 +18,10 @@ public sealed class EngineConfig
 
     /// <summary>Dispositius que hi havia l'última vegada: serveix per detectar els nous i els formats canviats.</summary>
     public List<AudioDevice> KnownDevices { get; set; } = [];
+
+    /// <summary>Escala de la interfície (1 = 100 %). Entre <see cref="MinZoom"/> i <see cref="MaxZoom"/>.</summary>
+    public double UiZoom { get; set; } = 1.0;
+
+    public const double MinZoom = 0.7;
+    public const double MaxZoom = 1.5;
 }

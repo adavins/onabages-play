@@ -72,6 +72,7 @@ public sealed class ConfigRepository
             ["players"] = WriteAssignments(config.Players),
             ["recorders"] = WriteAssignments(config.Recorders),
             ["knownDevices"] = new JsonArray(config.KnownDevices.Select(d => (JsonNode)WriteDevice(d)).ToArray()),
+            ["ui"] = new JsonObject { ["zoom"] = config.UiZoom },
         };
         string text = root.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
 
@@ -103,6 +104,10 @@ public sealed class ConfigRepository
         var config = new EngineConfig();
         ReadAssignments(root["players"], config.Players);
         ReadAssignments(root["recorders"], config.Recorders);
+
+        // "ui" és opcional: els fitxers d'abans no el tenen i es fa servir el valor per defecte.
+        if (root["ui"]?["zoom"] is JsonValue zoom && zoom.TryGetValue(out double z))
+            config.UiZoom = Math.Clamp(z, EngineConfig.MinZoom, EngineConfig.MaxZoom);
 
         if (root["knownDevices"] is JsonArray devices)
         {

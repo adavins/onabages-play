@@ -71,11 +71,13 @@ foreach (var recorder in state.Recorders)
     };
 }
 
-// Dispositiu desat de cada reproductor i enregistrador (config.json).
-var hardware = new HardwareAssignments(state, new ConfigRepository());
-hardware.Warning += message => log.LogWarning("Configuració: {Message}", message);
+// Configuració desada (config.json): dispositiu de cada element i ajustos de la interfície.
+var config = new ConfigStore(new ConfigRepository());
+config.Warning += message => log.LogWarning("Configuració: {Message}", message);
+var hardware = new HardwareAssignments(state, config);
+hardware.Warning += message => log.LogWarning("Maquinari: {Message}", message);
 
-var router = new CommandRouter(state, () => app.Lifetime.StopApplication(), hardware: hardware);
+var router = new CommandRouter(state, () => app.Lifetime.StopApplication(), hardware: hardware, config: config);
 
 // Vigilant de dispositius: avisa els clients quan es connecta o desconnecta alguna cosa.
 var watcher = new DeviceWatcher();

@@ -315,7 +315,7 @@ public class HardwareTests : IDisposable
         File.WriteAllText(_repository.FilePath, "no és JSON");
         var hardware = new HardwareAssignments(NewState(), _repository);
         string? warning = null;
-        hardware.Warning += w => warning = w;
+        hardware.Store.Warning += w => warning = w;
 
         var report = hardware.Start([SoundBlaster]);
 

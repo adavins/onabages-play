@@ -15,53 +15,66 @@ namespace OnaBages.Engine;
 public sealed class HardwareAssignments
 {
     private readonly EngineState _state;
-    private readonly ConfigRepository _repository;
     private readonly Lock _sync = new();
-    private EngineConfig _config = new();
 
     // Elements que esperen que torni el seu dispositiu.
     private readonly HashSet<(ElementKind Kind, string Id)> _waiting = [];
 
-    public HardwareAssignments(EngineState state, ConfigRepository repository)
+    public HardwareAssignments(EngineState state, ConfigStore store)
     {
         _state = state;
-        _repository = repository;
+        Store = store;
     }
+
+    /// <summary>Per a les proves: una configuració pròpia a partir d'un repositori.</summary>
+    public HardwareAssignments(EngineState state, ConfigRepository repository)
+        : this(state, new ConfigStore(repository))
+    {
+    }
+
+    /// <summary>La configuració on es desen les assignacions.</summary>
+    public ConfigStore Store { get; }
 
     /// <summary>Resum de l'arrencada (buit fins que es crida <see cref="Start"/>).</summary>
     public HardwareReport Report { get; private set; } = HardwareReport.Empty;
 
-    /// <summary>Avisos que no són d'un element (p. ex. no s'ha pogut desar la configuració).</summary>
+    /// <summary>Avisos d'un element que no s'ha pogut assignar.</summary>
     public event Action<string>? Warning;
 
     /// <summary>Llegeix la configuració, la compara amb el maquinari actual i assigna el que es pot.</summary>
     public HardwareReport Start(IReadOnlyList<AudioDevice> current)
     {
-        var loaded = _repository.Load();
-        if (loaded.Problem is not null)
-            Warning?.Invoke(loaded.Problem);
+        var loaded = Store.Load();
 
         lock (_sync)
         {
-            _config = loaded.Config;
             _waiting.Clear();
+            var report = HardwareReport.Empty;
 
-            // Sense cap assignació desada és com la primera arrencada: la interfície proposarà una assignació.
-            bool firstRun = _config.Players.Count == 0 && _config.Recorders.Count == 0;
-            var report = HardwareCheck.Compare(_config, Elements(), current, firstRun, loaded.Problem);
-
-            foreach (var check in report.Elements)
+            Store.Update(config =>
             {
-                if (check.CanAssign)
-                    Assign(check);
-                else if (check.Result == CheckResult.Missing)
-                    _waiting.Add((check.Kind, check.ElementId));
-                // Ambiguous: no s'assigna ni s'espera; l'operador n'ha de triar un.
-            }
+                // Sense cap assignació desada és com la primera arrencada: la interfície proposarà una assignació.
+                bool firstRun = config.Players.Count == 0 && config.Recorders.Count == 0;
+                report = HardwareCheck.Compare(config, Elements(), current, firstRun, loaded.Problem);
 
-            _config.KnownDevices = current.ToList();
+                foreach (var check in report.Elements)
+                {
+                    if (check.CanAssign)
+                    {
+                        if (Assign(check))
+                            Remember(config, check);
+                    }
+                    else if (check.Result == CheckResult.Missing)
+                    {
+                        _waiting.Add((check.Kind, check.ElementId));
+                    }
+                    // Ambiguous: no s'assigna ni s'espera; l'operador n'ha de triar un.
+                }
+
+                config.KnownDevices = current.ToList();
+            });
+
             Report = report;
-            SaveLocked();
             return report;
         }
     }
@@ -73,9 +86,8 @@ public sealed class HardwareAssignments
         string name = current.FirstOrDefault(d => d.Id == deviceId)?.Name ?? "";
         lock (_sync)
         {
-            HardwareCheck.Assignments(_config, kind)[elementId] = new DeviceRef(deviceId, name);
             _waiting.Remove((kind, elementId));
-            SaveLocked();
+            Store.Update(config => HardwareCheck.Assignments(config, kind)[elementId] = new DeviceRef(deviceId, name));
         }
     }
 
@@ -89,29 +101,29 @@ public sealed class HardwareAssignments
         var reassigned = new List<ElementCheck>();
         lock (_sync)
         {
-            foreach (var (kind, id) in _waiting.ToList())
+            Store.Update(config =>
             {
-                var saved = HardwareCheck.Assignments(_config, kind).GetValueOrDefault(id);
-                if (saved is null)
+                foreach (var (kind, id) in _waiting.ToList())
                 {
-                    _waiting.Remove((kind, id));
-                    continue;
+                    var saved = HardwareCheck.Assignments(config, kind).GetValueOrDefault(id);
+                    if (saved is null)
+                    {
+                        _waiting.Remove((kind, id));
+                        continue;
+                    }
+
+                    var (device, result) = HardwareCheck.Find(saved, HardwareCheck.DeviceKindOf(kind), current);
+                    var check = new ElementCheck(kind, id, saved, device, result);
+                    if (check.CanAssign && Assign(check))
+                    {
+                        Remember(config, check);
+                        _waiting.Remove((kind, id));
+                        reassigned.Add(check);
+                    }
                 }
 
-                var (device, result) = HardwareCheck.Find(saved, HardwareCheck.DeviceKindOf(kind), current);
-                var check = new ElementCheck(kind, id, saved, device, result);
-                if (!check.CanAssign)
-                    continue;
-
-                if (Assign(check))
-                {
-                    _waiting.Remove((kind, id));
-                    reassigned.Add(check);
-                }
-            }
-
-            _config.KnownDevices = current.ToList();
-            SaveLocked();
+                config.KnownDevices = current.ToList();
+            });
         }
         return reassigned;
     }
@@ -127,7 +139,7 @@ public sealed class HardwareAssignments
         _state.Players.Select(p => (ElementKind.Player, p.Id))
             .Concat(_state.Recorders.Select(r => (ElementKind.Recorder, r.Id)));
 
-    /// <summary>Assigna el dispositiu trobat a l'element i actualitza la configuració (identificador i nom nous).</summary>
+    /// <summary>Assigna el dispositiu trobat a l'element. Retorna false si l'element no l'accepta.</summary>
     private bool Assign(ElementCheck check)
     {
         var device = check.Device!;
@@ -137,6 +149,7 @@ public sealed class HardwareAssignments
                 _state.FindPlayer(check.ElementId)?.SetDevice(device.Id);
             else
                 _state.FindRecorder(check.ElementId)?.SetDevice(device.Id);
+            return true;
         }
         catch (Exception ex)
         {
@@ -144,23 +157,11 @@ public sealed class HardwareAssignments
             Warning?.Invoke($"No s'ha pogut assignar «{device.Name}» a {ElementName(check.Kind, check.ElementId)}: {ex.Message}");
             return false;
         }
-
-        HardwareCheck.Assignments(_config, check.Kind)[check.ElementId] = new DeviceRef(device.Id, device.Name);
-        return true;
     }
 
-    private void SaveLocked()
-    {
-        try
-        {
-            _repository.Save(_config);
-        }
-        catch (Exception ex)
-        {
-            // Sense desar, el motor continua funcionant; només es perdria l'assignació en reiniciar.
-            Warning?.Invoke($"No s'ha pogut desar la configuració ({_repository.FilePath}): {ex.Message}");
-        }
-    }
+    /// <summary>Desa el dispositiu trobat (amb l'identificador i el nom d'ara).</summary>
+    private static void Remember(EngineConfig config, ElementCheck check) =>
+        HardwareCheck.Assignments(config, check.Kind)[check.ElementId] = new DeviceRef(check.Device!.Id, check.Device.Name);
 
     public static string ElementName(ElementKind kind, string id) =>
         kind == ElementKind.Player ? $"Reproductor {id}" : $"Enregistrador {id}";

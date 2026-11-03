@@ -17,6 +17,9 @@ contextBridge.exposeInMainWorld('onabages', {
     ipcRenderer.on('app:close-requested', () => callback());
   },
 
+  /** Escala de la interfície (1 = 100 %, de 0,7 a 1,5). */
+  setZoom: (factor) => ipcRenderer.invoke('ui:set-zoom', factor),
+
   /** La interfície confirma que la finestra es pot tancar. */
   confirmClose: () => ipcRenderer.send('app:close-confirmed'),
 });

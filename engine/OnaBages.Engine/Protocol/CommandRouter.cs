@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using OnaBages.Audio;
+using OnaBages.Engine.Data;
 
 namespace OnaBages.Engine.Protocol;
 
@@ -14,6 +15,7 @@ public sealed class CommandRouter
     private readonly Action _requestShutdown;
     private readonly Func<IReadOnlyList<AudioDevice>> _listDevices;
     private readonly HardwareAssignments? _hardware;
+    private readonly ConfigStore? _config;
 
     /// <param name="state">Estat del motor.</param>
     /// <param name="requestShutdown">Acció que atura el motor (s'executa poc després de respondre).</param>
@@ -22,16 +24,19 @@ public sealed class CommandRouter
     /// les proves hi passen una llista inventada.
     /// </param>
     /// <param name="hardware">Assignacions desades (config.json). Les proves que no en necessiten hi poden passar null.</param>
+    /// <param name="config">Configuració (ajustos de la interfície). Igual.</param>
     public CommandRouter(
         EngineState state,
         Action requestShutdown,
         Func<IReadOnlyList<AudioDevice>>? listDevices = null,
-        HardwareAssignments? hardware = null)
+        HardwareAssignments? hardware = null,
+        ConfigStore? config = null)
     {
         _state = state;
         _requestShutdown = requestShutdown;
         _listDevices = listDevices ?? DeviceList.GetAll;
         _hardware = hardware;
+        _config = config;
     }
 
     public JsonObject Handle(string text)
@@ -69,6 +74,8 @@ public sealed class CommandRouter
                 "engine.shutdown" => Shutdown(msg),
                 "devices.list" => DevicesList(msg),
                 "hardware.report" => HardwareReportGet(),
+                "settings.get" => SettingsGet(),
+                "settings.set" => SettingsSet(msg),
                 "player.setDevice" => PlayerSetDevice(msg),
                 "player.load" => PlayerLoad(msg),
                 "player.play" => PlayerCommand(msg, p => p.Play()),
@@ -137,6 +144,40 @@ public sealed class CommandRouter
     private JsonObject HardwareReportGet() => new()
     {
         ["report"] = HardwareJson.Report(_hardware?.Report ?? HardwareReport.Empty),
+    };
+
+    // -----------------------------------------------------------------------
+    // Ajustos (es desen a config.json)
+    // -----------------------------------------------------------------------
+
+    private ConfigStore RequireConfig() =>
+        _config ?? throw new InvalidOperationException("Aquest motor no té configuració.");
+
+    private JsonObject SettingsGet() => new() { ["settings"] = SettingsJson(RequireConfig()) };
+
+    /// <summary>
+    /// Canvia només els ajustos que s'envien. Ara: "ui": { "zoom": 0.7..1.5 }.
+    /// </summary>
+    private JsonObject SettingsSet(JsonObject msg)
+    {
+        var config = RequireConfig();
+        if (msg["ui"] is not JsonObject ui)
+            throw new BadParamsException("Falta el camp 'ui' amb els ajustos a canviar.");
+
+        if (ui["zoom"] is JsonNode zoomNode)
+        {
+            if (zoomNode is not JsonValue v || !v.TryGetValue(out double zoom)
+                || zoom < EngineConfig.MinZoom || zoom > EngineConfig.MaxZoom)
+                throw new BadParamsException($"'ui.zoom' ha de ser un número entre {EngineConfig.MinZoom} i {EngineConfig.MaxZoom}.");
+            config.Update(c => c.UiZoom = Math.Round(zoom, 2));
+        }
+
+        return new JsonObject { ["settings"] = SettingsJson(config) };
+    }
+
+    private static JsonObject SettingsJson(ConfigStore config) => new()
+    {
+        ["ui"] = new JsonObject { ["zoom"] = config.Read(c => c.UiZoom) },
     };
 
     // -----------------------------------------------------------------------

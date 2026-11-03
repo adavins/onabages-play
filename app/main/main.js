@@ -56,21 +56,30 @@ function createWindow() {
 
   mainWindow.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
 
-  // En tancar, primer avisem la interfície perquè decideixi què cal fer
-  // (fase 0: aturar el motor; fase 2: comprovar operacions actives i demanar confirmació).
+  // Sense el menú per defecte d'Electron: les seves dreceres (zoom, recàrrega...) passarien
+  // per davant de les de l'aplicació. El zoom el gestiona la interfície (js/ui/zoom.js).
+  mainWindow.removeMenu();
+
+  // F12 obre les eines de desenvolupament (només per desenvolupar; no a l'aplicació instal·lada).
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (input.type === 'keyDown' && input.key === 'F12' && !app.isPackaged) {
+      mainWindow?.webContents.toggleDevTools();
+      event.preventDefault();
+    }
+  });
+
+  // En tancar, primer avisem la interfície: si hi ha so o enregistraments, demana què cal fer.
+  // No hi ha cap temporitzador: la interfície pot estar esperant la resposta de l'operador.
   mainWindow.on('close', (event) => {
     if (closeConfirmed) return;
     event.preventDefault();
     mainWindow?.webContents.send('app:close-requested');
+  });
 
-    // Xarxa de seguretat només per a la fase 0: si la interfície no respon, tanquem igualment.
-    // A la fase 2 aquest temporitzador s'ha de treure (la interfície pot estar mostrant una confirmació).
-    setTimeout(() => {
-      if (!closeConfirmed) {
-        closeConfirmed = true;
-        mainWindow?.close();
-      }
-    }, 5000);
+  // Si la interfície ha caigut, ja no pot respondre: s'ha de poder tancar igualment.
+  // (El motor és un procés a part i continua: no es perd cap enregistrament.)
+  mainWindow.webContents.on('render-process-gone', () => {
+    closeConfirmed = true;
   });
 
   mainWindow.on('closed', () => {
@@ -183,6 +192,13 @@ ipcMain.handle('engine:get-info', async () => engineInfo ?? ensureEngine());
 ipcMain.handle('engine:ensure', async () => {
   engineInfo = null;
   return ensureEngine();
+});
+
+/** Escala de la interfície (la interfície valida el valor i el desa al motor). */
+ipcMain.handle('ui:set-zoom', (_event, factor) => {
+  if (typeof factor === 'number' && factor >= 0.7 && factor <= 1.5) {
+    mainWindow?.webContents.setZoomFactor(factor);
+  }
 });
 
 ipcMain.on('app:close-confirmed', () => {

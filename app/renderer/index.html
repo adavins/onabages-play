@@ -17,46 +17,40 @@
     <div id="clock" class="clock" aria-label="Hora actual">--:--:--</div>
 
     <div class="engine">
+      <span id="zoom-indicator" class="zoom-indicator"></span>
       <span id="engine-status" class="status status-connecting" role="status">
         <i class="bi bi-hourglass-split"></i>
         <span class="label">Connectant amb el motor…</span>
       </span>
       <span id="engine-details" class="details"></span>
-      <button id="btn-retry" class="btn btn-sm btn-warning d-none" type="button">
-        <i class="bi bi-arrow-repeat"></i> Reiniciar el motor
-      </button>
     </div>
   </header>
 
+  <!-- Avís molt visible quan el motor no respon (especificació 4.5). -->
+  <div id="engine-down" class="engine-down d-none" role="alert">
+    <i class="bi bi-exclamation-octagon-fill"></i>
+    <div class="engine-down-text">
+      <strong>MOTOR NO DISPONIBLE</strong>
+      <span id="engine-down-detail">El so i els enregistraments s'han aturat.</span>
+    </div>
+    <button id="btn-restart-engine" class="btn btn-light btn-lg" type="button">
+      <i class="bi bi-arrow-repeat"></i> Reiniciar el motor
+    </button>
+  </div>
+
   <main class="layout">
-    <section class="panel players" aria-label="Reproductors">
-      <div class="player card">
-        <div class="card-header"><i class="bi bi-music-note-list"></i> Reproductor 1</div>
-        <div class="card-body placeholder-text">Disponible a la fase 2</div>
-      </div>
-      <div class="player card">
-        <div class="card-header"><i class="bi bi-music-note-list"></i> Reproductor 2</div>
-        <div class="card-body placeholder-text">Disponible a la fase 2</div>
-      </div>
-      <div class="player card">
-        <div class="card-header"><i class="bi bi-music-note-list"></i> Reproductor 3</div>
-        <div class="card-body placeholder-text">Disponible a la fase 2</div>
-      </div>
+    <div id="players" class="players" aria-label="Reproductors"></div>
+
+    <section class="card panel cue" aria-label="Preescolta">
+      <div class="card-header panel-header"><span class="panel-title"><i class="bi bi-headphones"></i> Preescolta</span></div>
+      <div class="card-body placeholder-text">Pendent (pas 8)</div>
     </section>
 
-    <section class="panel cue card" aria-label="Preescolta">
-      <div class="card-header"><i class="bi bi-headphones"></i> Preescolta</div>
-      <div class="card-body placeholder-text">Disponible a la fase 2</div>
-    </section>
+    <div id="recorders" class="recorders" aria-label="Enregistradors"></div>
 
-    <section class="panel recorders card" aria-label="Enregistradors">
-      <div class="card-header"><i class="bi bi-record-circle"></i> Enregistradors</div>
-      <div class="card-body placeholder-text">Disponible a la fase 2</div>
-    </section>
-
-    <section class="panel recents card" aria-label="Enregistraments recents">
-      <div class="card-header"><i class="bi bi-clock-history"></i> Recents</div>
-      <div class="card-body placeholder-text">Disponible a la fase 2</div>
+    <section class="card panel recents" aria-label="Enregistraments recents">
+      <div class="card-header panel-header"><span class="panel-title"><i class="bi bi-clock-history"></i> Recents</span></div>
+      <div class="card-body placeholder-text">Pendent (pas 6)</div>
     </section>
   </main>
 

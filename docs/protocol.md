@@ -72,6 +72,8 @@ Tots els missatges són objectes JSON amb el camp `"v": 1`.
 | `engine.shutdown` | `force` (opcional, `true`) | `{ stopping: true }` i el motor es tanca. Si hi ha enregistraments en curs, es rebutja amb `recording_active`, tret que s'enviï `force: true`: llavors es tanquen correctament (fitxers vàlids, sense marcador `.rec`) abans d'aturar-se | fase 0 (`force`: fase 1) |
 | `devices.list` | `kind`: `"output"`, `"input"` o `"all"` (per defecte); `includeInactive`: `true` per incloure també els desactivats i desconnectats (per defecte, `false`) | `{ devices: [ … ] }` (vegeu 4.1) | fase 1 |
 | `hardware.report` | — | `{ report: { … } }`: resum de l'arrencada (vegeu 4.4) | fase 1 |
+| `settings.get` | — | `{ settings: { ui: { zoom } } }`: ajustos desats a `config.json` | fase 2 |
+| `settings.set` | `ui`: els ajustos a canviar, p. ex. `{ "zoom": 1.25 }` (escala de la interfície, de `0.7` a `1.5`) | `{ settings }` amb tots els ajustos. Es desa de seguida. Un valor fora de marge dona `bad_params` | fase 2 |
 
 ### 4.1. Dispositius
 

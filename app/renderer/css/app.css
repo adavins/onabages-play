@@ -1,11 +1,31 @@
-/* Ona Bages Play — estils de la interfície */
+/* Ona Bages Play — estils de la interfície
+ *
+ * Tots els colors i mides importants són variables aquí a dalt (--obp-…):
+ * per canviar l'aspecte, normalment n'hi ha prou de tocar-les.
+ * Mides en rem, perquè el zoom (Ctrl + / Ctrl −) ho escali tot igual.
+ */
 
 :root {
+  /* Colors generals */
   --obp-bg: #121417;
-  --obp-topbar-h: 64px;
+  --obp-panel-bg: var(--bs-body-bg);
+
+  /* Colors dels estats (sempre amb icona i text, mai només color) */
   --obp-ok: #2fb36b;
   --obp-warn: #e0a526;
   --obp-error: #e5484d;
+  --obp-recording: #e5484d;
+  --obp-info: #3d8bfd;
+  --obp-idle: #6c757d;
+
+  /* Mides de la distribució */
+  --obp-topbar-h: 4rem;
+  --obp-side-w: 21rem;        /* columna dreta: preescolta i recents */
+  --obp-recorders-h: 15rem;   /* fila de baix: enregistradors */
+  --obp-gap: 0.75rem;
+
+  /* Text */
+  --obp-clock-size: 2.2rem;
 }
 
 html, body {
@@ -37,7 +57,7 @@ body {
 }
 
 .clock {
-  font-size: 2.2rem;
+  font-size: var(--obp-clock-size);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.04em;
@@ -56,7 +76,18 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* Estat: sempre color + icona + text */
+.zoom-indicator {
+  color: var(--bs-secondary-color);
+  font-size: 0.85rem;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.zoom-indicator.visible {
+  opacity: 1;
+}
+
+/* Estat del motor: sempre color + icona + text */
 .status {
   display: inline-flex;
   align-items: center;
@@ -76,30 +107,121 @@ body {
   50% { opacity: 0.55; }
 }
 
+/* Avís de motor caigut ----------------------------------------------- */
+
+.engine-down {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  background: var(--obp-error);
+  color: #fff;
+  font-size: 1.1rem;
+}
+
+.engine-down > .bi {
+  font-size: 2rem;
+  animation: obp-blink 1s steps(2, start) infinite;
+}
+
+.engine-down-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.engine-down .btn {
+  margin-left: auto;
+}
+
+/* Sense motor, l'estat que es veu és antic: els panells es mostren apagats. */
+body.engine-offline .layout {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
 /* Distribució -------------------------------------------------------- */
 
 .layout {
   height: calc(100% - var(--obp-topbar-h));
   display: grid;
-  grid-template-columns: 1fr 340px;
-  grid-template-rows: 1fr 240px;
-  gap: 0.75rem;
-  padding: 0.75rem;
+  grid-template-columns: 1fr var(--obp-side-w);
+  grid-template-rows: 1fr var(--obp-recorders-h);
+  gap: var(--obp-gap);
+  padding: var(--obp-gap);
 }
 
-.players {
+/* Si hi ha l'avís del motor, la distribució es fa més petita perquè hi càpiga. */
+.engine-down:not(.d-none) + .layout {
+  height: calc(100% - var(--obp-topbar-h) - 4.5rem);
+}
+
+/* --obp-columns el posa app.js segons el nombre de reproductors o enregistradors. */
+.players,
+.recorders {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0.75rem;
+  grid-template-columns: repeat(var(--obp-columns, 2), minmax(0, 1fr));
+  gap: var(--obp-gap);
   min-height: 0;
 }
 
-.card {
+/* Panells ------------------------------------------------------------ */
+
+.panel {
   min-height: 0;
+  background: var(--obp-panel-bg);
 }
 
-.card-header {
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
   font-weight: 600;
+}
+
+.panel-title {
+  white-space: nowrap;
+}
+
+.panel-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.device {
+  font-size: 0.85rem;
+  color: var(--bs-secondary-color);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.device-missing { color: var(--obp-error); font-weight: 600; }
+.device-warning { color: var(--obp-warn); }
+
+.track {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.elapsed {
+  font-size: 1.6rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.error-text {
+  color: var(--obp-error);
+  font-size: 0.9rem;
+}
+
+.error-text:empty {
+  display: none;
 }
 
 .placeholder-text {
@@ -108,4 +230,55 @@ body {
   align-items: center;
   justify-content: center;
   font-style: italic;
+}
+
+/* Etiquetes d'estat dels reproductors i enregistradors (js/ui/states.js) */
+.state {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.15rem 0.55rem;
+  border-radius: 0.35rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.state-idle      { background: var(--obp-idle); }
+.state-ready     { background: var(--obp-info); }
+.state-playing   { background: var(--obp-ok); }
+.state-paused    { background: var(--obp-warn); color: #000; }
+.state-error     { background: var(--obp-error); }
+.state-recording { background: var(--obp-recording); animation: obp-blink 1s steps(2, start) infinite; }
+
+/* Diàlegs (js/ui/dialogs.js) ------------------------------------------ */
+
+.obp-dialog {
+  max-width: 34rem;
+  padding: 1.5rem;
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.6rem;
+  background: var(--bs-tertiary-bg);
+  color: var(--bs-body-color);
+}
+
+.obp-dialog::backdrop {
+  background: rgb(0 0 0 / 0.6);
+}
+
+.obp-dialog-title {
+  font-size: 1.3rem;
+  margin-bottom: 1rem;
+}
+
+.obp-dialog-message {
+  margin-bottom: 1.5rem;
+}
+
+.obp-dialog-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  flex-wrap: wrap;
 }

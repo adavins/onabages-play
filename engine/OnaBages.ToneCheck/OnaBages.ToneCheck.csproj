@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Eina de proves (no va a antena): genera el to de prova i analitza
+    l'enregistrament per detectar-hi talls. Vegeu el pas 8 de la fase 1.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>OnaBages.ToneCheck</RootNamespace>
+    <AssemblyName>OnaBages.ToneCheck</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OnaBages.Audio\OnaBages.Audio.csproj" />
+  </ItemGroup>
+</Project>

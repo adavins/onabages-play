@@ -113,7 +113,7 @@ Objecte `player` (també a `state.get` i a l'esdeveniment `player.state`):
   "error": null, "underruns": 0 }
 ```
 
-- `state`: `empty` (sense pista), `ready` (preparat), `playing`, `paused`, `ended` (ha acabat la pista), `error`.
+- `state`: `empty` (sense pista), `ready` (preparat), `playing`, `paused`, `ended` (ha acabat la pista: s'envia uns 200–300 ms després de l'última mostra, quan ja ha sortit tota de la targeta), `error`.
 - `duration` i `position`: en segons, amb tres decimals.
 - `error`: el motiu, en català, quan `state` és `error`. La pista i la posició es conserven. Per continuar: `player.retry` (mateixa sortida) o `player.setDevice` (una altra), i després `player.play`. El reproductor **no reprèn mai sol**. El detall tècnic de Windows no s'envia: només queda al registre del motor.
 - `underruns`: talls des que es va obrir el reproductor (la targeta ha demanat so i no n'hi havia de preparat). Ha de ser 0; serveix per a les proves llargues.

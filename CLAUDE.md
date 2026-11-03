@@ -96,6 +96,7 @@ engine/OnaBages.Audio/      àudio: dispositius, reproductors, enregistradors, D
 engine/OnaBages.Engine/     procés del motor: WebSocket, ordres, estat
 engine/OnaBages.Recovery/   utilitat de recuperació d'enregistraments (fase 2)
 engine/OnaBages.Tests/      proves automàtiques (xUnit)
+engine/OnaBages.ToneCheck/  eina de proves: to de prova i anàlisi de talls
 app/main/                   procés principal d'Electron i preload
 app/renderer/               interfície (HTML, CSS, JS)
 tools/                      eines de desenvolupament

@@ -3,4 +3,5 @@
   <Project Path="OnaBages.Engine/OnaBages.Engine.csproj" />
   <Project Path="OnaBages.Recovery/OnaBages.Recovery.csproj" />
   <Project Path="OnaBages.Tests/OnaBages.Tests.csproj" />
+  <Project Path="OnaBages.ToneCheck/OnaBages.ToneCheck.csproj" />
 </Solution>

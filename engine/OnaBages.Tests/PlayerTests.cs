@@ -183,7 +183,8 @@ public class PlayerTests
         }
         Assert.Equal(PlayerState.Ended, player.State);
         Assert.Equal(TimeSpan.FromSeconds(1), player.Position);
-        Assert.InRange(framesAfterRetry, 36000, 36000 + 960); // 0,75 s (+ els blocs del final)
+        // 0,75 s, més el silenci final perquè soni tot (200 ms), més els blocs de l'última volta.
+        Assert.InRange(framesAfterRetry, 36000 + 9600, 36000 + 9600 + 960);
     }
 
     [Fact]

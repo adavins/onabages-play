@@ -180,6 +180,30 @@ public class AudioChainTests
     }
 
     [Fact]
+    public void No_es_dona_per_acabada_fins_que_no_ha_sortit_de_la_targeta()
+    {
+        // Error trobat amb la prova de to: s'aturava la sortida amb l'últim tros encara a la targeta.
+        var ring = new SampleRingBuffer(1000);
+        var stream = new PlayerStream(ring, 48000, 2);
+        ring.Write([0.5f, 0.5f]);
+        stream.MarkSourceFinished();
+        var block = new byte[480 * 2 * sizeof(float)]; // 10 ms
+
+        stream.Read(block);
+        Assert.True(stream.EndReached);
+        Assert.False(stream.PlayedOut);
+
+        for (int i = 0; i < 19; i++)
+            stream.Read(block);
+        Assert.False(stream.PlayedOut); // 199,98 ms de silenci: encara no
+
+        stream.Read(block);
+        Assert.True(stream.PlayedOut);
+        Assert.Equal(1, stream.FramesPlayed);
+        Assert.Equal(0, stream.Underruns);
+    }
+
+    [Fact]
     public void Sortida_de_6_canals_rep_l_estereo_als_dos_primers()
     {
         var ring = new SampleRingBuffer(1000);

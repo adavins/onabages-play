@@ -230,7 +230,7 @@ public sealed class Player : IDisposable
                 _readerError = null;
                 FailKeepingTrack("No s'ha pogut continuar llegint el fitxer: és malmès o ja no és accessible.", readerError.Message);
             }
-            else if (State == PlayerState.Playing && _stream!.EndReached)
+            else if (State == PlayerState.Playing && _stream!.PlayedOut)
             {
                 _output!.Stop();
                 SetState(PlayerState.Ended);

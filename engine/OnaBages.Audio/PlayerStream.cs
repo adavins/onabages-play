@@ -22,6 +22,8 @@ public sealed class PlayerStream : IWaveProvider
     private int _underruns;
     private volatile bool _sourceFinished;
     private volatile bool _endReached;
+    private long _framesAfterEnd;
+    private readonly long _drainFrames;
 
     /// <param name="ring">Memòria amb mostres estèreo intercalades.</param>
     /// <param name="sampleRate">Freqüència de la sortida.</param>
@@ -30,6 +32,7 @@ public sealed class PlayerStream : IWaveProvider
     {
         _ring = ring;
         _outChannels = outChannels;
+        _drainFrames = sampleRate * DrainMilliseconds / 1000;
         _stereo = outChannels > 2 ? new float[sampleRate * 2] : [];
         WaveFormat = WaveFormat.CreateIeeeFloatWaveFormat(sampleRate, outChannels);
     }
@@ -42,8 +45,21 @@ public sealed class PlayerStream : IWaveProvider
     /// <summary>Vegades que la sortida ha demanat dades i no n'hi havia (talls).</summary>
     public int Underruns => Volatile.Read(ref _underruns);
 
+    /// <summary>
+    /// Silenci que s'envia després de l'última mostra abans de donar la pista per acabada.
+    /// Quan s'envia l'última mostra, encara és a la memòria de la targeta (fins a uns 100 ms):
+    /// si s'aturés la sortida en aquell moment, se'n tallaria el final.
+    /// </summary>
+    public const int DrainMilliseconds = 200;
+
     /// <summary>S'ha enviat tot el fitxer i la memòria és buida.</summary>
     public bool EndReached => _endReached;
+
+    /// <summary>
+    /// Ha sonat tot: després de l'última mostra s'ha enviat prou silenci perquè hagi sortit de la targeta.
+    /// Fins llavors no es pot aturar la sortida.
+    /// </summary>
+    public bool PlayedOut => _endReached && Interlocked.Read(ref _framesAfterEnd) >= _drainFrames;
 
     /// <summary>El fil de lectura ja ha llegit tot el fitxer.</summary>
     public bool SourceFinished => _sourceFinished;
@@ -71,6 +87,9 @@ public sealed class PlayerStream : IWaveProvider
                 _endReached = true;
             else if (!_endReached)
                 Interlocked.Increment(ref _underruns);
+
+            if (_endReached)
+                Interlocked.Add(ref _framesAfterEnd, frames - framesRead);
         }
 
         Interlocked.Add(ref _framesPlayed, framesRead);

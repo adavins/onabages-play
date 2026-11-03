@@ -608,6 +608,7 @@ No calen Visual Studio Build Tools, MSVC ni CMake.
 - Recuperació automàtica en arrencar i utilitat de recuperació independent.
 - Configuració desada en JSON. Historial CSV.
 - Instal·lador.
+- Pendent de la fase 1 (D-026): prova de 3 hores amb `OnaBages.ToneCheck` i desconnexió d'un dispositiu USB real.
 
 **Criteri:** fer un programa real complet amb Ona Bages Play, primer en paral·lel amb Winamp i després substituint-lo.
 

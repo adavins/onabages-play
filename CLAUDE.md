@@ -10,7 +10,8 @@ L'especificació completa és a `docs/especificacio.md`. Llegeix-ne la secció c
 
 ## Fase actual
 
-**Fase 1 — Prototip del motor (sense interfície)** (vegeu `docs/especificacio.md`, secció 14.3).
+**Fase 2 — MVP utilitzable en directe** (vegeu `docs/especificacio.md`, secció 14.3).
+Pendent de la fase 1 (D-026): la prova de 3 hores i la desconnexió d'un USB real.
 Ordinador de proves i repartiment de dispositius: `docs/inventari/`.
 Quan una fase s'acabi, actualitza aquesta línia i afegeix una entrada a `docs/decisions.md`.
 

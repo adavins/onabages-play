@@ -24,15 +24,30 @@ public sealed class PlayerStream : IWaveProvider
     private volatile bool _endReached;
     private long _framesAfterEnd;
     private readonly long _drainFrames;
+    private float _currentGain; // només el fa servir el fil d'àudio
+    private volatile float _gain;
+
+    /// <summary>Guany que es vol (1 = sense canvi, 0 = silenci). El fixa el reproductor quan es mou el fader.</summary>
+    public float Gain
+    {
+        get => _gain;
+        set => _gain = value;
+    }
+
+    /// <summary>Pic del que surt (després del volum), per al mesurador.</summary>
+    public PeakMeter Meter { get; } = new();
 
     /// <param name="ring">Memòria amb mostres estèreo intercalades.</param>
     /// <param name="sampleRate">Freqüència de la sortida.</param>
     /// <param name="outChannels">Canals de la sortida. L'estèreo va als dos primers; la resta, silenci.</param>
-    public PlayerStream(SampleRingBuffer ring, int sampleRate, int outChannels)
+    /// <param name="gain">Guany inicial (el volum del reproductor).</param>
+    public PlayerStream(SampleRingBuffer ring, int sampleRate, int outChannels, float gain = 1f)
     {
         _ring = ring;
         _outChannels = outChannels;
         _drainFrames = sampleRate * DrainMilliseconds / 1000;
+        _gain = gain;
+        _currentGain = gain; // sense rampa al principi
         _stereo = outChannels > 2 ? new float[sampleRate * 2] : [];
         WaveFormat = WaveFormat.CreateIeeeFloatWaveFormat(sampleRate, outChannels);
     }
@@ -92,8 +107,32 @@ public sealed class PlayerStream : IWaveProvider
                 Interlocked.Add(ref _framesAfterEnd, frames - framesRead);
         }
 
+        ApplyGain(output, framesRead);
+        Meter.AddInterleaved(output[..(framesRead * _outChannels)], _outChannels);
+
         Interlocked.Add(ref _framesPlayed, framesRead);
         return buffer.Length;
+    }
+
+    /// <summary>
+    /// Volum: multiplica els dos primers canals pel guany. Si el guany ha canviat, hi arriba
+    /// de mica en mica al llarg del bloc (una rampa), perquè moure el fader no faci clics.
+    /// </summary>
+    private void ApplyGain(Span<float> output, int frames)
+    {
+        float target = Gain;
+        float current = _currentGain;
+        if (current == 1f && target == 1f) return;
+
+        float step = frames > 0 ? (target - current) / frames : 0;
+        for (int i = 0; i < frames; i++)
+        {
+            current += step;
+            int o = i * _outChannels;
+            output[o] *= current;
+            output[o + 1] *= current;
+        }
+        _currentGain = target;
     }
 
     private int ReadIntoWiderOutput(Span<float> output, int frames)

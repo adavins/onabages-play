@@ -50,12 +50,19 @@ void Broadcast(System.Text.Json.Nodes.JsonObject ev) => _ = Task.Run(async () =>
 
 foreach (var player in state.Players)
 {
+    string lastLogged = "";
     player.StateChanged += p =>
     {
-        if (p.State == PlayerState.Error)
-            log.LogWarning("Reproductor {Id}: error — {Message} (detall: {Detail})", p.Id, p.ErrorMessage, p.ErrorDetail ?? "cap");
-        else
-            log.LogInformation("Reproductor {Id}: {State} {File}", p.Id, PlayerJson.State(p.State), Path.GetFileName(p.FilePath) ?? "");
+        // Al registre només hi va el canvi d'estat o de pista (no cada moviment del fader).
+        string summary = $"{p.State}|{p.FilePath}|{p.ErrorMessage}";
+        if (summary != lastLogged)
+        {
+            lastLogged = summary;
+            if (p.State == PlayerState.Error)
+                log.LogWarning("Reproductor {Id}: error — {Message} (detall: {Detail})", p.Id, p.ErrorMessage, p.ErrorDetail ?? "cap");
+            else
+                log.LogInformation("Reproductor {Id}: {State} {File}", p.Id, PlayerJson.State(p.State), Path.GetFileName(p.FilePath) ?? "");
+        }
         Broadcast(PlayerJson.StateEvent(p));
     };
 }
@@ -163,6 +170,26 @@ app.Lifetime.ApplicationStopping.Register(() =>
     foreach (var player in state.Players)
         player.Dispose();
     RuntimeFile.DeleteIfOwned();
+});
+
+// Mesuradors: 25 vegades per segon, tots els nivells en un sol missatge (especificació 4.4).
+// Només si hi ha alguna interfície connectada.
+_ = Task.Run(async () =>
+{
+    var stopping = app.Lifetime.ApplicationStopping;
+    using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(40));
+    try
+    {
+        while (await timer.WaitForNextTickAsync(stopping))
+        {
+            if (state.Clients == 0) continue;
+            await hub.BroadcastAsync(MetersJson.Event(state.Players, state.Recorders), stopping);
+        }
+    }
+    catch (OperationCanceledException)
+    {
+        // El motor s'està aturant.
+    }
 });
 
 // Esdeveniment periòdic d'estat: permet a la interfície saber que el motor és viu.

@@ -10,6 +10,7 @@
 //   'player'           ha canviat un reproductor        (detail: id)
 //   'recorder'         ha canviat un enregistrador      (detail: id)
 //   'devices'          ha canviat la llista de dispositius
+//   'meters'           nivells nous dels mesuradors (25 per segon)
 
 /** @typedef {import('./engine-client.js').EngineClient} EngineClient */
 
@@ -19,6 +20,8 @@ export class Store extends EventTarget {
   /** @type {any[]} */ devices = [];
   /** @type {any} */ hardware = null;
   /** @type {any} */ engine = null;
+  /** Últims nivells dels mesuradors (esdeveniment meters). @type {any} */
+  meters = { players: {}, recorders: {} };
 
   /** @type {EngineClient | null} */
   #client = null;
@@ -36,6 +39,10 @@ export class Store extends EventTarget {
       for (const r of /** @type {any} */ (e).detail.recorders) this.#mergeRecorder(r);
     });
     client.addEventListener('ev:devices.changed', () => this.refreshDevices());
+    client.addEventListener('ev:meters', (e) => {
+      this.meters = /** @type {any} */ (e).detail;
+      this.#emit('meters');
+    });
   }
 
   /** Torna a llegir tot l'estat del motor. */

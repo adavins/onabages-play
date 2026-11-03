@@ -20,6 +20,7 @@ public static class RecorderJson
         ["bitrateKbps"] = recorder.BitrateKbps,
         ["samplesLost"] = recorder.SamplesLost,
         ["captureGlitches"] = recorder.CaptureGlitches,
+        ["inputActive"] = recorder.InputActive,
         ["error"] = recorder.ErrorMessage,
     };
 

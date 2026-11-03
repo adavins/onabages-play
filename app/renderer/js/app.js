@@ -177,6 +177,10 @@ function setupPanels() {
   store.addEventListener('player', (e) => playerPanels.get(/** @type {any} */ (e).detail)?.render());
   store.addEventListener('recorder', (e) => recorderPanels.get(/** @type {any} */ (e).detail)?.render());
   store.addEventListener('devices', renderAll);
+  store.addEventListener('meters', () => {
+    for (const [id, panel] of playerPanels) panel.updateMeter(store.meters.players?.[id]);
+    for (const [id, panel] of recorderPanels) panel.updateMeter(store.meters.recorders?.[id]);
+  });
 }
 
 /** Crea un panell per a cada reproductor i enregistrador que té el motor. */

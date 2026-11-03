@@ -83,6 +83,7 @@ public sealed class CommandRouter
                 "player.stop" => PlayerCommand(msg, p => p.Stop()),
                 "player.retry" => PlayerCommand(msg, p => p.Retry()),
                 "player.seek" => PlayerSeek(msg),
+                "player.setVolume" => PlayerSetVolume(msg),
                 "recorder.setDevice" => RecorderSetDevice(msg),
                 "recorder.start" => RecorderStart(msg),
                 "recorder.stop" => RecorderCommand(msg, r => r.Stop()),
@@ -227,6 +228,18 @@ public sealed class CommandRouter
 
         player.Seek(TimeSpan.FromSeconds(seconds));
         return PlayerResult(player);
+    }
+
+    /// <summary>Paràmetre "db": volum de −60 (silenci) a 0. Fora de marge, es queda al límit.</summary>
+    private JsonObject PlayerSetVolume(JsonObject msg)
+    {
+        var player = GetPlayer(msg);
+        if (msg["db"] is not JsonValue v || !v.TryGetValue(out double db) || double.IsNaN(db))
+            throw new BadParamsException("'db' ha de ser un nombre (de −60 a 0).");
+
+        player.SetVolume(db);
+        // El volum es pot canviar també amb el reproductor en error: es respon sempre amb l'estat.
+        return new JsonObject { ["player"] = PlayerJson.Player(player) };
     }
 
     private JsonObject PlayerCommand(JsonObject msg, Action<Player> action)

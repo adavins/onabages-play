@@ -31,6 +31,16 @@
   --obp-remaining-size: 3.2rem;   /* temps restant */
   --obp-control-size: 1.8rem;     /* icones de Play, Pausa, Stop */
   --obp-ending-bg: var(--obp-error);  /* temps restant als últims segons */
+
+  /* Mesuradors (js/ui/meter.js). L'escala va de −60 a 0 dBFS:
+     −18 dB és al 70 % de l'amplada i −6 dB al 90 %. */
+  --obp-meter-h: 0.55rem;           /* alçada de cada canal */
+  --obp-meter-green: #2fb36b;
+  --obp-meter-yellow: #e0c326;
+  --obp-meter-red: #e5484d;
+  --obp-meter-off: #23272b;         /* part apagada */
+  --obp-meter-yellow-from: 70%;     /* −18 dB */
+  --obp-meter-red-from: 90%;        /* −6 dB */
 }
 
 html, body {
@@ -363,6 +373,115 @@ body.engine-offline .layout {
   font-weight: 600;
   pointer-events: none;
 }
+
+/* Mesurador de nivell (js/ui/meter.js) --------------------------------- */
+
+.meter {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+}
+
+.meter-channels {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* La barra té els colors de l'escala; una màscara tapa la part que no està encesa. */
+.meter-bar {
+  position: relative;
+  height: var(--obp-meter-h);
+  border-radius: 2px;
+  overflow: hidden;
+  background: linear-gradient(to right,
+    var(--obp-meter-green) 0 var(--obp-meter-yellow-from),
+    var(--obp-meter-yellow) var(--obp-meter-yellow-from) var(--obp-meter-red-from),
+    var(--obp-meter-red) var(--obp-meter-red-from) 100%);
+}
+
+.meter-mask {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--obp-meter-off);
+}
+
+.meter-hold {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: #fff;
+}
+
+.meter-scale {
+  position: relative;
+  height: 0.8rem;
+  font-size: 0.6rem;
+  color: var(--bs-secondary-color);
+}
+
+.meter-scale span {
+  position: absolute;
+  transform: translateX(-50%);
+}
+
+.meter-scale span:last-child {
+  transform: translateX(-100%);
+}
+
+.meter-clip {
+  border: 1px solid var(--bs-border-color);
+  border-radius: 3px;
+  background: var(--obp-meter-off);
+  color: var(--bs-secondary-color);
+  font-size: 0.6rem;
+  font-weight: 700;
+  padding: 0.1rem 0.25rem;
+  line-height: 1;
+}
+
+.meter-clip.on {
+  background: var(--obp-meter-red);
+  border-color: var(--obp-meter-red);
+  color: #fff;
+}
+
+.meter.inactive {
+  opacity: 0.35;
+}
+
+.input-off {
+  color: var(--obp-warn);
+  font-size: 0.8rem;
+}
+
+/* Fader de volum (js/ui/fader.js) -------------------------------------- */
+
+.fader {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.fader .form-range {
+  flex: 1;
+}
+
+.fader-value {
+  min-width: 4.2rem;
+  text-align: right;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Volum abaixat o en silenci: es diu amb color i amb el text del valor. */
+.fader.lowered .fader-value { color: var(--obp-warn); }
+.fader.muted .fader-value   { color: var(--obp-error); font-weight: 700; }
 
 /* Etiquetes d'estat dels reproductors i enregistradors (js/ui/states.js) */
 .state {

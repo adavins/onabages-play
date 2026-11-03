@@ -48,8 +48,14 @@ public sealed class Recorder : IDisposable
     private readonly Func<string, IAudioInput> _openInput;
     private readonly Lock _sync = new();
 
+    /// <summary>Si l'entrada no s'ha pogut obrir per al mesurador, cada quant es torna a provar.</summary>
+    private static readonly TimeSpan MonitorRetry = TimeSpan.FromSeconds(3);
+
+    // L'entrada és oberta sempre que hi ha dispositiu (per al mesurador), no només mentre s'enregistra.
     private IAudioInput? _input;
-    private SampleRingBuffer? _ring;
+    // Només existeix mentre s'enregistra: si és null, el que arriba només va al mesurador.
+    private volatile SampleRingBuffer? _ring;
+    private DateTime _nextMonitorAttempt;
     private float[] _zeros = [];
     private Thread? _encoderThread;
     private volatile bool _stopEncoder;
@@ -114,6 +120,15 @@ public sealed class Recorder : IDisposable
         }
     }
 
+    /// <summary>Pic del que entra (també quan no s'enregistra), per al mesurador.</summary>
+    public PeakMeter Meter { get; } = new();
+
+    /// <summary>L'entrada és oberta i el mesurador funciona.</summary>
+    public bool InputActive
+    {
+        get { lock (_sync) return _input is not null && _inputError is null; }
+    }
+
     /// <summary>Es dispara quan canvia l'estat, el fitxer, el dispositiu o l'error.</summary>
     public event Action<Recorder>? StateChanged;
 
@@ -127,7 +142,10 @@ public sealed class Recorder : IDisposable
         {
             if (State == RecorderState.Recording)
                 throw new RecorderCommandException("No es pot canviar l'entrada mentre s'enregistra.");
+            if (deviceId != DeviceId)
+                CloseInput();
             DeviceId = deviceId;
+            OpenMonitor();
             _changed = true;
         }
         RaiseStateChanged();
@@ -180,9 +198,23 @@ public sealed class Recorder : IDisposable
     {
         lock (_sync)
         {
-            if (State != RecorderState.Recording) return;
-
-            if (_inputError is { } inputError)
+            if (State != RecorderState.Recording)
+            {
+                // Sense enregistrar, perdre l'entrada no és un error (no es perd res): el mesurador
+                // queda apagat i es torna a obrir l'entrada quan torni.
+                if (_inputError is not null)
+                {
+                    CloseInput();
+                    _nextMonitorAttempt = DateTime.UtcNow + MonitorRetry;
+                    _changed = true;
+                }
+                if (_input is null && DeviceId is not null && DateTime.UtcNow >= _nextMonitorAttempt)
+                {
+                    OpenMonitor();
+                    if (_input is not null) _changed = true;
+                }
+            }
+            else if (_inputError is { } inputError)
             {
                 // Especificació 5.3: es tanca el fitxer de manera neta i s'avisa.
                 bool ok = FinishRecording();
@@ -207,6 +239,7 @@ public sealed class Recorder : IDisposable
         {
             if (State == RecorderState.Recording)
                 FinishRecording();
+            CloseInput();
         }
     }
 
@@ -217,12 +250,25 @@ public sealed class Recorder : IDisposable
     private void BeginRecording(string folder, string name)
     {
         IAudioInput? input = null;
+        bool openedNow = false;
         FileStream? file = null;
         LameEncoder? encoder = null;
         string? path = null;
         try
         {
-            input = _openInput(DeviceId!);
+            // Normalment l'entrada ja és oberta (mesurador): l'enregistrament comença a l'instant.
+            // Si s'havia perdut o no s'havia pogut obrir, es torna a obrir ara.
+            if (_inputError is not null) CloseInput();
+            if (_input is null)
+            {
+                input = _openInput(DeviceId!);
+                AttachInput(input);
+                openedNow = true;
+            }
+            else
+            {
+                input = _input;
+            }
 
             Directory.CreateDirectory(folder);
             var startedAt = DateTimeOffset.Now;
@@ -233,15 +279,12 @@ public sealed class Recorder : IDisposable
             encoder = new LameEncoder(input.SampleRate, BitrateKbps);
             WriteMarker(path, startedAt, input);
 
-            _input = input;
-            _inputChannels = input.Channels;
-            _ring = new SampleRingBuffer(input.SampleRate * input.Channels * BufferSeconds);
+            var ring = new SampleRingBuffer(input.SampleRate * input.Channels * BufferSeconds);
             _zeros = new float[input.SampleRate * input.Channels / 10];
             Interlocked.Exchange(ref _framesCaptured, 0);
             Interlocked.Exchange(ref _samplesLost, 0);
             Interlocked.Exchange(ref _fileSize, 0);
             Volatile.Write(ref _captureGlitches, 0);
-            _inputError = null;
             _encoderError = null;
             _stopEncoder = false;
 
@@ -249,7 +292,6 @@ public sealed class Recorder : IDisposable
             SampleRate = input.SampleRate;
             StartedAt = startedAt;
 
-            var ring = _ring;
             var encoderForThread = encoder;
             var fileForThread = file;
             _encoderThread = new Thread(() => EncoderLoop(ring, encoderForThread, fileForThread, path))
@@ -259,18 +301,18 @@ public sealed class Recorder : IDisposable
                 Priority = ThreadPriority.AboveNormal,
             };
 
-            input.DataAvailable += OnCaptured;
-            input.Stopped += error => { if (error is not null) _inputError = error; };
-
             _encoderThread.Start();
-            input.Start();
+            // A partir d'aquí, el que arriba de l'entrada també va al fitxer.
+            _ring = ring;
+            if (openedNow) input.Start();
             SetState(RecorderState.Recording);
         }
         catch (Exception ex)
         {
             // No ha arribat a començar (per qualsevol motiu): es desfà tot el que s'hagi creat.
-            if (input is not null) input.DataAvailable -= OnCaptured;
-            try { input?.Stop(); } catch { /* potser no havia arrencat */ }
+            // Si l'entrada ja era oberta per al mesurador, es deixa oberta.
+            _ring = null;
+            if (openedNow) CloseInput();
             _stopEncoder = true;
             _encoderThread?.Join(TimeSpan.FromSeconds(2));
             _encoderThread = null;
@@ -281,10 +323,6 @@ public sealed class Recorder : IDisposable
                 TryDelete(path);
                 TryDelete(path + ".rec");
             }
-            input?.Dispose();
-            _input = null;
-
-            _ring = null;
             string message = ex switch
             {
                 AudioDeviceException or AudioFileException => ex.Message,
@@ -301,12 +339,15 @@ public sealed class Recorder : IDisposable
     /// </summary>
     private void OnCaptured(ReadOnlySpan<float> samples, bool silent, bool discontinuity)
     {
+        // El mesurador funciona sempre, s'enregistri o no.
+        int channels = _inputChannels;
+        if (!silent) Meter.AddInterleaved(samples, channels);
+
         var ring = _ring;
-        if (ring is null) return;
+        if (ring is null) return; // no s'enregistra
 
         // Només fotogrames sencers (tots els canals d'un instant): si la memòria s'omplís,
         // mai no hi pot quedar mig fotograma, perquè els canals es desordenarien.
-        int channels = _inputChannels;
         int written = 0;
         while (written < samples.Length)
         {
@@ -400,23 +441,67 @@ public sealed class Recorder : IDisposable
     }
 
     /// <summary>
-    /// Atura la captura, espera que el fil de codificació buidi la memòria i tanqui el fitxer.
+    /// Deixa d'enviar l'entrada al fitxer, espera que el fil de codificació buidi la memòria
+    /// i tanqui el fitxer. L'entrada continua oberta per al mesurador (si no s'ha perdut).
     /// Retorna true si el fitxer s'ha tancat correctament (i el marcador s'ha esborrat).
     /// </summary>
     private bool FinishRecording()
     {
-        try { _input?.Stop(); } catch { /* entrada ja perduda */ }
-        if (_input is not null) _input.DataAvailable -= OnCaptured;
+        _ring = null;
+        // El fil de captura pot estar acabant d'escriure l'últim paquet: se li deixa temps.
+        Thread.Sleep(30);
 
         _stopEncoder = true;
         _encoderThread?.Join(TimeSpan.FromSeconds(60)); // buidar 10 s de memòria triga molt menys
         _encoderThread = null;
 
-        try { _input?.Dispose(); } catch { /* idem */ }
-        _input = null;
-        _ring = null;
+        if (_inputError is not null)
+            CloseInput();
 
         return _encoderError is null;
+    }
+
+    /// <summary>Obre l'entrada per al mesurador, si té dispositiu i no ho està. Si falla, ho tornarà a provar.</summary>
+    private void OpenMonitor()
+    {
+        if (_input is not null || DeviceId is null) return;
+
+        IAudioInput? input = null;
+        try
+        {
+            input = _openInput(DeviceId);
+            AttachInput(input);
+            input.Start();
+        }
+        catch
+        {
+            // Dispositiu desconnectat, desactivat...: no és un error de l'enregistrador.
+            // Tick() ho tornarà a provar d'aquí a una estona.
+            if (input is not null) CloseInput();
+            _nextMonitorAttempt = DateTime.UtcNow + MonitorRetry;
+        }
+    }
+
+    private void AttachInput(IAudioInput input)
+    {
+        _input = input;
+        _inputChannels = input.Channels;
+        _inputError = null;
+        input.DataAvailable += OnCaptured;
+        // Una entrada antiga (ja substituïda) no pot marcar error a la nova.
+        input.Stopped += error => { if (error is not null && ReferenceEquals(input, _input)) _inputError = error; };
+    }
+
+    /// <summary>Tanca l'entrada (si n'hi ha) i apaga el mesurador.</summary>
+    private void CloseInput()
+    {
+        var input = _input;
+        if (input is null) return;
+        _input = null;
+        _inputError = null;
+        input.DataAvailable -= OnCaptured;
+        try { input.Stop(); } catch { /* entrada ja perduda */ }
+        try { input.Dispose(); } catch { /* idem */ }
     }
 
     private void WriteMarker(string path, DateTimeOffset startedAt, IAudioInput input)

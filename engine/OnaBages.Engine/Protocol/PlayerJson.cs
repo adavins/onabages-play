@@ -19,6 +19,7 @@ public static class PlayerJson
         ["position"] = Seconds(player.Position),
         ["error"] = player.ErrorMessage,
         ["underruns"] = player.Underruns,
+        ["volumeDb"] = player.VolumeDb,
     };
 
     public static JsonArray All(IEnumerable<Player> players) =>

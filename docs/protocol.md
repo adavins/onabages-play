@@ -105,6 +105,7 @@ Fase 1: hi ha dos reproductors fixos, `"1"` i `"2"`. Encara no hi ha llistes ni 
 | `player.stop` | `player` | tots menys `error`. Torna a l'inici (`ready`) | `{ player }` |
 | `player.retry` | `player` | `error`. Torna a obrir la sortida i el fitxer i queda `ready` **a la mateixa posició**. No torna a sonar sol: cal `player.play` | `{ player }` |
 | `player.seek` | `player`, `position` (segons des de l'inici) | `ready`, `playing`, `paused`, `ended`. Salta a aquest punt (si és més enllà del final, es queda al final). Si sonava, **continua sonant** des d'allà, amb un silenci molt curt mentre es torna a obrir la sortida; si era en pausa, continua en pausa; si havia acabat, queda `ready`. Tornar a començar la pista és `position: 0` | `{ player }` |
+| `player.setVolume` | `player`, `db` (de `-60` a `0`) | tots, també mentre sona. A `-60` el reproductor queda en silenci; fora de marge es queda al límit. El canvi es fa amb una rampa curta (sense clics). En arrencar el motor, tots els reproductors són a 0 dB (no es desa) | `{ player }` |
 
 Objecte `player` (també a `state.get` i a l'esdeveniment `player.state`):
 
@@ -113,13 +114,14 @@ Objecte `player` (també a `state.get` i a l'esdeveniment `player.state`):
   "deviceId": "{0.0.0.00000000}.{f2d6376b-…}",
   "file": "D:\\Musica\\prova.mp3",
   "duration": 183.512, "position": 12.300,
-  "error": null, "underruns": 0 }
+  "error": null, "underruns": 0, "volumeDb": 0 }
 ```
 
 - `state`: `empty` (sense pista), `ready` (preparat), `playing`, `paused`, `ended` (ha acabat la pista: s'envia uns 200–300 ms després de l'última mostra, quan ja ha sortit tota de la targeta), `error`.
 - `duration` i `position`: en segons, amb tres decimals.
 - `error`: el motiu, en català, quan `state` és `error`. La pista i la posició es conserven. Per continuar: `player.retry` (mateixa sortida) o `player.setDevice` (una altra), i després `player.play`. El reproductor **no reprèn mai sol**. El detall tècnic de Windows no s'envia: només queda al registre del motor.
 - `underruns`: talls des que es va obrir el reproductor (la targeta ha demanat so i no n'hi havia de preparat). Ha de ser 0; serveix per a les proves llargues.
+- `volumeDb`: volum del fader (de `-60`, silenci, a `0`).
 
 ### 4.3. Enregistradors
 
@@ -142,13 +144,14 @@ Objecte `recorder` (també a `state.get` i a l'esdeveniment `recorder.state`):
   "startedAt": "2026-11-02T17:30:00.123+01:00",
   "elapsed": 125.4, "fileSize": 5017600, "freeDiskBytes": 146028888064,
   "sampleRate": 48000, "bitrateKbps": 320,
-  "samplesLost": 0, "captureGlitches": 0,
+  "samplesLost": 0, "captureGlitches": 0, "inputActive": true,
   "error": null }
 ```
 
 - `state`: `idle` (inactiu), `recording`, `pending` (fitxer acabat, a `file`), `error`.
 - `elapsed`: segons enregistrats. `fileSize`: bytes escrits. `freeDiskBytes`: espai lliure a la unitat del fitxer (`null` si no se sap, p. ex. en una unitat de xarxa).
 - `samplesLost`: mostres perdudes perquè el disc no ha anat prou ràpid. `captureGlitches`: vegades que Windows ha avisat que s'han perdut dades de captura. Tots dos han de ser 0.
+- `inputActive`: l'entrada és oberta i el mesurador funciona. **L'entrada s'obre en triar-la, no en començar a enregistrar** (per veure el nivell abans d'enregistrar); `recorder.start` fa servir la mateixa entrada i comença a l'instant. Si l'entrada es perd quan no s'enregistra, no és cap error: `inputActive` passa a `false` i el motor la torna a obrir quan torna (cada 3 s ho prova).
 - `error`: el motiu, en català, quan `state` és `error`. Si l'entrada es desconnecta mentre s'enregistra, el fitxer es tanca correctament (vàlid fins a aquell moment) i `file` hi continua apuntant. Per continuar, `recorder.start` en fa un de nou.
 
 ### 4.4. Maquinari en arrencar
@@ -193,6 +196,7 @@ El motor desa el dispositiu de cada reproductor i enregistrador a `%APPDATA%\Ona
 | `recorder.state` | `recorder`: objecte complet (vegeu 4.3) | quan canvia l'estat, el fitxer, l'entrada o l'error d'un enregistrador | fase 1 |
 | `recorder.progress` | `recorders`: `[ { id, elapsed, fileSize, freeDiskBytes, samplesLost, captureGlitches } ]` dels que enregistren | cada segon, només mentre algun enregistra | fase 1 |
 | `hardware.reassigned` | `element`: una línia com les de `elements` de 4.4, amb el dispositiu ja assignat | quan torna el dispositiu d'un element que en arrencar era `missing`. El reproductor **no es posa a sonar**; després arriba també el seu `player.state` o `recorder.state` | fase 1 |
+| `meters` | `players`, `recorders`: nivells de pic de cada element (vegeu 5.2) | 25 per segon, si hi ha alguna interfície connectada | fase 2 |
 
 ### 5.1. Canvis de dispositius
 
@@ -217,9 +221,21 @@ El motor desa el dispositiu de cada reproductor i enregistrador a `%APPDATA%\Ona
 - Windows envia molts avisos per a una sola acció (i també quan algú mou el volum). El motor els agrupa i **només envia l'esdeveniment si la llista ha canviat de debò**.
 - Els dispositius «no presents» no s'hi tenen en compte: un USB que es treu dona `removed` o `status` → `unplugged`, segons el controlador.
 
+### 5.2. Mesuradors
+
+```json
+{ "v": 1, "ev": "meters",
+  "players":   { "1": [-12.3, -11.8], "2": [-90, -90] },
+  "recorders": { "1": [-18.0, -17.5], "2": [-90, -90] } }
+```
+
+- Per a cada element, `[esquerre, dret]` en **dBFS**: el pic més alt des de l'esdeveniment anterior (uns 40 ms). `-90` vol dir silenci.
+- Reproductors: el que surt, **després del volum**. Enregistradors: el que entra, també quan no s'enregistra (si `inputActive`).
+- Una entrada mono dona el mateix valor als dos canals.
+- La interfície fa la caiguda suau, la retenció del pic i l'indicador de saturació.
+
 ## 6. Previst (no implementat)
 
-- Reproductors: llistes, volum, salts de posició (fase 2)
+- Reproductors: llistes (fase 2)
 - Enregistradors: desar, descartar, editar, recents, recuperació (fase 2)
 - `cue.*` (preescolta, fase 2)
-- `meters` (agrupat, 20–30 per segon, fase 1)

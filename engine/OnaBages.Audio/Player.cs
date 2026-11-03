@@ -63,6 +63,12 @@ public sealed class Player : IDisposable
     public string Id { get; }
     public PlayerState State { get; private set; } = PlayerState.Empty;
     public string? DeviceId { get; private set; }
+
+    /// <summary>Volum mínim del fader: en aquest punt el reproductor queda en silenci.</summary>
+    public const double MinVolumeDb = -60;
+
+    /// <summary>Volum en dB, de <see cref="MinVolumeDb"/> (silenci) a 0 (sense canvi). En arrencar, sempre 0.</summary>
+    public double VolumeDb { get; private set; }
     public string? FilePath { get; private set; }
     public TimeSpan Duration { get; private set; }
 
@@ -90,6 +96,32 @@ public sealed class Player : IDisposable
     // -----------------------------------------------------------------------
     // Ordres
     // -----------------------------------------------------------------------
+
+    /// <summary>
+    /// Canvia el volum (en qualsevol estat, també mentre sona). Fora de marge, es queda al límit.
+    /// </summary>
+    public void SetVolume(double db)
+    {
+        lock (_sync)
+        {
+            VolumeDb = Math.Round(Math.Clamp(db, MinVolumeDb, 0), 1);
+            if (_stream is not null)
+                _stream.Gain = GainFor(VolumeDb);
+            _changed = true;
+        }
+        RaiseStateChanged();
+    }
+
+    /// <summary>Pic del que ha sortit des de l'última crida, per al mesurador (0 si no sona).</summary>
+    public (float Left, float Right) TakePeaks()
+    {
+        var stream = _stream;
+        return stream is null ? (0f, 0f) : stream.Meter.Take();
+    }
+
+    /// <summary>Guany lineal d'un volum en dB. Al mínim del fader, silenci.</summary>
+    public static float GainFor(double db) =>
+        db <= MinVolumeDb ? 0f : (float)Math.Pow(10, db / 20);
 
     /// <summary>Assigna la sortida. No es pot canviar mentre sona.</summary>
     public void SetDevice(string deviceId)
@@ -329,7 +361,7 @@ public sealed class Player : IDisposable
         Duration = source.Duration;
         var ring = new SampleRingBuffer(_output.SampleRate * 2 * BufferSeconds);
         _ring = ring;
-        _stream = new PlayerStream(ring, _output.SampleRate, _output.Channels);
+        _stream = new PlayerStream(ring, _output.SampleRate, _output.Channels, GainFor(VolumeDb));
 
         var output = _output;
         output.Stopped += error =>

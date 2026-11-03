@@ -108,6 +108,7 @@
       <label><input type="checkbox" id="hide-status" checked> Amagar els esdeveniments engine.status</label>
       <label><input type="checkbox" id="hide-position" checked> Amagar els esdeveniments player.position</label>
       <label><input type="checkbox" id="hide-progress" checked> Amagar els esdeveniments recorder.progress</label>
+      <label><input type="checkbox" id="hide-meters" checked> Amagar els esdeveniments meters</label>
       <button id="clear">Netejar el registre</button>
     </div>
 
@@ -158,6 +159,7 @@
         if (msg.ev === 'engine.status' && $('hide-status').checked) return;
         if (msg.ev === 'player.position' && $('hide-position').checked) return;
         if (msg.ev === 'recorder.progress' && $('hide-progress').checked) return;
+        if (msg.ev === 'meters' && $('hide-meters').checked) return;
         log(`← ${JSON.stringify(msg)}`, msg.ev ? 'ev' : (msg.ok ? 'in' : 'err'));
       };
     };

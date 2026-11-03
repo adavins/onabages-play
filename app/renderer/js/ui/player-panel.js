@@ -5,6 +5,8 @@
 import { PLAYER_STATES, stateBadge } from './states.js';
 import { deviceWarning } from './device-line.js';
 import { DeviceSelect } from './device-select.js';
+import { LevelMeter } from './meter.js';
+import { VolumeFader } from './fader.js';
 import { escapeHtml, fileName, formatDuration } from './format.js';
 
 /** @typedef {import('../store.js').Store} Store */
@@ -28,6 +30,8 @@ export class PlayerPanel {
   #id;
   #request;
   #deviceSelect;
+  #meter;
+  #fader;
   /** @type {Record<string, HTMLElement>} */ #el = {};
   /** @type {number | undefined} */ #messageTimer;
   /** Mentre s'arrossega la barra de posició: on es deixaria (0..1). Si no, null. */
@@ -73,6 +77,9 @@ export class PlayerPanel {
           <span class="js-duration">0:00</span>
         </div>
 
+        <div class="js-meter-slot"></div>
+        <div class="js-fader-slot"></div>
+
         <div class="controls">
           <button class="btn btn-outline-light btn-control btn-restart js-restart" type="button" title="Tornar a començar"><i class="bi bi-skip-start-fill"></i></button>
           <button class="btn btn-success btn-control js-play" type="button" title="Play"><i class="bi bi-play-fill"></i></button>
@@ -95,6 +102,11 @@ export class PlayerPanel {
 
     this.#deviceSelect = new DeviceSelect('output', (deviceId) => this.#setDevice(deviceId));
     this.#el['device-slot'].appendChild(this.#deviceSelect.element);
+
+    this.#meter = new LevelMeter();
+    this.#el['meter-slot'].appendChild(this.#meter.element);
+    this.#fader = new VolumeFader((db) => this.#send('player.setVolume', { db }));
+    this.#el['fader-slot'].appendChild(this.#fader.element);
 
     this.#el.restart.addEventListener('click', () => this.#send('player.seek', { position: 0 }));
     this.#el.play.addEventListener('click', () => this.#send('player.play'));
@@ -146,6 +158,12 @@ export class PlayerPanel {
     el.retry.classList.toggle('d-none', p.state !== 'error');
 
     el.error.textContent = p.error ?? '';
+    this.#fader.update(p.volumeDb ?? 0);
+  }
+
+  /** Nivells nous del motor (esdeveniment meters): [esquerre, dret] en dBFS. */
+  updateMeter(/** @type {number[] | undefined} */ levels) {
+    if (levels) this.#meter.update(levels);
   }
 
   // -------------------------------------------------------------------------

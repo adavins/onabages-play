@@ -51,7 +51,7 @@ Tots els missatges són objectes JSON amb el camp `"v": 1`.
 
 | Codi | Significat |
 |---|---|
-| `bad_json` | El missatge no és JSON vàlid o no és un objecte |
+| `bad_json` | El missatge no és JSON vàlid, no és un objecte o té camps repetits (p. ex. dos `id`) |
 | `protocol_version` | El camp `v` falta o no és compatible |
 | `missing_cmd` | Falta el camp `cmd` |
 | `bad_params` | Falta un paràmetre o té un valor no vàlid (p. ex. un reproductor que no existeix) |
@@ -94,15 +94,16 @@ Tots els missatges són objectes JSON amb el camp `"v": 1`.
 
 ### 4.2. Reproductors
 
-Fase 1: hi ha dos reproductors fixos, `"1"` i `"2"`. Encara no hi ha llistes ni es desa res.
+Hi ha dos reproductors fixos, `"1"` i `"2"` (configurable al pas 9). Cada un té la seva llista (vegeu 4.5).
 
 | Ordre | Paràmetres | Estats en què es pot fer | Resultat |
 |---|---|---|---|
-| `player.setDevice` | `player`, `deviceId` | tots menys `playing`. Si hi ha pista, es torna a preparar: des del mateix punt si era a `paused` o `error`; des de l'inici en els altres casos | `{ player }` |
-| `player.load` | `player`, `path` (ruta completa) | tots menys `playing`. Cal haver triat la sortida | `{ player }` |
-| `player.play` | `player` | `ready`, `paused`, `ended` (torna a començar) | `{ player }` |
+| `player.setDevice` | `player`, `deviceId` | tots menys `playing`. Si hi ha pista preparada, es torna a preparar: des del mateix punt si era a `paused` o `error` | `{ player }` |
+| `player.play` | `player` | `ready` i `paused`: continua la pista actual. `empty` i `ended`: fa sonar la pista amb **cue** o, si no n'hi ha, la que va **després de l'última reproduïda** (la primera, si no n'ha sonat cap). Si no n'hi ha cap més, `bad_state` | `{ player }` |
+| `player.playItem` | `player`, `itemId` | tots menys `error`. Doble clic: atura el que sona i fa sonar aquesta pista des de l'inici. La que sonava queda com a última reproduïda | `{ player }` |
 | `player.pause` | `player` | `playing` | `{ player }` |
-| `player.stop` | `player` | tots menys `error`. Torna a l'inici (`ready`) | `{ player }` |
+| `player.stop` | `player` | tots menys `error`. **Atura la llista**: passa a `ended` i la pista queda com a última reproduïda (`lastPlayedId`) | `{ player }` |
+| `player.load` | `player`, `path` (ruta completa) | tots menys `playing`. Afegeix el fitxer al final de la llista i el deixa preparat (`ready`). Només per a la consola de proves: la interfície fa servir `playlist.add` | `{ player }` |
 | `player.retry` | `player` | `error`. Torna a obrir la sortida i el fitxer i queda `ready` **a la mateixa posició**. No torna a sonar sol: cal `player.play` | `{ player }` |
 | `player.seek` | `player`, `position` (segons des de l'inici) | `ready`, `playing`, `paused`, `ended`. Salta a aquest punt (si és més enllà del final, es queda al final). Si sonava, **continua sonant** des d'allà, amb un silenci molt curt mentre es torna a obrir la sortida; si era en pausa, continua en pausa; si havia acabat, queda `ready`. Tornar a començar la pista és `position: 0` | `{ player }` |
 | `player.setVolume` | `player`, `db` (de `-60` a `0`) | tots, també mentre sona. A `-60` el reproductor queda en silenci; fora de marge es queda al límit. El canvi es fa amb una rampa curta (sense clics). En arrencar el motor, tots els reproductors són a 0 dB (no es desa) | `{ player }` |
@@ -114,10 +115,13 @@ Objecte `player` (també a `state.get` i a l'esdeveniment `player.state`):
   "deviceId": "{0.0.0.00000000}.{f2d6376b-…}",
   "file": "D:\\Musica\\prova.mp3",
   "duration": 183.512, "position": 12.300,
-  "error": null, "underruns": 0, "volumeDb": 0 }
+  "error": null, "underruns": 0, "volumeDb": 0,
+  "currentItemId": "t3", "lastPlayedId": "t2", "format": "MP3 192 kbps estèreo 44,1 kHz" }
 ```
 
-- `state`: `empty` (sense pista), `ready` (preparat), `playing`, `paused`, `ended` (ha acabat la pista: s'envia uns 200–300 ms després de l'última mostra, quan ja ha sortit tota de la targeta), `error`.
+- `state`: `empty` (encara no ha sonat res), `ready` (preparat), `playing`, `paused`, `ended` (la llista s'ha aturat: la pista s'ha acabat o s'ha premut Stop. S'envia uns 200–300 ms després de l'última mostra, quan ja ha sortit tota de la targeta), `error`.
+- `currentItemId`: pista de la llista que sona (o preparada, en pausa, en error). `lastPlayedId`: última que ha sonat (es marca en blau). `format`: format abreujat de la pista actual, quan ja s'ha comprovat.
+- Quan una pista s'encadena amb la següent (bucle o avanç automàtic), arriba un `player.state` amb el `currentItemId` nou en el moment que comença a sonar.
 - `duration` i `position`: en segons, amb tres decimals.
 - `error`: el motiu, en català, quan `state` és `error`. La pista i la posició es conserven. Per continuar: `player.retry` (mateixa sortida) o `player.setDevice` (una altra), i després `player.play`. El reproductor **no reprèn mai sol**. El detall tècnic de Windows no s'envia: només queda al registre del motor.
 - `underruns`: talls des que es va obrir el reproductor (la targeta ha demanat so i no n'hi havia de preparat). Ha de ser 0; serveix per a les proves llargues.
@@ -185,6 +189,36 @@ El motor desa el dispositiu de cada reproductor i enregistrador a `%APPDATA%\Ona
 - `newDevices`: dispositius actius que no hi eren l'última vegada i no són de cap element. `formatChanges`: dispositius amb el format canviat a Windows.
 - El motor **mai no assigna un dispositiu diferent** del que s'havia triat (D-016). El resum és el de l'arrencada: no canvia fins que el motor es reinicia.
 
+### 4.5. Llistes de reproducció
+
+Cada reproductor té una llista. Viu al motor: la interfície la mostra i hi envia ordres. Cada pista té un `itemId` propi que no canvia encara que es mogui. Regles completes: D-031.
+
+| Ordre | Paràmetres | Resultat |
+|---|---|---|
+| `playlist.get` | `player` | `{ playlist }` |
+| `playlist.add` | `player`, `paths` (llista de rutes completes); opcional `beforeId` (s'insereixen davant d'aquesta pista; per defecte, al final) | `{ ids }`: els `itemId` nous, en ordre. Cada pista es comprova en segon pla (`status: "analyzing"` → `ok` o `error`) |
+| `playlist.move` | `player`, `ids` (es mouen en l'ordre de la llista); opcional `beforeId` (per defecte, al final). Es pot moure la pista que sona | `{ playlist }` |
+| `playlist.remove` | `player`, `ids`. Si s'esborra la pista que sona, acaba igualment | `{ playlist }` |
+| `playlist.setFlags` | `player`, `itemId`; opcionals `loop`, `autoNext`, `cue` (`true`/`false`; els que no s'envien no canvien) | `{ playlist }` |
+| `track.info` | `path` | `{ info: { path, fileSize, duration, format, title, artist, album, year, genre, comment } }` (metadades amb TagLib#; els camps que no hi són, `null`) |
+
+Objecte `playlist` (també a `state.get` → `playlists` i a l'esdeveniment `playlist.changed`):
+
+```json
+{ "player": "1", "cueId": "t4", "totalDuration": 612.4,
+  "items": [
+    { "id": "t3", "name": "Sintonia", "path": "D:\\Musica\\Sintonia.mp3",
+      "duration": 32.5, "format": "MP3 320 kbps estèreo 44,1 kHz",
+      "status": "ok", "problem": null, "loop": false, "autoNext": true }
+  ] }
+```
+
+- `name`: nom del fitxer sense extensió (no es fan servir les metadades).
+- `status`: `analyzing` (s'està comprovant), `ok` (sonarà), `error` (malmès o format no compatible) o `missing` (el fitxer ja no hi és). `problem`: el motiu, en català.
+- **Comprovació:** en afegir una pista, el motor l'obre amb el mateix descodificador que el reproductor i en llegeix el principi. **Si una pista és `ok`, sonarà.** Cada 30 s es comprova que els fitxers encara existeixen (sense obrir-los); si un que faltava torna, es torna a comprovar.
+- `totalDuration`: suma de les durades conegudes.
+- **Avanç** (D-031): per defecte, manual (quan s'acaba una pista, la llista s'atura). `loop`: la pista es repeteix fins a Stop. `autoNext`: quan s'acaba, sona la del cue o, si no n'hi ha, la següent (**un sol pas**). `cueId`: només n'hi pot haver una; s'apaga quan comença a sonar. Amb bucle o avanç automàtic **no hi ha silenci** entre pistes: el motor decideix què ve després **1 s abans** del final.
+
 ## 5. Esdeveniments
 
 | Esdeveniment | Camps | Freqüència | Des de |
@@ -197,6 +231,7 @@ El motor desa el dispositiu de cada reproductor i enregistrador a `%APPDATA%\Ona
 | `recorder.progress` | `recorders`: `[ { id, elapsed, fileSize, freeDiskBytes, samplesLost, captureGlitches } ]` dels que enregistren | cada segon, només mentre algun enregistra | fase 1 |
 | `hardware.reassigned` | `element`: una línia com les de `elements` de 4.4, amb el dispositiu ja assignat | quan torna el dispositiu d'un element que en arrencar era `missing`. El reproductor **no es posa a sonar**; després arriba també el seu `player.state` o `recorder.state` | fase 1 |
 | `meters` | `players`, `recorders`: nivells de pic de cada element (vegeu 5.2) | 25 per segon, si hi ha alguna interfície connectada | fase 2 |
+| `playlist.changed` | `playlist`: la llista sencera (vegeu 4.5) | quan canvia alguna cosa (pistes, ordre, marques, resultat d'una comprovació). Agrupat: com a molt 10 per segon per reproductor | fase 2 |
 
 ### 5.1. Canvis de dispositius
 
@@ -236,6 +271,5 @@ El motor desa el dispositiu de cada reproductor i enregistrador a `%APPDATA%\Ona
 
 ## 6. Previst (no implementat)
 
-- Reproductors: llistes (fase 2)
 - Enregistradors: desar, descartar, editar, recents, recuperació (fase 2)
 - `cue.*` (preescolta, fase 2)

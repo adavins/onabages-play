@@ -54,7 +54,8 @@ public class PlayerCommandsTests
         Assert.Equal("paused", PlayerState(r));
 
         r = Send("""{ "v": 1, "id": 5, "cmd": "player.stop", "player": "1" }""");
-        Assert.Equal("ready", PlayerState(r));
+        Assert.Equal("ended", PlayerState(r));
+        Assert.NotNull(r["result"]!["player"]!["lastPlayedId"]); // Stop: queda com a última reproduïda
     }
 
     [Fact]
@@ -82,7 +83,7 @@ public class PlayerCommandsTests
 
         Assert.Equal("bad_state", ErrorCode(r));
         Assert.Equal(7, r["id"]!.GetValue<int>());
-        Assert.Contains("cap pista", r["error"]!["message"]!.GetValue<string>());
+        Assert.Contains("sortida", r["error"]!["message"]!.GetValue<string>()); // sense sortida ni llista
     }
 
     [Fact]

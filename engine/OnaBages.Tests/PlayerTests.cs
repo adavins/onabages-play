@@ -25,13 +25,15 @@ public class PlayerTests
     {
         Thread.Sleep(200); // deixa que el fil de lectura ompli la memòria
         var deadline = DateTime.UtcNow.AddSeconds(5);
+        var last = TimeSpan.Zero;
         while (DateTime.UtcNow < deadline)
         {
             _lastOutput!.Pump(480);
+            last = player.Position; // abans de Tick: en acabar, la pista es descarrega i la posició torna a 0
             player.Tick();
             if (player.State != PlayerState.Playing) break;
         }
-        return (long)(player.Position.TotalSeconds * 48000);
+        return (long)Math.Round(last.TotalSeconds * 48000);
     }
 
     [Fact]
@@ -101,31 +103,32 @@ public class PlayerTests
     }
 
     [Fact]
-    public void Stop_torna_a_l_inici()
+    public void Stop_atura_la_llista_i_la_pista_queda_com_a_ultima_reproduida()
     {
         using var player = ReadyPlayer();
+        string item = player.CurrentItemId!;
         player.Play();
         Thread.Sleep(100);
         _lastOutput!.Pump(4800);
 
         player.Stop();
 
-        Assert.Equal(PlayerState.Ready, player.State);
+        Assert.Equal(PlayerState.Ended, player.State);
+        Assert.Equal(item, player.LastPlayedId);
+        Assert.Null(player.CurrentItemId);
         Assert.Equal(TimeSpan.Zero, player.Position);
     }
 
     [Fact]
-    public void Play_despres_del_final_torna_a_comencar()
+    public void Play_despres_de_l_ultima_pista_avisa_que_s_ha_acabat_la_llista()
     {
         using var player = ReadyPlayer(0.2);
         player.Play();
         PumpUntilEnd(player);
         Assert.Equal(PlayerState.Ended, player.State);
 
-        player.Play();
-
-        Assert.Equal(PlayerState.Playing, player.State);
-        Assert.Equal(TimeSpan.Zero, player.Position);
+        var ex = Assert.Throws<PlayerCommandException>(() => player.Play());
+        Assert.Contains("final de la llista", ex.Message);
     }
 
     [Fact]
@@ -182,7 +185,6 @@ public class PlayerTests
             player.Tick();
         }
         Assert.Equal(PlayerState.Ended, player.State);
-        Assert.Equal(TimeSpan.FromSeconds(1), player.Position);
         // 0,75 s, més el silenci final perquè soni tot (200 ms), més els blocs de l'última volta.
         Assert.InRange(framesAfterRetry, 36000 + 9600, 36000 + 9600 + 960);
     }
@@ -259,7 +261,7 @@ public class PlayerTests
         player.Stop();
 
         Assert.Equal(
-            [PlayerState.Empty, PlayerState.Ready, PlayerState.Playing, PlayerState.Paused, PlayerState.Ready],
+            [PlayerState.Empty, PlayerState.Ready, PlayerState.Playing, PlayerState.Paused, PlayerState.Ended],
             states);
     }
 

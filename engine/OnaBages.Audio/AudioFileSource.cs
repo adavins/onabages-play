@@ -24,6 +24,8 @@ public sealed class AudioFileSource : IDisposable
     {
         _reader = reader;
         Duration = reader.TotalTime;
+        SourceSampleRate = reader.WaveFormat.SampleRate;
+        SourceChannels = reader.WaveFormat.Channels;
 
         // Començar a mig fitxer (p. ex. en reintentar després d'un error). Es fa abans de
         // muntar el remostrejador perquè aquest comenci net.
@@ -39,6 +41,12 @@ public sealed class AudioFileSource : IDisposable
 
     /// <summary>Durada total del fitxer.</summary>
     public TimeSpan Duration { get; }
+
+    /// <summary>Freqüència original del fitxer.</summary>
+    public int SourceSampleRate { get; }
+
+    /// <summary>Canals originals del fitxer (1 = mono, 2 = estèreo...).</summary>
+    public int SourceChannels { get; }
 
     /// <summary>Freqüència de les mostres que dona <see cref="Read"/>.</summary>
     public int SampleRate => _output.WaveFormat.SampleRate;

@@ -61,6 +61,7 @@ public class CommandRouterTests
     [Theory]
     [InlineData("això no és json")]
     [InlineData("[1, 2, 3]")]
+    [InlineData("""{ "v": 1, "id": 1, "id": 2, "cmd": "engine.ping" }""")] // camp repetit
     public void Missatge_no_valid_es_rebutja(string text)
     {
         var r = NewRouter().Handle(text);

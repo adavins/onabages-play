@@ -178,7 +178,10 @@
       btn.onclick = () => send(JSON.stringify({ v: 1, id: nextId++, cmd: btn.dataset.cmd, ...params }));
     });
 
-    $('send').onclick = () => send($('custom').value.trim());
+    // Cada línia no buida és un missatge (així es poden enganxar diverses ordres de cop).
+    $('send').onclick = () => {
+      for (const line of $('custom').value.split('\n').map((l) => l.trim()).filter(Boolean)) send(line);
+    };
 
     function sendCmd(cmd, params = {}) {
       send(JSON.stringify({ v: 1, id: nextId++, cmd, ...params }));

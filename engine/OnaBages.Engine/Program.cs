@@ -37,9 +37,20 @@ builder.Logging.AddFilter("Microsoft", LogLevel.Warning);
 var app = builder.Build();
 var log = app.Logger;
 
+// Comprova en segon pla les pistes que s'afegeixen a les llistes (una per a tot el motor).
+var analyzer = new TrackAnalyzer();
+
 // Fase 1: dos reproductors i dos enregistradors fixos. Més endavant, el nombre sortirà de la configuració.
-var state = new EngineState([new Player("1"), new Player("2")], [new Recorder("1"), new Recorder("2")]);
+var state = new EngineState(
+    [new Player("1", analyzer: analyzer), new Player("2", analyzer: analyzer)],
+    [new Recorder("1"), new Recorder("2")]);
 var hub = new ClientHub(state, log);
+
+// Llistes que han canviat: s'envien agrupades a la revisió següent (com a molt 10 per segon),
+// encara que se n'hagin afegit cent pistes de cop.
+var playlistsChanged = new System.Collections.Concurrent.ConcurrentDictionary<Player, bool>();
+foreach (var player in state.Players)
+    player.Playlist.Changed += () => playlistsChanged[player] = true;
 
 // Envia un esdeveniment a tots els clients sense esperar (no pot bloquejar qui el crida).
 void Broadcast(System.Text.Json.Nodes.JsonObject ev) => _ = Task.Run(async () =>
@@ -169,7 +180,30 @@ app.Lifetime.ApplicationStopping.Register(() =>
     }
     foreach (var player in state.Players)
         player.Dispose();
+    analyzer.Dispose();
     RuntimeFile.DeleteIfOwned();
+});
+
+// Cada 30 s, comprova que els fitxers de les llistes encara existeixen (només si hi són, sense obrir-los).
+_ = Task.Run(async () =>
+{
+    var stopping = app.Lifetime.ApplicationStopping;
+    using var timer = new PeriodicTimer(TimeSpan.FromSeconds(30));
+    try
+    {
+        while (await timer.WaitForNextTickAsync(stopping))
+        {
+            foreach (var player in state.Players)
+            {
+                try { player.Playlist.CheckFiles(); }
+                catch (Exception ex) { log.LogWarning("Reproductor {Id}: no s'ha pogut revisar la llista: {Message}", player.Id, ex.Message); }
+            }
+        }
+    }
+    catch (OperationCanceledException)
+    {
+        // El motor s'està aturant.
+    }
 });
 
 // Mesuradors: 25 vegades per segon, tots els nivells en un sol missatge (especificació 4.4).
@@ -269,6 +303,12 @@ _ = Task.Run(async () =>
 
             if (state.Players.Any(p => p.State == PlayerState.Playing))
                 await hub.BroadcastAsync(PlayerJson.PositionEvent(state.Players), stopping);
+
+            foreach (var player in playlistsChanged.Keys)
+            {
+                if (playlistsChanged.TryRemove(player, out _))
+                    await hub.BroadcastAsync(PlaylistJson.ChangedEvent(player), stopping);
+            }
         }
     }
     catch (OperationCanceledException)

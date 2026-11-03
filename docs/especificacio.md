@@ -313,22 +313,32 @@ Nombre de reproductors configurable (inicialment fins a 6).
 
 ## 6.3. Llista de reproducció
 
-- Afegir fitxers des d'un diàleg o arrossegant-los des de l'Explorador.
-- Reordenar arrossegant, i eliminar elements.
-- Modificar la llista mentre sona, sense afectar la reproducció.
-- Desar i carregar llistes (format JSON propi; importació de M3U).
-- Avís si un fitxer de la llista no existeix.
+Definida pel desenvolupador en provar la fase 2 (D-031): es conserva el que funciona de Winamp i s'hi afegeixen marques per pista.
+
+- **Afegir:** arrossegant fitxers (un o diversos) a sobre de la llista, que queden inserits on es deixen anar; o amb el diàleg «Obrir» (al final).
+- **Reordenar** arrossegant, també diverses pistes seleccionades i també la que sona. **Esborrar** amb la tecla Supr. Tot es pot fer mentre sona, sense afectar la reproducció.
+- **Selecció:** un clic només selecciona (fons diferent); Ctrl+clic i Maj+clic, diverses.
+- **Doble clic:** atura la pista que sona (si n'hi ha) i fa sonar la triada.
+- **Cada fila:** número de posició, botons de bucle, cue i avanç automàtic (només icones), nom del fitxer **sense extensió** (no es fan servir les metadades) i durada.
+- **Durada total** de la llista, que s'actualitza sola.
+- **Colors:** la que sona, en verd; l'última reproduïda (quan s'atura), en blau; la seleccionada, una mica més clara o més fosca.
+- **Menú del botó dret:** informació (finestra amb les metadades) i «Mostrar a l'Explorador».
+- **Seguretat:** en afegir una pista, el motor la comprova (l'obre i en llegeix el principi). Si és malmesa o el format no és compatible, es mostra igualment però amb un fons diferent i una icona ⚠ que diu el motiu. **Si una pista no té cap avís, sonarà.** Cada 30 s es comprova en segon pla que els fitxers encara existeixen.
+- Desar i carregar llistes (format JSON propi; importació de M3U): pas 5.
 
 Formats: MP3, WAV, AAC/M4A, FLAC, WMA (via Media Foundation) i OGG (via complement).
 
-## 6.4. Avançament per pista
+El reproductor mostra el format de la pista que sona, abreujat (p. ex. «MP3 192 kbps estèreo 44,1 kHz»).
 
-Cada element de la llista té un mode:
+## 6.4. Avançament
 
-- **Automàtic (▶▶):** quan acaba, comença el següent.
-- **Espera (⏸):** quan acaba, el reproductor queda en espera fins que l'operador prem Play o Següent.
-
-El mode es desa amb l'element, es pot canviar en qualsevol moment amb un clic i es mostra amb icona, color i text.
+- **Per defecte, l'avanç és manual:** quan s'acaba la pista o es prem Stop, la llista s'atura i la pista queda marcada com a última reproduïda.
+- **Play** fa sonar la pista marcada amb **cue** o, si no n'hi ha, la que va després de l'última reproduïda.
+- Marques per pista (es poden canviar en qualsevol moment, també mentre sona):
+  - **Bucle:** la pista es repeteix fins que es prem Stop.
+  - **Cue:** aquesta serà la següent. Només n'hi pot haver una per llista; s'apaga quan comença a sonar.
+  - **Avanç automàtic:** quan aquesta pista s'acaba, sona la del cue o, si no n'hi ha, la següent. Només un pas: continua si la que comença també té l'avanç automàtic.
+- Amb bucle o avanç automàtic no hi ha silenci entre pistes: el motor prepara la següent i decideix quina és 1 s abans del final.
 
 **Regla de «pista següent»:** la pista següent és sempre la que hi ha **després de la pista actual en l'ordre actual de la llista** en el moment que acaba. Es calcula per identitat de l'element, no per posició numèrica. Si la pista actual s'ha eliminat de la llista, es fa servir la que ocupava el lloc següent.
 
@@ -336,12 +346,11 @@ El mode es desa amb l'element, es pot canviar en qualsevol moment amb un clic i 
 
 | Estat | Descripció | Accions possibles |
 |---|---|---|
-| `Buit` | No hi ha cap pista preparada | Carregar |
-| `Preparat` | Pista carregada, a l'inici o en una posició | Play |
-| `Reproduint` | Sona | Pausa, Stop, Següent |
-| `Pausat` | Aturat a la posició actual | Play (continua), Stop |
-| `Esperant` | Ha acabat una pista en mode Espera; la següent està preparada | Play, Següent |
-| `Final` | Ha acabat l'última pista de la llista | Carregar, Play (des d'una pista triada) |
+| `Buit` | Encara no ha sonat res | Play (la del cue o la primera), doble clic |
+| `Preparat` | Pista preparada en una posició (p. ex. després de Reintentar) | Play |
+| `Reproduint` | Sona | Pausa, Stop, saltar, doble clic |
+| `Pausat` | Aturat a la posició actual | Play (continua), Stop, saltar |
+| `Aturat` | La pista s'ha acabat (avanç manual) o s'ha premut Stop | Play (la del cue o la següent), doble clic |
 | `Error` | Dispositiu no disponible o fitxer il·legible | Reintentar, triar un altre dispositiu |
 
 La màquina d'estats és al motor. La interfície només envia ordres i mostra l'estat que rep.

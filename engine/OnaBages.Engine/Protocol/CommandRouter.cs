@@ -45,10 +45,13 @@ public sealed class CommandRouter
         try
         {
             node = JsonNode.Parse(text);
+            // Els camps es llegeixen la primera vegada que es fan servir: es força ara perquè
+            // un camp repetit (p. ex. dos "id") doni bad_json aquí i no un error més endavant.
+            if (node is JsonObject obj) _ = obj.Count;
         }
-        catch (JsonException)
+        catch (Exception ex) when (ex is JsonException or ArgumentException)
         {
-            return Messages.Error(null, "bad_json", "El missatge no és JSON vàlid.");
+            return Messages.Error(null, "bad_json", "El missatge no és JSON vàlid (o té camps repetits).");
         }
 
         if (node is not JsonObject msg)
@@ -84,6 +87,13 @@ public sealed class CommandRouter
                 "player.retry" => PlayerCommand(msg, p => p.Retry()),
                 "player.seek" => PlayerSeek(msg),
                 "player.setVolume" => PlayerSetVolume(msg),
+                "player.playItem" => PlayerCommand(msg, p => p.PlayItem(RequireString(msg, "itemId"))),
+                "playlist.get" => new JsonObject { ["playlist"] = PlaylistJson.Playlist(GetPlayer(msg)) },
+                "playlist.add" => PlaylistAdd(msg),
+                "playlist.move" => PlaylistMove(msg),
+                "playlist.remove" => PlaylistRemove(msg),
+                "playlist.setFlags" => PlaylistSetFlags(msg),
+                "track.info" => TrackInfoGet(msg),
                 "recorder.setDevice" => RecorderSetDevice(msg),
                 "recorder.start" => RecorderStart(msg),
                 "recorder.stop" => RecorderCommand(msg, r => r.Stop()),
@@ -139,6 +149,7 @@ public sealed class CommandRouter
         ["engine"] = _state.ToJson(),
         ["players"] = PlayerJson.All(_state.Players),
         ["recorders"] = RecorderJson.All(_state.Recorders),
+        ["playlists"] = PlaylistJson.All(_state.Players),
         ["hardware"] = HardwareJson.Report(_hardware?.Report ?? HardwareReport.Empty),
     };
 
@@ -229,6 +240,89 @@ public sealed class CommandRouter
         player.Seek(TimeSpan.FromSeconds(seconds));
         return PlayerResult(player);
     }
+
+    // -----------------------------------------------------------------------
+    // Llistes (docs/protocol.md, 4.5)
+    // -----------------------------------------------------------------------
+
+    /// <summary>"paths": fitxers (rutes completes); "beforeId" (opcional): on s'insereixen (per defecte, al final).</summary>
+    private JsonObject PlaylistAdd(JsonObject msg)
+    {
+        var player = GetPlayer(msg);
+        var paths = RequireStrings(msg, "paths");
+        if (paths.Any(p => !Path.IsPathFullyQualified(p)))
+            throw new BadParamsException("Cada element de 'paths' ha de ser una ruta completa.");
+
+        var ids = player.Playlist.Add(paths, ExistingItem(player, ReadString(msg["beforeId"])));
+        return new JsonObject { ["ids"] = new JsonArray(ids.Select(id => (JsonNode)id).ToArray()) };
+    }
+
+    /// <summary>"ids": pistes a moure (en l'ordre de la llista); "beforeId" (opcional): davant de quina (per defecte, al final).</summary>
+    private JsonObject PlaylistMove(JsonObject msg)
+    {
+        var player = GetPlayer(msg);
+        var ids = RequireStrings(msg, "ids");
+        foreach (var id in ids) ExistingItem(player, id);
+        player.Playlist.Move(ids, ExistingItem(player, ReadString(msg["beforeId"])));
+        return new JsonObject { ["playlist"] = PlaylistJson.Playlist(player) };
+    }
+
+    private JsonObject PlaylistRemove(JsonObject msg)
+    {
+        var player = GetPlayer(msg);
+        var ids = RequireStrings(msg, "ids");
+        player.Playlist.Remove(ids);
+        return new JsonObject { ["playlist"] = PlaylistJson.Playlist(player) };
+    }
+
+    /// <summary>"itemId" i, opcionals, "loop", "autoNext", "cue" (bool). Els que no s'envien no canvien.</summary>
+    private JsonObject PlaylistSetFlags(JsonObject msg)
+    {
+        var player = GetPlayer(msg);
+        string id = ExistingItem(player, RequireString(msg, "itemId"))!;
+        player.Playlist.SetFlags(id, ReadBool(msg["loop"]), ReadBool(msg["autoNext"]), ReadBool(msg["cue"]));
+        return new JsonObject { ["playlist"] = PlaylistJson.Playlist(player) };
+    }
+
+    /// <summary>Metadades d'un fitxer, per a la finestra d'informació. Paràmetre "path".</summary>
+    private static JsonObject TrackInfoGet(JsonObject msg)
+    {
+        string path = RequireString(msg, "path");
+        try
+        {
+            return new JsonObject { ["info"] = PlaylistJson.Metadata(TrackInfo.ReadMetadata(path)) };
+        }
+        catch (AudioFileException ex)
+        {
+            throw new BadParamsException(ex.Message);
+        }
+    }
+
+    /// <summary>L'identificador ha de ser d'una pista de la llista (o null). Si no, bad_params.</summary>
+    private static string? ExistingItem(Player player, string? id)
+    {
+        if (id is not null && player.Playlist.Find(id) is null)
+            throw new BadParamsException($"La pista '{id}' no és a la llista del reproductor {player.Id}.");
+        return id;
+    }
+
+    private static List<string> RequireStrings(JsonObject msg, string field)
+    {
+        if (msg[field] is not JsonArray array || array.Count == 0)
+            throw new BadParamsException($"Falta el camp '{field}' (una llista).");
+        var list = new List<string>();
+        foreach (var node in array)
+        {
+            string? value = ReadString(node);
+            if (string.IsNullOrWhiteSpace(value))
+                throw new BadParamsException($"'{field}' només pot tenir textos.");
+            list.Add(value);
+        }
+        return list;
+    }
+
+    private static bool? ReadBool(JsonNode? node) =>
+        node is JsonValue value && value.TryGetValue(out bool b) ? b : null;
 
     /// <summary>Paràmetre "db": volum de −60 (silenci) a 0. Fora de marge, es queda al límit.</summary>
     private JsonObject PlayerSetVolume(JsonObject msg)

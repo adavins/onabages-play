@@ -20,6 +20,9 @@ public static class PlayerJson
         ["error"] = player.ErrorMessage,
         ["underruns"] = player.Underruns,
         ["volumeDb"] = player.VolumeDb,
+        ["currentItemId"] = player.CurrentItemId,
+        ["lastPlayedId"] = player.LastPlayedId,
+        ["format"] = player.Format,
     };
 
     public static JsonArray All(IEnumerable<Player> players) =>

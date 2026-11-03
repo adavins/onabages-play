@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <PackageReference Include="NAudio.Wasapi" Version="3.3.0" />
+    <PackageReference Include="TagLibSharp" Version="2.3.0" />
   </ItemGroup>
 
   <!-- LAME 3.100 x64 (LGPL, enllaç dinàmic): vegeu native/LLEGEIX-ME.md -->

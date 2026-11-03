@@ -262,4 +262,68 @@ public class PlayerTests
             [PlayerState.Empty, PlayerState.Ready, PlayerState.Playing, PlayerState.Paused, PlayerState.Ready],
             states);
     }
+
+    [Fact]
+    public void Saltar_mentre_sona_continua_sonant_des_d_alla()
+    {
+        using var player = ReadyPlayer(1.0);
+        player.Play();
+        Thread.Sleep(100);
+        _lastOutput!.Pump(4800);
+
+        player.Seek(TimeSpan.FromSeconds(0.5));
+
+        Assert.Equal(PlayerState.Playing, player.State);
+        Assert.Equal(0.5, player.Position.TotalSeconds, 3);
+        long frames = PumpUntilEnd(player);
+        Assert.Equal(PlayerState.Ended, player.State);
+        Assert.Equal(48000, frames); // acaba al final de la pista: n'ha sonat la segona meitat
+        Assert.Equal(0, player.Underruns);
+    }
+
+    [Fact]
+    public void Saltar_en_pausa_queda_en_pausa_a_la_posicio_nova()
+    {
+        using var player = ReadyPlayer(1.0);
+        player.Play();
+        player.Pause();
+
+        player.Seek(TimeSpan.FromSeconds(0.3));
+
+        Assert.Equal(PlayerState.Paused, player.State);
+        Assert.Equal(0.3, player.Position.TotalSeconds, 3);
+    }
+
+    [Fact]
+    public void Tornar_a_comencar_es_saltar_a_zero()
+    {
+        using var player = ReadyPlayer(1.0);
+        player.Play();
+        Thread.Sleep(100);
+        _lastOutput!.Pump(24000);
+
+        player.Seek(TimeSpan.Zero);
+
+        Assert.Equal(PlayerState.Playing, player.State);
+        Assert.Equal(TimeSpan.Zero, player.Position);
+    }
+
+    [Fact]
+    public void Saltar_mes_enlla_del_final_es_queda_al_final()
+    {
+        using var player = ReadyPlayer(1.0);
+
+        player.Seek(TimeSpan.FromSeconds(99));
+
+        Assert.Equal(TimeSpan.FromSeconds(1), player.Position);
+    }
+
+    [Fact]
+    public void Sense_pista_no_es_pot_saltar()
+    {
+        using var player = NewPlayer();
+        player.SetDevice(DeviceId);
+
+        Assert.Throws<PlayerCommandException>(() => player.Seek(TimeSpan.FromSeconds(1)));
+    }
 }

@@ -104,6 +104,7 @@ Fase 1: hi ha dos reproductors fixos, `"1"` i `"2"`. Encara no hi ha llistes ni 
 | `player.pause` | `player` | `playing` | `{ player }` |
 | `player.stop` | `player` | tots menys `error`. Torna a l'inici (`ready`) | `{ player }` |
 | `player.retry` | `player` | `error`. Torna a obrir la sortida i el fitxer i queda `ready` **a la mateixa posició**. No torna a sonar sol: cal `player.play` | `{ player }` |
+| `player.seek` | `player`, `position` (segons des de l'inici) | `ready`, `playing`, `paused`, `ended`. Salta a aquest punt (si és més enllà del final, es queda al final). Si sonava, **continua sonant** des d'allà, amb un silenci molt curt mentre es torna a obrir la sortida; si era en pausa, continua en pausa; si havia acabat, queda `ready`. Tornar a començar la pista és `position: 0` | `{ player }` |
 
 Objecte `player` (també a `state.get` i a l'esdeveniment `player.state`):
 

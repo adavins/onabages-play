@@ -5,7 +5,7 @@
 // i passar-ne la informació de connexió (port i testimoni) a la interfície.
 // Aquí NO hi ha àudio: tot l'àudio és al motor .NET.
 
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const crypto = require('node:crypto');
@@ -192,6 +192,27 @@ ipcMain.handle('engine:get-info', async () => engineInfo ?? ensureEngine());
 ipcMain.handle('engine:ensure', async () => {
   engineInfo = null;
   return ensureEngine();
+});
+
+/** Formats que el motor pot llegir (especificació 6.3). */
+const AUDIO_EXTENSIONS = ['mp3', 'wav', 'm4a', 'aac', 'flac', 'wma', 'ogg'];
+let lastAudioFolder = undefined;
+
+/** Diàleg per triar un fitxer d'àudio. Recorda l'última carpeta mentre l'aplicació és oberta. */
+ipcMain.handle('dialog:open-audio', async () => {
+  if (!mainWindow) return null;
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Obrir una pista',
+    defaultPath: lastAudioFolder,
+    properties: ['openFile'],
+    filters: [
+      { name: 'Àudio', extensions: AUDIO_EXTENSIONS },
+      { name: 'Tots els fitxers', extensions: ['*'] },
+    ],
+  });
+  if (result.canceled || result.filePaths.length === 0) return null;
+  lastAudioFolder = path.dirname(result.filePaths[0]);
+  return result.filePaths[0];
 });
 
 /** Escala de la interfície (la interfície valida el valor i el desa al motor). */

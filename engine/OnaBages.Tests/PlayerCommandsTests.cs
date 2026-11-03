@@ -137,4 +137,27 @@ public class PlayerCommandsTests
         Assert.Equal(2, posEv["players"]!.AsArray().Count);
         Assert.Equal(0.0, posEv["players"]![0]!["position"]!.GetValue<double>());
     }
+
+    [Fact]
+    public void Saltar_a_una_posicio()
+    {
+        LoadReady();
+
+        var r = Send("""{ "v": 1, "id": 3, "cmd": "player.seek", "player": "1", "position": 0.25 }""");
+
+        Assert.Equal("ready", PlayerState(r));
+        Assert.Equal(0.25, r["result"]!["player"]!["position"]!.GetValue<double>(), 3);
+    }
+
+    [Theory]
+    [InlineData("-1")]
+    [InlineData("\"mig\"")]
+    public void Posicio_no_valida_dona_bad_params(string position)
+    {
+        LoadReady();
+
+        var r = Send($$"""{ "v": 1, "id": 3, "cmd": "player.seek", "player": "1", "position": {{position}} }""");
+
+        Assert.Equal("bad_params", ErrorCode(r));
+    }
 }

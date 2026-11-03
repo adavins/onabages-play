@@ -197,6 +197,47 @@ public sealed class Player : IDisposable
         RaiseStateChanged();
     }
 
+    /// <summary>
+    /// Salta a un punt de la pista. Si sonava, continua sonant des d'allà (amb un silenci
+    /// molt curt mentre es torna a obrir la sortida); si era en pausa, hi continua.
+    /// Tornar a començar la pista és saltar a 0.
+    /// </summary>
+    public void Seek(TimeSpan position)
+    {
+        lock (_sync)
+        {
+            if (State is PlayerState.Empty or PlayerState.Error || FilePath is null)
+                throw new PlayerCommandException("No hi ha cap pista preparada on saltar.");
+
+            var previous = State;
+            if (position < TimeSpan.Zero) position = TimeSpan.Zero;
+            if (position > Duration) position = Duration;
+
+            Prepare(FilePath, position);
+            if (State == PlayerState.Ready)
+            {
+                if (previous == PlayerState.Playing)
+                {
+                    try
+                    {
+                        WaitForPrefill();
+                        _output!.Play();
+                        SetState(PlayerState.Playing);
+                    }
+                    catch (Exception ex)
+                    {
+                        FailKeepingTrack(DeviceLostMessage, ex.Message);
+                    }
+                }
+                else if (previous == PlayerState.Paused)
+                {
+                    SetState(PlayerState.Paused);
+                }
+            }
+        }
+        RaiseStateChanged();
+    }
+
     /// <summary>Atura i torna a l'inici de la pista.</summary>
     public void Stop()
     {

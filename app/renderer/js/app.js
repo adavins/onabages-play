@@ -158,7 +158,21 @@ function setStatus(state, message) {
 // Panells
 // ---------------------------------------------------------------------------
 
+/**
+ * Envia una ordre al motor (els panells la fan servir per als botons).
+ * @param {string} cmd
+ * @param {object} [params]
+ */
+function request(cmd, params = {}) {
+  if (!client?.connected) return Promise.reject(new Error('El motor no està connectat.'));
+  return client.request(cmd, params);
+}
+
 function setupPanels() {
+  // Un fitxer deixat anar fora d'un panell no ha de fer res (Electron l'obriria com una pàgina).
+  window.addEventListener('dragover', (e) => e.preventDefault());
+  window.addEventListener('drop', (e) => e.preventDefault());
+
   store.addEventListener('reset', buildPanels);
   store.addEventListener('player', (e) => playerPanels.get(/** @type {any} */ (e).detail)?.render());
   store.addEventListener('recorder', (e) => recorderPanels.get(/** @type {any} */ (e).detail)?.render());
@@ -167,7 +181,7 @@ function setupPanels() {
 
 /** Crea un panell per a cada reproductor i enregistrador que té el motor. */
 function buildPanels() {
-  playerPanels = new Map([...store.players.keys()].map((id) => [id, new PlayerPanel(store, id)]));
+  playerPanels = new Map([...store.players.keys()].map((id) => [id, new PlayerPanel(store, id, request)]));
   recorderPanels = new Map([...store.recorders.keys()].map((id) => [id, new RecorderPanel(store, id)]));
 
   els.players.replaceChildren(...[...playerPanels.values()].map((p) => p.element));

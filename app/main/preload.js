@@ -3,7 +3,7 @@
 // Pont segur entre la interfície i el procés principal.
 // La interfície només pot fer servir el que s'exposa aquí (window.onabages).
 
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 contextBridge.exposeInMainWorld('onabages', {
   /** Port i testimoni del motor (l'arrenca si cal). */
@@ -16,6 +16,12 @@ contextBridge.exposeInMainWorld('onabages', {
   onCloseRequested: (callback) => {
     ipcRenderer.on('app:close-requested', () => callback());
   },
+
+  /** Diàleg de Windows per triar un fitxer d'àudio. Retorna la ruta, o null si es cancel·la. */
+  openAudioFile: () => ipcRenderer.invoke('dialog:open-audio'),
+
+  /** Ruta completa d'un fitxer arrossegat des de l'Explorador (la pàgina no la pot saber sola). */
+  pathForFile: (file) => webUtils.getPathForFile(file),
 
   /** Escala de la interfície (1 = 100 %, de 0,7 a 1,5). */
   setZoom: (factor) => ipcRenderer.invoke('ui:set-zoom', factor),

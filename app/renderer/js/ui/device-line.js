@@ -6,6 +6,16 @@ import { escapeHtml } from './format.js';
 /** @typedef {import('../store.js').Store} Store */
 
 /**
+ * Només l'avís, si el dispositiu té algun problema (per als panells que ja mostren un desplegable).
+ * @param {Store} store
+ * @param {string | null} deviceId
+ */
+export function deviceWarning(store, deviceId) {
+  const device = store.device(deviceId);
+  return device?.status === 'active' ? '' : deviceLine(store, deviceId);
+}
+
+/**
  * @param {Store} store
  * @param {string | null} deviceId
  */

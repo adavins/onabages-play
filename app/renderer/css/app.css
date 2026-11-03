@@ -26,6 +26,11 @@
 
   /* Text */
   --obp-clock-size: 2.2rem;
+
+  /* Reproductor */
+  --obp-remaining-size: 3.2rem;   /* temps restant */
+  --obp-control-size: 1.8rem;     /* icones de Play, Pausa, Stop */
+  --obp-ending-bg: var(--obp-error);  /* temps restant als últims segons */
 }
 
 html, body {
@@ -230,6 +235,133 @@ body.engine-offline .layout {
   align-items: center;
   justify-content: center;
   font-style: italic;
+}
+
+.message-text {
+  color: var(--obp-warn);
+  font-size: 0.85rem;
+}
+
+.message-text:empty {
+  display: none;
+}
+
+/* Reproductor (js/ui/player-panel.js) --------------------------------- */
+
+.player {
+  position: relative;
+}
+
+.device-select {
+  font-size: 0.85rem;
+}
+
+.track-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.track-row .track {
+  flex: 1;
+  min-width: 0;
+}
+
+.remaining {
+  font-size: var(--obp-remaining-size);
+  font-weight: 700;
+  line-height: 1.1;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  border-radius: 0.4rem;
+}
+
+/* Últims segons de la pista: color i parpelleig (a més del número que baixa). */
+.remaining.ending {
+  background: var(--obp-ending-bg);
+  color: #fff;
+  animation: obp-blink 1s steps(2, start) infinite;
+}
+
+/* La zona on es pot clicar és més alta que la barra, perquè sigui fàcil d'encertar. */
+.seek-area {
+  padding: 0.4rem 0;
+  touch-action: none;
+}
+
+.seek-area.seekable {
+  cursor: pointer;
+}
+
+.seek-area.seekable:hover .player-progress,
+.seek-area.dragging .player-progress {
+  height: 0.8rem;
+}
+
+.player-progress {
+  height: 0.5rem;
+  transition: height 0.1s;
+}
+
+.player-progress .progress-bar {
+  transition: none;
+}
+
+.times {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.85rem;
+  color: var(--bs-secondary-color);
+  font-variant-numeric: tabular-nums;
+}
+
+.controls {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.btn-control {
+  flex: 1;
+  font-size: var(--obp-control-size);
+  line-height: 1;
+  padding: 0.4rem 0;
+}
+
+.btn-control.js-retry {
+  font-size: 1rem;
+}
+
+/* Tornar a començar: més estret que Play, Pausa i Stop. */
+.btn-control.btn-restart {
+  flex: 0.6;
+}
+
+/* Botó de Pausa mentre està en pausa. */
+.btn-control.blink {
+  animation: obp-blink 1s steps(2, start) infinite;
+}
+
+/* Arrossegar un fitxer al panell */
+.drop-hint {
+  display: none;
+}
+
+.panel.drop-target {
+  outline: 3px dashed var(--obp-info);
+  outline-offset: -3px;
+}
+
+.panel.drop-target .drop-hint {
+  display: flex;
+  position: absolute;
+  inset: 0;
+  align-items: center;
+  justify-content: center;
+  background: rgb(13 110 253 / 0.25);
+  font-size: 1.2rem;
+  font-weight: 600;
+  pointer-events: none;
 }
 
 /* Etiquetes d'estat dels reproductors i enregistradors (js/ui/states.js) */

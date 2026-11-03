@@ -301,7 +301,9 @@ Nombre de reproductors configurable (inicialment fins a 6).
 
 ## 6.2. Controls i informació
 
-- Play, Pausa, Stop, Següent.
+- Play, Pausa, Stop, Següent, i tornar a començar la pista.
+- **Barra de posició:** clicar-la o arrossegar-la per saltar a un altre punt de la pista, també mentre sona.
+- Mentre està en pausa, el botó de Pausa parpelleja.
 - Volum (fader), amb indicació en dB.
 - Temps transcorregut, temps restant (gran i ben visible) i durada.
 - Pista actual i última pista reproduïda, marcades a la llista.
@@ -524,7 +526,7 @@ Les dues opcions poden conviure: configuració i perfils en JSON (fàcils de cop
 - **Escala de la interfície (zoom)** configurable (per exemple del 70 % al 150 %): fa més grans o més petits tots els elements alhora (lletra, icones, botons). Es fa amb el zoom d'Electron (`setZoomFactor`), amb dreceres Ctrl+/Ctrl−/Ctrl+0, i el valor es desa a la configuració. El CSS fa servir `rem` en lloc de píxels fixos. Fase 2.
 - Elements grans per a les accions de directe: Play, Stop, Enregistrar i temps restant.
 - Estats amb color, icona i text.
-- Confirmació per a les accions que interrompen: Stop d'un reproductor que sona (configurable), aturar un enregistrament, tancar l'aplicació.
+- Confirmació per a les accions que interrompen: aturar un enregistrament i tancar l'aplicació. El Stop d'un reproductor **no** demana confirmació (D-028).
 
 ## 12.2. Distribució del MVP
 

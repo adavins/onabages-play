@@ -82,6 +82,7 @@ public sealed class CommandRouter
                 "player.pause" => PlayerCommand(msg, p => p.Pause()),
                 "player.stop" => PlayerCommand(msg, p => p.Stop()),
                 "player.retry" => PlayerCommand(msg, p => p.Retry()),
+                "player.seek" => PlayerSeek(msg),
                 "recorder.setDevice" => RecorderSetDevice(msg),
                 "recorder.start" => RecorderStart(msg),
                 "recorder.stop" => RecorderCommand(msg, r => r.Stop()),
@@ -214,6 +215,17 @@ public sealed class CommandRouter
     {
         var player = GetPlayer(msg);
         player.Load(RequireString(msg, "path"));
+        return PlayerResult(player);
+    }
+
+    /// <summary>Paràmetre "position": segons des de l'inici de la pista.</summary>
+    private JsonObject PlayerSeek(JsonObject msg)
+    {
+        var player = GetPlayer(msg);
+        if (msg["position"] is not JsonValue v || !v.TryGetValue(out double seconds) || double.IsNaN(seconds) || seconds < 0)
+            throw new BadParamsException("'position' ha de ser un nombre de segons (0 o més).");
+
+        player.Seek(TimeSpan.FromSeconds(seconds));
         return PlayerResult(player);
     }
 

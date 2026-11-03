@@ -72,7 +72,11 @@ static int Analyze(string path, string? expectedText)
     Console.WriteLine($"To:         de {Time(report.ToneStart)} a {Time(report.ToneStart + report.ToneLength)} ({report.ToneLength.TotalSeconds:F3} s)");
     Console.WriteLine($"Nivell:     {report.LevelDb:F1} dBFS (el to generat fa −15,0)");
 
-    Console.WriteLine($"Rellotges:  {report.ClockPpm:+0;-0;0} ppm de diferència entre el de sortida i el d'entrada (fins a ±200 és normal)");
+    // Amb menys de 2 minuts de to, uns pocs ms d'imprecisió a les vores ja donen centenars de ppm.
+    if (report.ToneLength >= TimeSpan.FromMinutes(2))
+        Console.WriteLine($"Rellotges:  {report.ClockPpm:+0;-0;0} ppm de diferència entre el de sortida i el d'entrada (fins a ±200 és normal)");
+    else
+        Console.WriteLine("Rellotges:  el to és massa curt per mesurar la diferència de rellotges");
 
     bool ok = report.Ok;
     if (expected is { } seconds)

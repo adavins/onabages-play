@@ -184,6 +184,22 @@ public class ToneTests
     }
 
     [Fact]
+    public void Analitza_un_mp3_tallat_a_mig_fotograma()
+    {
+        // Com un enregistrament després d'un tancament forçat: el to no acaba i l'últim fotograma és incomplet.
+        var samples = Recording(10);
+        string path = WriteMp3(samples[..((int)(7.5 * Rate) * 2)]); // 1 s de silenci + 6,5 s de to
+        using (var file = new FileStream(path, FileMode.Open))
+            file.SetLength(file.Length - 517);
+
+        var report = ToneAnalyzer.AnalyzeFile(path);
+        File.Delete(path);
+
+        Assert.True(report.Ok, string.Join(", ", report.Events));
+        Assert.InRange(report.ToneLength.TotalSeconds, 6.4, 6.5);
+    }
+
+    [Fact]
     public void Sense_to_ho_diu()
     {
         var report = Analyze(new float[Rate * 4]);

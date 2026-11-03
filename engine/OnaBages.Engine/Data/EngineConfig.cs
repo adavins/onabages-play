@@ -22,6 +22,6 @@ public sealed class EngineConfig
     /// <summary>Escala de la interfície (1 = 100 %). Entre <see cref="MinZoom"/> i <see cref="MaxZoom"/>.</summary>
     public double UiZoom { get; set; } = 1.0;
 
-    public const double MinZoom = 0.7;
+    public const double MinZoom = 0.5;
     public const double MaxZoom = 1.5;
 }

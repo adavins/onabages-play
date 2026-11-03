@@ -3,9 +3,15 @@
  * Tots els colors i mides importants són variables aquí a dalt (--obp-…):
  * per canviar l'aspecte, normalment n'hi ha prou de tocar-les.
  * Mides en rem, perquè el zoom (Ctrl + / Ctrl −) ho escali tot igual.
+ *
+ * --obp-ui-scale: per sota del 70 % de zoom, la lletra ja no es fa més petita (no es llegiria);
+ * js/ui/zoom.js baixa aquest valor (1 → 0,71) i el que s'hi multiplica es fa més petit:
+ * espais, botons, comptador gran, mesuradors, amplades mínimes...
  */
 
 :root {
+  --obp-ui-scale: 1;
+
   /* Colors generals */
   --obp-bg: #121417;
   --obp-panel-bg: var(--bs-body-bg);
@@ -19,26 +25,28 @@
   --obp-idle: #6c757d;
 
   /* Mides de la distribució */
-  --obp-topbar-h: 4rem;
-  --obp-side-w: 21rem;        /* columna dreta: preescolta i recents */
-  --obp-recorders-h: 15rem;   /* fila de baix: enregistradors */
-  --obp-gap: 0.75rem;
+  --obp-topbar-h: calc(4rem * var(--obp-ui-scale));
+  --obp-side-w: calc(19rem * var(--obp-ui-scale));          /* columna dreta: preescolta i recents */
+  --obp-player-min-w: calc(16rem * var(--obp-ui-scale));    /* més estret, els reproductors passen a una altra fila */
+  --obp-recorder-min-w: calc(15rem * var(--obp-ui-scale));
+  --obp-gap: calc(0.75rem * var(--obp-ui-scale));
+  --obp-pad: calc(0.75rem * var(--obp-ui-scale));           /* marge interior dels panells */
 
   /* Text */
-  --obp-clock-size: 2.2rem;
+  --obp-clock-size: calc(2.2rem * var(--obp-ui-scale));
 
   /* Reproductor */
-  --obp-remaining-size: 3.2rem;   /* temps restant */
-  --obp-control-size: 1.8rem;     /* icones de Play, Pausa, Stop */
+  --obp-remaining-size: calc(3.2rem * var(--obp-ui-scale)); /* comptador gran (màxim: s'ajusta a l'amplada del panell) */
+  --obp-control-size: calc(1.8rem * var(--obp-ui-scale));   /* icones de Play, Pausa, Stop */
   --obp-ending-bg: var(--obp-error);  /* temps restant als últims segons */
 
   /* Mesuradors (js/ui/meter.js). L'escala va de −60 a 0 dBFS:
      −18 dB és al 70 % de l'amplada i −6 dB al 90 %. */
-  --obp-meter-h: 0.55rem;           /* alçada de cada canal */
+  --obp-meter-h: calc(0.55rem * var(--obp-ui-scale));       /* alçada de cada canal */
   --obp-meter-green: #2fb36b;
   --obp-meter-yellow: #e0c326;
   --obp-meter-red: #e5484d;
-  --obp-meter-off: #23272b;         /* part apagada */
+  --obp-meter-off: #33393f;         /* part apagada (prou clara perquè es vegi la barra en silenci) */
   --obp-meter-yellow-from: 70%;     /* −18 dB */
   --obp-meter-red-from: 90%;        /* −6 dB */
 }
@@ -59,8 +67,10 @@ body {
   height: var(--obp-topbar-h);
   display: flex;
   align-items: center;
-  gap: 2rem;
-  padding: 0 1rem;
+  gap: calc(2rem * var(--obp-ui-scale));
+  padding: 0 var(--obp-pad);
+  white-space: nowrap;
+  overflow: hidden;
   border-bottom: 1px solid var(--bs-border-color);
   background: var(--bs-tertiary-bg);
 }
@@ -156,11 +166,12 @@ body.engine-offline .layout {
 
 /* Distribució -------------------------------------------------------- */
 
+/* Reproductors a dalt, enregistradors a sota; preescolta i recents a la dreta. */
 .layout {
   height: calc(100% - var(--obp-topbar-h));
   display: grid;
-  grid-template-columns: 1fr var(--obp-side-w);
-  grid-template-rows: 1fr var(--obp-recorders-h);
+  grid-template-columns: minmax(0, 1fr) var(--obp-side-w);
+  grid-template-rows: minmax(0, 1fr) auto;
   gap: var(--obp-gap);
   padding: var(--obp-gap);
 }
@@ -170,13 +181,47 @@ body.engine-offline .layout {
   height: calc(100% - var(--obp-topbar-h) - 4.5rem);
 }
 
-/* --obp-columns el posa app.js segons el nombre de reproductors o enregistradors. */
-.players,
-.recorders {
+/* Tants reproductors (o enregistradors) per fila com hi càpiguen; si no, passen a la fila següent. */
+.players {
   display: grid;
-  grid-template-columns: repeat(var(--obp-columns, 2), minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(var(--obp-player-min-w), 1fr));
+  grid-auto-rows: minmax(0, 1fr);
   gap: var(--obp-gap);
   min-height: 0;
+}
+
+.recorders {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(var(--obp-recorder-min-w), 1fr));
+  gap: var(--obp-gap);
+}
+
+/* Finestra estreta (p. ex. mitja pantalla en vertical): una sola columna,
+   la preescolta i els recents a sota, i es pot desplaçar amunt i avall. */
+@media (max-width: 48rem) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto;
+    overflow-y: auto;
+  }
+
+  .players {
+    min-height: calc(26rem * var(--obp-ui-scale));
+    grid-auto-rows: minmax(calc(26rem * var(--obp-ui-scale)), 1fr);
+  }
+
+  .cue,
+  .recents {
+    min-height: calc(8rem * var(--obp-ui-scale));
+  }
+}
+
+/* Barra superior estreta: només el que és imprescindible (rellotge i estat del motor). */
+@media (max-width: 56rem) {
+  .brand-text,
+  .engine .details {
+    display: none;
+  }
 }
 
 /* Panells ------------------------------------------------------------ */
@@ -184,6 +229,16 @@ body.engine-offline .layout {
 .panel {
   min-height: 0;
   background: var(--obp-panel-bg);
+  /* Permet que el que hi ha a dins s'ajusti a l'amplada del panell (unitats cqi). */
+  container-type: inline-size;
+}
+
+.panel > .card-header {
+  padding: calc(0.4rem * var(--obp-ui-scale)) var(--obp-pad);
+}
+
+.panel > .card-body {
+  padding: var(--obp-pad);
 }
 
 .panel-header {
@@ -225,7 +280,7 @@ body.engine-offline .layout {
 }
 
 .elapsed {
-  font-size: 1.6rem;
+  font-size: calc(1.6rem * var(--obp-ui-scale));
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
@@ -278,7 +333,9 @@ body.engine-offline .layout {
 }
 
 .remaining {
-  font-size: var(--obp-remaining-size);
+  /* Com a molt --obp-remaining-size; en un panell estret, més petit (18 % de l'amplada del panell). */
+  font-size: min(var(--obp-remaining-size), 18cqi);
+  cursor: pointer;
   font-weight: 700;
   line-height: 1.1;
   text-align: center;
@@ -295,7 +352,7 @@ body.engine-offline .layout {
 
 /* La zona on es pot clicar és més alta que la barra, perquè sigui fàcil d'encertar. */
 .seek-area {
-  padding: 0.4rem 0;
+  padding: calc(0.4rem * var(--obp-ui-scale)) 0;
   touch-action: none;
 }
 
@@ -335,7 +392,7 @@ body.engine-offline .layout {
   flex: 1;
   font-size: var(--obp-control-size);
   line-height: 1;
-  padding: 0.4rem 0;
+  padding: calc(0.4rem * var(--obp-ui-scale)) 0;
 }
 
 .btn-control.js-retry {
@@ -532,4 +589,13 @@ body.engine-offline .layout {
   justify-content: flex-end;
   gap: 0.5rem;
   flex-wrap: wrap;
+}
+
+/* Mesurador en un panell estret: menys marques a l'escala perquè no es trepitgin. */
+@container (max-width: 21rem) {
+  .meter-scale span:nth-child(2),
+  .meter-scale span:nth-child(3),
+  .meter-scale span:nth-child(7) {
+    display: none;
+  }
 }

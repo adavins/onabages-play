@@ -47,7 +47,7 @@ public class SettingsTests : IDisposable
     }
 
     [Theory]
-    [InlineData("0.5")]
+    [InlineData("0.4")]
     [InlineData("2")]
     [InlineData("\"gran\"")]
     public void Zoom_fora_de_marge_dona_bad_params(string value)

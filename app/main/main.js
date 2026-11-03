@@ -41,8 +41,8 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1600,
     height: 900,
-    minWidth: 1024,
-    minHeight: 680,
+    minWidth: 512,
+    minHeight: 340,
     title: 'Ona Bages Play',
     backgroundColor: '#121417',
     autoHideMenuBar: true,
@@ -215,7 +215,7 @@ ipcMain.handle('dialog:open-audio', async () => {
   return result.filePaths[0];
 });
 
-/** Escala de la interfície (la interfície valida el valor i el desa al motor). */
+/** Zoom d'Electron (de 0,7 a 1,5). Per sota de 0,7 la interfície no redueix la lletra: només els espais i els elements grans (js/ui/zoom.js). */
 ipcMain.handle('ui:set-zoom', (_event, factor) => {
   if (typeof factor === 'number' && factor >= 0.7 && factor <= 1.5) {
     mainWindow?.webContents.setZoomFactor(factor);

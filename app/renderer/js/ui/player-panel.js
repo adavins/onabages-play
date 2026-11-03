@@ -36,6 +36,8 @@ export class PlayerPanel {
   /** @type {number | undefined} */ #messageTimer;
   /** Mentre s'arrossega la barra de posició: on es deixaria (0..1). Si no, null. */
   /** @type {number | null} */ #dragFraction = null;
+  /** El comptador gran mostra el temps transcorregut en lloc del restant. */
+  #showElapsed = false;
 
   /**
    * @param {Store} store
@@ -66,7 +68,7 @@ export class PlayerPanel {
           </button>
         </div>
 
-        <div class="remaining js-remaining" title="Temps restant">--:--</div>
+        <div class="remaining js-remaining" role="button" title="Temps restant">--:--</div>
         <div class="seek-area js-seek" title="Clica o arrossega per saltar">
           <div class="progress player-progress" role="progressbar" aria-label="Posició">
             <div class="progress-bar js-progress"></div>
@@ -108,6 +110,10 @@ export class PlayerPanel {
     this.#fader = new VolumeFader((db) => this.#send('player.setVolume', { db }));
     this.#el['fader-slot'].appendChild(this.#fader.element);
 
+    this.#el.remaining.addEventListener('click', () => {
+      this.#showElapsed = !this.#showElapsed;
+      this.render();
+    });
     this.#el.restart.addEventListener('click', () => this.#send('player.seek', { position: 0 }));
     this.#el.play.addEventListener('click', () => this.#send('player.play'));
     this.#el.pause.addEventListener('click', () => this.#pauseOrResume());
@@ -140,9 +146,14 @@ export class PlayerPanel {
 
     // Temps restant (gran) i avís dels últims segons.
     const remaining = Math.max(0, p.duration - position);
-    el.remaining.textContent = hasTrack ? `−${formatDuration(Math.ceil(remaining))}` : '--:--';
+    const remainingText = `−${formatDuration(Math.ceil(remaining))}`;
+    const elapsedText = formatDuration(position);
+    // El comptador gran mostra el temps restant o el transcorregut (es canvia clicant-hi);
+    // el petit de sota, l'altre.
+    el.remaining.textContent = !hasTrack ? '--:--' : this.#showElapsed ? elapsedText : remainingText;
+    el.remaining.title = this.#showElapsed ? 'Temps transcorregut (clica per veure el restant)' : 'Temps restant (clica per veure el transcorregut)';
     el.remaining.classList.toggle('ending', playing && remaining <= END_WARNING_SECONDS);
-    el.position.textContent = formatDuration(position);
+    el.position.textContent = this.#showElapsed ? remainingText : elapsedText;
     el.duration.textContent = formatDuration(p.duration);
     el.progress.style.width = hasTrack ? `${Math.min(100, (position / p.duration) * 100)}%` : '0%';
     el.seek.classList.toggle('seekable', hasTrack && CAN_SEEK.includes(p.state));

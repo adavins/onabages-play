@@ -190,10 +190,6 @@ function buildPanels() {
 
   els.players.replaceChildren(...[...playerPanels.values()].map((p) => p.element));
   els.recorders.replaceChildren(...[...recorderPanels.values()].map((r) => r.element));
-
-  // Les columnes s'adapten al nombre d'elements (css/app.css).
-  els.players.style.setProperty('--obp-columns', String(Math.max(1, playerPanels.size)));
-  els.recorders.style.setProperty('--obp-columns', String(Math.max(1, recorderPanels.size)));
 }
 
 function renderAll() {

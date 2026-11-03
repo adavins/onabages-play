@@ -1,9 +1,18 @@
 // @ts-check
 // Escala de la interfície (zoom): Ctrl + / Ctrl − / Ctrl 0 i Ctrl + roda del ratolí.
-// El valor es desa al motor (settings.set) i s'aplica amb el zoom d'Electron (preload.js).
+// El valor es desa al motor (settings.set).
+//
+// Dues maneres d'escalar:
+// - Del 70 % al 150 %: zoom d'Electron (ho fa tot més gran o més petit, també la lletra).
+// - Per sota del 70 % (60 % i 50 %): la lletra es queda com al 70 %, perquè no es llegiria bé.
+//   El que es fa més petit són els espais, els botons, el comptador gran, els mesuradors...:
+//   tot el que a css/app.css es multiplica per --obp-ui-scale.
 
-/** Passos de zoom disponibles (1 = 100 %). Han d'estar entre 0,7 i 1,5, com accepta el motor. */
-const STEPS = [0.7, 0.8, 0.9, 1.0, 1.1, 1.25, 1.5];
+/** Passos de zoom disponibles (1 = 100 %). Han d'estar entre 0,5 i 1,5, com accepta el motor. */
+const STEPS = [0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.25, 1.5];
+
+/** Per sota d'aquí la lletra ja no es fa més petita. */
+const MIN_TEXT_ZOOM = 0.7;
 
 let current = 1.0;
 
@@ -29,7 +38,7 @@ export function setupZoom(onChange) {
   /** @param {number} direction */
   function step(direction) {
     const index = STEPS.findIndex((s) => s >= current - 0.001);
-    const next = STEPS[Math.min(STEPS.length - 1, Math.max(0, (index < 0 ? 3 : index) + direction))];
+    const next = STEPS[Math.min(STEPS.length - 1, Math.max(0, (index < 0 ? STEPS.indexOf(1.0) : index) + direction))];
     change(next);
   }
 
@@ -44,7 +53,10 @@ export function setupZoom(onChange) {
 /** Aplica un zoom (p. ex. el desat al motor) sense tornar-lo a desar. */
 export function applyZoom(/** @type {number} */ zoom) {
   current = zoom;
-  /** @type {any} */ (window).onabages?.setZoom(zoom);
+  const electronZoom = Math.max(zoom, MIN_TEXT_ZOOM);
+  const uiScale = zoom < MIN_TEXT_ZOOM ? zoom / MIN_TEXT_ZOOM : 1;
+  document.documentElement.style.setProperty('--obp-ui-scale', String(uiScale));
+  /** @type {any} */ (window).onabages?.setZoom(electronZoom);
 }
 
 export function currentZoom() {

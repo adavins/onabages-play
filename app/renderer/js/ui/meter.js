@@ -21,6 +21,9 @@ const HOLD_MS = 1500;
 /** A partir d'aquí es considera saturació (pràcticament 0 dBFS). */
 const CLIP_DB = -0.1;
 
+/** L'indicador de saturació s'apaga sol al cap d'aquest temps sense saturar (D-033). */
+const CLIP_HOLD_MS = 15000;
+
 /** Posició (0..100 %) d'un valor en dB dins l'escala. */
 const percent = (/** @type {number} */ db) => Math.min(100, Math.max(0, ((db - MIN_DB) / -MIN_DB) * 100));
 
@@ -29,6 +32,8 @@ export class LevelMeter {
   /** @type {{ mask: HTMLElement, hold: HTMLElement, shown: number, holdDb: number, holdAt: number }[]} */
   #channels = [];
   /** @type {HTMLElement} */ #clip;
+  /** Quan ha saturat per última vegada (0 si l'indicador és apagat). */
+  #clipAt = 0;
   #lastUpdate = performance.now();
 
   constructor() {
@@ -63,7 +68,7 @@ export class LevelMeter {
     }
 
     this.#clip = /** @type {HTMLElement} */ (this.element.querySelector('.meter-clip'));
-    this.#clip.addEventListener('click', () => this.#clip.classList.remove('on'));
+    this.#clip.addEventListener('click', () => this.resetClip());
     this.#draw();
   }
 
@@ -84,9 +89,19 @@ export class LevelMeter {
         ch.holdDb = db;
         ch.holdAt = now;
       }
-      if (db >= CLIP_DB) this.#clip.classList.add('on');
+      if (db >= CLIP_DB) {
+        this.#clipAt = now;
+        this.#clip.classList.add('on');
+      }
     });
+    if (this.#clipAt > 0 && now - this.#clipAt > CLIP_HOLD_MS) this.resetClip();
     this.#draw();
+  }
+
+  /** Apaga l'indicador de saturació (clic, canvi de pista o 15 s sense saturar). */
+  resetClip() {
+    this.#clipAt = 0;
+    this.#clip.classList.remove('on');
   }
 
   /** Mesurador apagat (p. ex. l'entrada no està disponible). */

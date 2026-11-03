@@ -5,7 +5,7 @@
 // i passar-ne la informació de connexió (port i testimoni) a la interfície.
 // Aquí NO hi ha àudio: tot l'àudio és al motor .NET.
 
-const { app, BrowserWindow, dialog, ipcMain } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const crypto = require('node:crypto');
@@ -198,21 +198,21 @@ ipcMain.handle('engine:ensure', async () => {
 const AUDIO_EXTENSIONS = ['mp3', 'wav', 'm4a', 'aac', 'flac', 'wma', 'ogg'];
 let lastAudioFolder = undefined;
 
-/** Diàleg per triar un fitxer d'àudio. Recorda l'última carpeta mentre l'aplicació és oberta. */
+/** Diàleg per triar fitxers d'àudio (un o diversos). Recorda l'última carpeta mentre l'aplicació és oberta. */
 ipcMain.handle('dialog:open-audio', async () => {
-  if (!mainWindow) return null;
+  if (!mainWindow) return [];
   const result = await dialog.showOpenDialog(mainWindow, {
-    title: 'Obrir una pista',
+    title: 'Afegir pistes a la llista',
     defaultPath: lastAudioFolder,
-    properties: ['openFile'],
+    properties: ['openFile', 'multiSelections'],
     filters: [
       { name: 'Àudio', extensions: AUDIO_EXTENSIONS },
       { name: 'Tots els fitxers', extensions: ['*'] },
     ],
   });
-  if (result.canceled || result.filePaths.length === 0) return null;
+  if (result.canceled || result.filePaths.length === 0) return [];
   lastAudioFolder = path.dirname(result.filePaths[0]);
-  return result.filePaths[0];
+  return result.filePaths;
 });
 
 /** Zoom d'Electron (de 0,7 a 1,5). Per sota de 0,7 la interfície no redueix la lletra: només els espais i els elements grans (js/ui/zoom.js). */
@@ -225,4 +225,9 @@ ipcMain.handle('ui:set-zoom', (_event, factor) => {
 ipcMain.on('app:close-confirmed', () => {
   closeConfirmed = true;
   mainWindow?.close();
+});
+
+/** Obre l'Explorador de Windows amb el fitxer seleccionat (menú contextual de la llista). */
+ipcMain.handle('shell:show-in-folder', (_event, filePath) => {
+  if (typeof filePath === 'string' && path.isAbsolute(filePath)) shell.showItemInFolder(filePath);
 });

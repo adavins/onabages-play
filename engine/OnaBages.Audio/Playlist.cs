@@ -107,6 +107,47 @@ public sealed class Playlist
     }
 
     /// <summary>
+    /// Afegeix còpies de pistes (d'aquesta llista o d'una altra) davant de <paramref name="beforeId"/>
+    /// (o al final). Es conserven les marques de bucle i d'avanç automàtic i el resultat de la
+    /// comprovació (no cal tornar-les a comprovar); el cue no es copia. Retorna els identificadors nous.
+    /// </summary>
+    public IReadOnlyList<string> AddCopies(IEnumerable<PlaylistItem> sources, string? beforeId = null)
+    {
+        var added = new List<string>();
+        lock (_sync)
+        {
+            int index = IndexOrEnd(beforeId);
+            foreach (var source in sources)
+            {
+                var copy = source with { Id = $"t{++_nextId}" };
+                _items.Insert(index++, copy);
+                added.Add(copy.Id);
+            }
+        }
+        RaiseChanged();
+        return added;
+    }
+
+    /// <summary>Posa una còpia de cada pista just a sota de l'original. Retorna els identificadors nous.</summary>
+    public IReadOnlyList<string> Duplicate(IReadOnlyCollection<string> ids)
+    {
+        var added = new List<string>();
+        lock (_sync)
+        {
+            var set = ids.ToHashSet();
+            for (int i = 0; i < _items.Count; i++)
+            {
+                if (!set.Contains(_items[i].Id)) continue;
+                var copy = _items[i] with { Id = $"t{++_nextId}" };
+                _items.Insert(++i, copy); // just a sota (i se salta la còpia)
+                added.Add(copy.Id);
+            }
+        }
+        RaiseChanged();
+        return added;
+    }
+
+    /// <summary>
     /// Mou les pistes <paramref name="ids"/> (es manté el seu ordre) davant de <paramref name="beforeId"/>
     /// (o al final). Es pot fer també amb la pista que sona.
     /// </summary>
@@ -157,7 +198,13 @@ public sealed class Playlist
             if (index < 0) throw new KeyNotFoundException(id);
 
             var item = _items[index];
-            _items[index] = item with { Loop = loop ?? item.Loop, AutoNext = autoNext ?? item.AutoNext };
+            bool newLoop = loop ?? item.Loop;
+            // Bucle i avanç automàtic no poden anar junts (D-034): amb el bucle no es pot activar
+            // l'avanç; i activar el bucle apaga l'avanç que hi hagués.
+            if (autoNext == true && newLoop)
+                throw new PlayerCommandException("Aquesta pista té el bucle activat: no pot tenir també l'avanç automàtic.");
+            bool newAutoNext = loop == true ? false : autoNext ?? item.AutoNext;
+            _items[index] = item with { Loop = newLoop, AutoNext = newAutoNext };
             if (cue == true) CueId = id;
             else if (cue == false && CueId == id) CueId = null;
         }

@@ -335,9 +335,9 @@ El reproductor mostra el format de la pista que sona, abreujat (p. ex. «MP3 192
 - **Per defecte, l'avanç és manual:** quan s'acaba la pista o es prem Stop, la llista s'atura i la pista queda marcada com a última reproduïda.
 - **Play** fa sonar la pista marcada amb **cue** o, si no n'hi ha, la que va després de l'última reproduïda.
 - Marques per pista (es poden canviar en qualsevol moment, també mentre sona):
-  - **Bucle:** la pista es repeteix fins que es prem Stop.
+  - **Bucle:** la pista es repeteix fins que es prem Stop. No pot anar amb l'avanç automàtic: activar el bucle l'apaga, i amb el bucle activat no es pot activar (D-034).
   - **Cue:** aquesta serà la següent. Només n'hi pot haver una per llista; s'apaga quan comença a sonar.
-  - **Avanç automàtic:** quan aquesta pista s'acaba, sona la del cue o, si no n'hi ha, la següent. Només un pas: continua si la que comença també té l'avanç automàtic.
+  - **Avanç automàtic:** quan aquesta pista s'acaba, sona la del cue o, si no n'hi ha, la següent. Només un pas: continua si la que comença també té l'avanç automàtic. Per precaució, quan ja ha passat a la següent, es desmarca sol (D-033).
 - Amb bucle o avanç automàtic no hi ha silenci entre pistes: el motor prepara la següent i decideix quina és 1 s abans del final.
 
 **Regla de «pista següent»:** la pista següent és sempre la que hi ha **després de la pista actual en l'ordre actual de la llista** en el moment que acaba. Es calcula per identitat de l'element, no per posició numèrica. Si la pista actual s'ha eliminat de la llista, es fa servir la que ocupava el lloc següent.

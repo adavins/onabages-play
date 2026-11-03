@@ -221,6 +221,7 @@ public class PlaylistTests
 
         Assert.Equal(PlayerState.Ended, player.State);
         Assert.Equal(ids[1], player.LastPlayedId);        // ha sonat la 2a i s'ha aturat (un sol pas)
+        Assert.False(player.Playlist.Find(ids[0])!.AutoNext); // l'avanç ja fet es desmarca (D-033)
         Assert.True(LongestGap(output) < 10, $"Silenci entre pistes: {LongestGap(output)} mostres");
         Assert.Equal(0, player.Underruns);
     }
@@ -291,6 +292,72 @@ public class PlaylistTests
 
         Assert.Equal(PlayerState.Error, player.State);
         Assert.Equal(TrackStatus.Error, player.Playlist.Find(ids[0])!.Status);
+    }
+
+    [Fact]
+    public void Bucle_i_avanc_automatic_no_poden_anar_junts()
+    {
+        var list = new Playlist();
+        string id = list.Add([@"C:\A.mp3"])[0];
+
+        list.SetFlags(id, autoNext: true);
+        list.SetFlags(id, loop: true);                    // activar el bucle apaga l'avanç
+        Assert.True(list.Find(id)!.Loop);
+        Assert.False(list.Find(id)!.AutoNext);
+
+        var ex = Assert.Throws<PlayerCommandException>(() => list.SetFlags(id, autoNext: true));
+        Assert.Contains("bucle", ex.Message);
+        Assert.False(list.Find(id)!.AutoNext);
+
+        list.SetFlags(id, loop: false);
+        list.SetFlags(id, autoNext: true);                // sense bucle, sí
+        Assert.True(list.Find(id)!.AutoNext);
+    }
+
+    [Fact]
+    public void Duplicar_posa_cada_copia_just_a_sota()
+    {
+        var list = new Playlist();
+        var ids = list.Add(new[] { "A", "B", "C" }.Select(n => $@"C:\{n}.mp3"));
+        list.SetFlags(ids[0], loop: true, cue: true);
+
+        var copies = list.Duplicate([ids[0], ids[2]]);
+
+        Assert.Equal(["A", "A", "B", "C", "C"], list.Items.Select(i => i.Name));
+        Assert.Equal(copies[0], list.Items[1].Id);
+        Assert.True(list.Items[1].Loop);                  // les marques es copien...
+        Assert.Equal(ids[0], list.CueId);                 // ...però el cue no
+    }
+
+    [Fact]
+    public void Arrossegar_a_una_altra_llista_mou_les_pistes_i_amb_ctrl_les_copia()
+    {
+        var state = new EngineState([
+            new Player("1", _ => new FakeOutput(), new TrackAnalyzer(synchronous: true)),
+            new Player("2", _ => new FakeOutput(), new TrackAnalyzer(synchronous: true))]);
+        var router = new CommandRouter(state, () => { }, () => []);
+        var from = state.FindPlayer("1")!.Playlist;
+        var to = state.FindPlayer("2")!.Playlist;
+        var ids = from.Add([Wav(), Wav(2)]);
+        from.SetFlags(ids[1], autoNext: true);
+        var target = to.Add([Wav()])[0];
+
+        var r = router.Handle($$"""{ "v": 1, "id": 1, "cmd": "playlist.transfer", "player": "1", "ids": ["{{ids[1]}}"], "toPlayer": "2", "beforeId": "{{target}}" }""");
+
+        Assert.True(r["ok"]!.GetValue<bool>());
+        Assert.Single(from.Items);                        // s'ha mogut: ja no és a l'origen
+        Assert.Equal(2, to.Items.Count);
+        Assert.True(to.Items[0].AutoNext);                // amb les marques
+        Assert.Equal(TrackStatus.Ok, to.Items[0].Status);
+        Assert.Equal(TimeSpan.FromSeconds(2), to.Items[0].Duration);
+
+        router.Handle($$"""{ "v": 1, "id": 2, "cmd": "playlist.transfer", "player": "1", "ids": ["{{ids[0]}}"], "toPlayer": "2", "copy": true }""");
+        Assert.Single(from.Items);                        // copiar: l'origen no canvia
+        Assert.Equal(3, to.Items.Count);
+
+        r = router.Handle($$"""{ "v": 1, "id": 3, "cmd": "playlist.duplicate", "player": "2", "ids": ["{{target}}"] }""");
+        Assert.Single(r["result"]!["ids"]!.AsArray());
+        Assert.Equal(4, to.Items.Count);
     }
 
     // --- Ordres ---

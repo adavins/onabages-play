@@ -358,6 +358,13 @@ public sealed class Player : IDisposable
                 while (_transitions.TryPeek(out var next) && _stream.FramesPlayed >= next.StartFrame)
                 {
                     _transitions.TryDequeue(out _);
+
+                    // Per precaució, l'avanç automàtic ja fet es desmarca: la pista no tornarà a
+                    // encadenar sola si es torna a fer sonar (D-033). El bucle sí que es manté.
+                    if (CurrentItemId is not null && CurrentItemId != next.Item.Id
+                        && Playlist.Find(CurrentItemId) is { AutoNext: true })
+                        Playlist.SetFlags(CurrentItemId, autoNext: false);
+
                     LastPlayedId = CurrentItemId;
                     SetCurrent(next.Item, next.Duration);
                     _startOffset = TimeSpan.Zero;

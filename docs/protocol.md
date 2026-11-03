@@ -199,7 +199,9 @@ Cada reproductor té una llista. Viu al motor: la interfície la mostra i hi env
 | `playlist.add` | `player`, `paths` (llista de rutes completes); opcional `beforeId` (s'insereixen davant d'aquesta pista; per defecte, al final) | `{ ids }`: els `itemId` nous, en ordre. Cada pista es comprova en segon pla (`status: "analyzing"` → `ok` o `error`) |
 | `playlist.move` | `player`, `ids` (es mouen en l'ordre de la llista); opcional `beforeId` (per defecte, al final). Es pot moure la pista que sona | `{ playlist }` |
 | `playlist.remove` | `player`, `ids`. Si s'esborra la pista que sona, acaba igualment | `{ playlist }` |
-| `playlist.setFlags` | `player`, `itemId`; opcionals `loop`, `autoNext`, `cue` (`true`/`false`; els que no s'envien no canvien) | `{ playlist }` |
+| `playlist.setFlags` | `player`, `itemId`; opcionals `loop`, `autoNext`, `cue` (`true`/`false`; els que no s'envien no canvien). Bucle i avanç automàtic no poden anar junts: activar `loop` apaga `autoNext`, i `autoNext: true` en una pista amb bucle dona `bad_state` (D-034) | `{ playlist }` |
+| `playlist.duplicate` | `player`, `ids`. Cada pista es duplica just a sota de l'original (amb les marques de bucle i avanç automàtic; el cue no) | `{ ids }`: les còpies |
+| `playlist.transfer` | `player` (origen), `ids`, `toPlayer` (destí; pot ser el mateix); opcionals `beforeId` (de la llista de destí; per defecte, al final) i `copy` (`true`: copia; per defecte es **mou**). Conserva bucle, avanç automàtic i el resultat de la comprovació. És el que fa arrossegar pistes d'una llista a una altra (amb Ctrl, copiar) | `{ ids }`: les pistes a la llista de destí |
 | `track.info` | `path` | `{ info: { path, fileSize, duration, format, title, artist, album, year, genre, comment } }` (metadades amb TagLib#; els camps que no hi són, `null`) |
 
 Objecte `playlist` (també a `state.get` → `playlists` i a l'esdeveniment `playlist.changed`):
@@ -217,7 +219,7 @@ Objecte `playlist` (també a `state.get` → `playlists` i a l'esdeveniment `pla
 - `status`: `analyzing` (s'està comprovant), `ok` (sonarà), `error` (malmès o format no compatible) o `missing` (el fitxer ja no hi és). `problem`: el motiu, en català.
 - **Comprovació:** en afegir una pista, el motor l'obre amb el mateix descodificador que el reproductor i en llegeix el principi. **Si una pista és `ok`, sonarà.** Cada 30 s es comprova que els fitxers encara existeixen (sense obrir-los); si un que faltava torna, es torna a comprovar.
 - `totalDuration`: suma de les durades conegudes.
-- **Avanç** (D-031): per defecte, manual (quan s'acaba una pista, la llista s'atura). `loop`: la pista es repeteix fins a Stop. `autoNext`: quan s'acaba, sona la del cue o, si no n'hi ha, la següent (**un sol pas**). `cueId`: només n'hi pot haver una; s'apaga quan comença a sonar. Amb bucle o avanç automàtic **no hi ha silenci** entre pistes: el motor decideix què ve després **1 s abans** del final.
+- **Avanç** (D-031): per defecte, manual (quan s'acaba una pista, la llista s'atura). `loop`: la pista es repeteix fins a Stop. `autoNext`: quan s'acaba, sona la del cue o, si no n'hi ha, la següent (**un sol pas**).  Quan ja ha passat a la següent, l'`autoNext` d'aquella pista es desmarca sol (D-033). `cueId`: només n'hi pot haver una; s'apaga quan comença a sonar. Amb bucle o avanç automàtic **no hi ha silenci** entre pistes: el motor decideix què ve després **1 s abans** del final.
 
 ## 5. Esdeveniments
 

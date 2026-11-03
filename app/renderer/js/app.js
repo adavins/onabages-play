@@ -176,6 +176,7 @@ function setupPanels() {
   store.addEventListener('reset', buildPanels);
   store.addEventListener('player', (e) => playerPanels.get(/** @type {any} */ (e).detail)?.render());
   store.addEventListener('recorder', (e) => recorderPanels.get(/** @type {any} */ (e).detail)?.render());
+  store.addEventListener('playlist', (e) => playerPanels.get(/** @type {any} */ (e).detail)?.renderPlaylist());
   store.addEventListener('devices', renderAll);
   store.addEventListener('meters', () => {
     for (const [id, panel] of playerPanels) panel.updateMeter(store.meters.players?.[id]);

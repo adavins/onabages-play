@@ -17,8 +17,11 @@ contextBridge.exposeInMainWorld('onabages', {
     ipcRenderer.on('app:close-requested', () => callback());
   },
 
-  /** Diàleg de Windows per triar un fitxer d'àudio. Retorna la ruta, o null si es cancel·la. */
-  openAudioFile: () => ipcRenderer.invoke('dialog:open-audio'),
+  /** Diàleg de Windows per triar fitxers d'àudio (un o diversos). Retorna les rutes (buit si es cancel·la). */
+  openAudioFiles: () => ipcRenderer.invoke('dialog:open-audio'),
+
+  /** Obre l'Explorador amb aquest fitxer seleccionat. */
+  showInFolder: (filePath) => ipcRenderer.invoke('shell:show-in-folder', filePath),
 
   /** Ruta completa d'un fitxer arrossegat des de l'Explorador (la pàgina no la pot saber sola). */
   pathForFile: (file) => webUtils.getPathForFile(file),

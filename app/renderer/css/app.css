@@ -50,6 +50,16 @@
   --obp-meter-off: #33393f;         /* part apagada (prou clara perquè es vegi la barra en silenci) */
   --obp-meter-yellow-from: 70%;     /* −18 dB */
   --obp-meter-red-from: 90%;        /* −6 dB */
+
+  /* Llista de reproducció (js/ui/playlist-view.js) */
+  --obp-pl-row-h: calc(1.7rem * var(--obp-ui-scale));
+  --obp-pl-playing-bg: #1f6b43;     /* la que sona (verd) */
+  --obp-pl-last-bg: #1d4f8c;        /* l'última reproduïda (blau) */
+  --obp-pl-selected-bg: #3a4048;    /* seleccionada (més clara) */
+  --obp-pl-problem-bg: #5c2a17;     /* malmesa o desapareguda */
+  --obp-pl-loop-on: #3d8bfd;
+  --obp-pl-cue-on: #e0a526;
+  --obp-pl-auto-on: #2fb36b;
 }
 
 html, body {
@@ -601,4 +611,173 @@ body.engine-offline .layout {
   .meter-scale span:nth-child(7) {
     display: none;
   }
+}
+
+/* Llista de reproducció (js/ui/playlist-view.js) ------------------------ */
+
+/* Ocupa tot l'espai que queda al panell; si no hi cap, es desplaça. */
+.playlist-slot {
+  flex: 1;
+  min-height: calc(6rem * var(--obp-ui-scale));
+  display: flex;
+  min-width: 0;
+}
+
+.playlist {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  /* Sense això, la llista no es faria mai més estreta que el nom més llarg: sortiria del
+     panell i s'amagarien la durada i els botons. Així, el que s'escurça és el nom. */
+  min-width: 0;
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.3rem;
+}
+
+.pl-rows {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  outline: none;
+  font-size: 0.85rem;
+}
+
+.pl-rows:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--obp-info);
+}
+
+.pl-empty {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  color: var(--bs-secondary-color);
+  font-style: italic;
+  padding: 1rem;
+  text-align: center;
+}
+
+.pl-row {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  height: var(--obp-pl-row-h);
+  padding: 0 0.3rem;
+  border-bottom: 1px solid rgb(255 255 255 / 0.04);
+  cursor: default;
+}
+
+.pl-row:hover { background: rgb(255 255 255 / 0.04); }
+.pl-row.pl-selected { background: var(--obp-pl-selected-bg); }
+.pl-row.pl-last     { background: var(--obp-pl-last-bg); }
+.pl-row.pl-playing,
+.pl-row.pl-current  { background: var(--obp-pl-playing-bg); font-weight: 600; }
+.pl-row.pl-problem  { background: var(--obp-pl-problem-bg); }
+.pl-row.pl-analyzing .pl-name { color: var(--bs-secondary-color); font-style: italic; }
+
+/* Seleccionada + un altre estat: es manté el color de l'estat amb una vora clara. */
+.pl-row.pl-selected.pl-last,
+.pl-row.pl-selected.pl-playing,
+.pl-row.pl-selected.pl-current,
+.pl-row.pl-selected.pl-problem {
+  box-shadow: inset 0 0 0 2px rgb(255 255 255 / 0.35);
+}
+
+.pl-num {
+  min-width: 1.6rem;
+  text-align: right;
+  color: var(--bs-secondary-color);
+  font-variant-numeric: tabular-nums;
+}
+
+.pl-name {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pl-dur {
+  min-width: 2.8rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--bs-secondary-color);
+}
+
+.pl-row.pl-playing .pl-dur,
+.pl-row.pl-current .pl-dur { color: inherit; }
+
+.pl-warn { color: #ffb347; }
+.pl-wait { color: var(--bs-secondary-color); }
+
+/* Botons de bucle, cue i avanç automàtic: només icona; apagats, gairebé transparents. */
+.pl-flag {
+  border: 0;
+  background: none;
+  padding: 0 0.15rem;
+  line-height: 1;
+  color: rgb(255 255 255 / 0.2);
+  font-size: 0.9rem;
+}
+
+.pl-flag:hover { color: rgb(255 255 255 / 0.6); }
+.pl-flag-loop.on { color: var(--obp-pl-loop-on); }
+.pl-flag-cue.on  { color: var(--obp-pl-cue-on); }
+.pl-flag-auto.on { color: var(--obp-pl-auto-on); }
+
+/* On es deixarà anar el que s'arrossega. */
+.pl-row.drop-before { box-shadow: inset 0 2px 0 var(--obp-info); }
+.pl-row.drop-after  { box-shadow: inset 0 -2px 0 var(--obp-info); }
+.pl-rows.drop-end   { box-shadow: inset 0 -3px 0 var(--obp-info); }
+
+.pl-footer {
+  padding: 0.15rem 0.4rem;
+  font-size: 0.75rem;
+  color: var(--bs-secondary-color);
+  border-top: 1px solid var(--bs-border-color);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.pl-footer:empty { display: none; }
+
+/* Format de la pista (entre els temps, on sobra espai). */
+.track-format {
+  flex: 1;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0 0.5rem;
+}
+
+/* Menú contextual (js/ui/context-menu.js) */
+.obp-menu {
+  position: fixed;
+  z-index: 1000;
+}
+
+/* Finestra d'informació (js/ui/dialogs.js) */
+.obp-info-list {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.3rem 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.obp-info-list dt { color: var(--bs-secondary-color); font-weight: 400; }
+.obp-info-list dd { margin: 0; word-break: break-all; user-select: text; }
+
+/* A la fila, només s'escurça el nom: la durada i els botons es veuen sempre (D-033). */
+.pl-row > :not(.pl-name) {
+  flex-shrink: 0;
+}
+
+/* Marca que no es pot fer servir (p. ex. avanç automàtic amb el bucle activat). */
+.pl-flag:disabled {
+  color: rgb(255 255 255 / 0.06);
+  cursor: not-allowed;
 }

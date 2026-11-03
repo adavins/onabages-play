@@ -1,5 +1,5 @@
 // @ts-check
-// Panell d'un reproductor (pas 2): una pista, controls, temps i sortida.
+// Panell d'un reproductor: pista actual, controls, temps, sortida, volum i llista.
 // La interfície només envia ordres i mostra l'estat que rep del motor.
 
 import { PLAYER_STATES, stateBadge } from './states.js';
@@ -7,7 +7,8 @@ import { deviceWarning } from './device-line.js';
 import { DeviceSelect } from './device-select.js';
 import { LevelMeter } from './meter.js';
 import { VolumeFader } from './fader.js';
-import { escapeHtml, fileName, formatDuration } from './format.js';
+import { PlaylistView } from './playlist-view.js';
+import { escapeHtml, formatDuration } from './format.js';
 
 /** @typedef {import('../store.js').Store} Store */
 /** @typedef {(cmd: string, params?: object) => Promise<any>} Request */
@@ -16,7 +17,7 @@ import { escapeHtml, fileName, formatDuration } from './format.js';
 const END_WARNING_SECONDS = 10;
 
 /** Estats en què es pot saltar dins la pista (player.seek). */
-const CAN_SEEK = ['ready', 'playing', 'paused', 'ended'];
+const CAN_SEEK = ['ready', 'playing', 'paused'];
 
 /** Quant temps es mostra un missatge d'error d'una ordre. */
 const MESSAGE_MS = 5000;
@@ -32,6 +33,8 @@ export class PlayerPanel {
   #deviceSelect;
   #meter;
   #fader;
+  #playlist;
+  /** @type {string | null} */ #lastItemId = null;
   /** @type {Record<string, HTMLElement>} */ #el = {};
   /** @type {number | undefined} */ #messageTimer;
   /** Mentre s'arrossega la barra de posició: on es deixaria (0..1). Si no, null. */
@@ -63,8 +66,8 @@ export class PlayerPanel {
 
         <div class="track-row">
           <div class="track js-track"></div>
-          <button class="btn btn-sm btn-outline-secondary js-open" type="button" title="Obrir una pista">
-            <i class="bi bi-folder2-open"></i> Obrir
+          <button class="btn btn-sm btn-outline-secondary js-open" type="button" title="Afegir pistes al final de la llista">
+            <i class="bi bi-plus-lg"></i> Afegir
           </button>
         </div>
 
@@ -76,6 +79,7 @@ export class PlayerPanel {
         </div>
         <div class="times">
           <span class="js-position">0:00</span>
+          <span class="track-format js-format"></span>
           <span class="js-duration">0:00</span>
         </div>
 
@@ -94,7 +98,8 @@ export class PlayerPanel {
 
         <div class="error-text js-error"></div>
         <div class="message-text js-message"></div>
-        <div class="drop-hint">Deixa anar el fitxer per carregar-lo</div>
+        <div class="js-playlist-slot playlist-slot"></div>
+        <div class="drop-hint">Deixa anar els fitxers per afegir-los al final de la llista</div>
       </div>`;
 
     for (const node of this.element.querySelectorAll('[class*="js-"]')) {
@@ -109,6 +114,8 @@ export class PlayerPanel {
     this.#el['meter-slot'].appendChild(this.#meter.element);
     this.#fader = new VolumeFader((db) => this.#send('player.setVolume', { db }));
     this.#el['fader-slot'].appendChild(this.#fader.element);
+    this.#playlist = new PlaylistView(id, request, (text) => this.#showMessage(text));
+    this.#el['playlist-slot'].appendChild(this.#playlist.element);
 
     this.#el.remaining.addEventListener('click', () => {
       this.#showElapsed = !this.#showElapsed;
@@ -137,8 +144,14 @@ export class PlayerPanel {
     this.#deviceSelect.update(this.#store, p.deviceId, playing);
     el['device-warning'].innerHTML = deviceWarning(this.#store, p.deviceId);
 
-    el.track.textContent = p.file ? fileName(p.file) : 'Cap pista carregada';
+    // Pista actual: el nom que té a la llista (fitxer sense extensió).
+    const list = this.#store.playlists.get(this.#id);
+    const current = list?.items.find((/** @type {any} */ i) => i.id === p.currentItemId);
+    const name = current?.name ?? (p.file ? p.file.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, '') : null);
+    el.track.textContent = name ?? (p.state === 'ended' ? 'Aturat' : 'Cap pista');
     el.track.title = p.file ?? '';
+    el.format.textContent = p.format ?? '';
+    el.format.title = p.format ?? '';
 
     // Mentre s'arrossega la barra, es mostra la posició on s'anirà.
     const hasTrack = p.duration > 0;
@@ -161,15 +174,27 @@ export class PlayerPanel {
 
     // Cada botó, només quan el motor l'accepta (docs/protocol.md, 4.2).
     setEnabled(el.restart, hasTrack && CAN_SEEK.includes(p.state));
-    setEnabled(el.play, ['ready', 'paused', 'ended'].includes(p.state));
+    const hasItems = (list?.items.length ?? 0) > 0;
+    setEnabled(el.play, ['ready', 'paused'].includes(p.state) || (['empty', 'ended'].includes(p.state) && hasItems));
     setEnabled(el.pause, playing || p.state === 'paused');
     el.pause.classList.toggle('blink', p.state === 'paused');
-    setEnabled(el.stop, ['playing', 'paused', 'ended'].includes(p.state));
-    setEnabled(el.open, !playing && !!p.deviceId);
+    setEnabled(el.stop, ['playing', 'paused', 'ready'].includes(p.state));
     el.retry.classList.toggle('d-none', p.state !== 'error');
 
     el.error.textContent = p.error ?? '';
     this.#fader.update(p.volumeDb ?? 0);
+    this.#playlist.update(list, p);
+
+    // Pista nova: l'indicador de saturació torna a començar (D-033).
+    if (p.currentItemId !== this.#lastItemId) {
+      this.#lastItemId = p.currentItemId;
+      this.#meter.resetClip();
+    }
+  }
+
+  /** Ha canviat la llista (esdeveniment playlist.changed). */
+  renderPlaylist() {
+    this.render();
   }
 
   /** Nivells nous del motor (esdeveniment meters): [esquerre, dret] en dBFS. */
@@ -241,21 +266,16 @@ export class PlayerPanel {
     });
   }
 
+  /** Botó «Afegir»: diàleg de Windows (un o diversos fitxers), al final de la llista. */
   async #open() {
-    const path = await bridge?.openAudioFile();
-    if (path) await this.#load(path);
+    const paths = await bridge?.openAudioFiles();
+    if (paths?.length) this.#playlist.addFiles(paths);
   }
 
-  async #load(/** @type {string} */ path) {
-    const p = this.#store.players.get(this.#id);
-    if (p?.state === 'playing') {
-      this.#showMessage('No es pot carregar una pista mentre sona. Atura-la primer.');
-      return;
-    }
-    await this.#send('player.load', { path });
-  }
-
-  /** Arrossegar un fitxer des de l'Explorador al panell. */
+  /**
+   * Fitxers de l'Explorador deixats anar a qualsevol lloc del panell que no sigui la llista:
+   * s'afegeixen al final. (A sobre de la llista, ho gestiona la llista: on es deixen anar.)
+   */
   #setupDrop() {
     const panel = this.element;
     panel.addEventListener('dragover', (e) => {
@@ -269,10 +289,8 @@ export class PlayerPanel {
     panel.addEventListener('drop', (e) => {
       e.preventDefault();
       panel.classList.remove('drop-target');
-      const file = e.dataTransfer?.files[0];
-      if (!file) return;
-      const path = bridge?.pathForFile(file);
-      if (path) this.#load(path);
+      const paths = [...(e.dataTransfer?.files ?? [])].map((f) => bridge?.pathForFile(f)).filter(Boolean);
+      this.#playlist.addFiles(paths);
     });
   }
 

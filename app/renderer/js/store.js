@@ -9,6 +9,7 @@
 //   'reset'            s'ha tornat a llegir tot l'estat (connexió nova)
 //   'player'           ha canviat un reproductor        (detail: id)
 //   'recorder'         ha canviat un enregistrador      (detail: id)
+//   'playlist'         ha canviat la llista d'un reproductor (detail: id del reproductor)
 //   'devices'          ha canviat la llista de dispositius
 //   'meters'           nivells nous dels mesuradors (25 per segon)
 
@@ -17,6 +18,8 @@
 export class Store extends EventTarget {
   /** @type {Map<string, any>} */ players = new Map();
   /** @type {Map<string, any>} */ recorders = new Map();
+  /** Llista de cada reproductor (clau: id del reproductor). @type {Map<string, any>} */
+  playlists = new Map();
   /** @type {any[]} */ devices = [];
   /** @type {any} */ hardware = null;
   /** @type {any} */ engine = null;
@@ -39,6 +42,11 @@ export class Store extends EventTarget {
       for (const r of /** @type {any} */ (e).detail.recorders) this.#mergeRecorder(r);
     });
     client.addEventListener('ev:devices.changed', () => this.refreshDevices());
+    client.addEventListener('ev:playlist.changed', (e) => {
+      const playlist = /** @type {any} */ (e).detail.playlist;
+      this.playlists.set(playlist.player, playlist);
+      this.#emit('playlist', playlist.player);
+    });
     client.addEventListener('ev:meters', (e) => {
       this.meters = /** @type {any} */ (e).detail;
       this.#emit('meters');
@@ -57,6 +65,7 @@ export class Store extends EventTarget {
     this.hardware = state.hardware;
     this.players = new Map(state.players.map((/** @type {any} */ p) => [p.id, p]));
     this.recorders = new Map(state.recorders.map((/** @type {any} */ r) => [r.id, r]));
+    this.playlists = new Map(state.playlists.map((/** @type {any} */ l) => [l.player, l]));
     this.devices = devices.devices;
     this.#emit('reset');
   }

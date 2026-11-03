@@ -93,6 +93,8 @@ public sealed class CommandRouter
                 "playlist.move" => PlaylistMove(msg),
                 "playlist.remove" => PlaylistRemove(msg),
                 "playlist.setFlags" => PlaylistSetFlags(msg),
+                "playlist.duplicate" => PlaylistDuplicate(msg),
+                "playlist.transfer" => PlaylistTransfer(msg),
                 "track.info" => TrackInfoGet(msg),
                 "recorder.setDevice" => RecorderSetDevice(msg),
                 "recorder.start" => RecorderStart(msg),
@@ -282,6 +284,42 @@ public sealed class CommandRouter
         string id = ExistingItem(player, RequireString(msg, "itemId"))!;
         player.Playlist.SetFlags(id, ReadBool(msg["loop"]), ReadBool(msg["autoNext"]), ReadBool(msg["cue"]));
         return new JsonObject { ["playlist"] = PlaylistJson.Playlist(player) };
+    }
+
+    /// <summary>"ids": cada pista es duplica just a sota de l'original.</summary>
+    private JsonObject PlaylistDuplicate(JsonObject msg)
+    {
+        var player = GetPlayer(msg);
+        var ids = RequireStrings(msg, "ids");
+        foreach (var id in ids) ExistingItem(player, id);
+        var added = player.Playlist.Duplicate(ids);
+        return new JsonObject { ["ids"] = new JsonArray(added.Select(id => (JsonNode)id).ToArray()) };
+    }
+
+    /// <summary>
+    /// Arrossegar pistes a una llista (la mateixa o una altra): "ids" (de la llista de "player"),
+    /// "toPlayer", "beforeId" opcional (de la llista de destí) i "copy" (per defecte false: es mouen).
+    /// Es conserven les marques de bucle i d'avanç automàtic.
+    /// </summary>
+    private JsonObject PlaylistTransfer(JsonObject msg)
+    {
+        var from = GetPlayer(msg);
+        string? toId = ReadString(msg["toPlayer"]);
+        var to = _state.FindPlayer(toId) ?? throw new BadParamsException($"No existeix el reproductor '{toId}'.");
+        var ids = RequireStrings(msg, "ids");
+        var items = ids.Select(id => from.Playlist.Find(ExistingItem(from, id))!).ToList();
+        string? beforeId = ExistingItem(to, ReadString(msg["beforeId"]));
+        bool copy = ReadBool(msg["copy"]) ?? false;
+
+        if (!copy && ReferenceEquals(from, to))
+        {
+            from.Playlist.Move(ids, beforeId); // dins la mateixa llista, moure és canviar l'ordre
+            return new JsonObject { ["ids"] = new JsonArray(ids.Select(id => (JsonNode)id).ToArray()) };
+        }
+
+        var added = to.Playlist.AddCopies(items, beforeId);
+        if (!copy) from.Playlist.Remove(ids);
+        return new JsonObject { ["ids"] = new JsonArray(added.Select(id => (JsonNode)id).ToArray()) };
     }
 
     /// <summary>Metadades d'un fitxer, per a la finestra d'informació. Paràmetre "path".</summary>

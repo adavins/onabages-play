@@ -5,8 +5,9 @@ namespace OnaBages.Engine;
 
 /// <summary>
 /// Opcions d'arrencada del motor, llegides de la línia d'ordres.
+/// Ús: OnaBages.Engine [--port 47800] [--token <testimoni>] [--data-dir <carpeta>]
 /// </summary>
-public sealed record EngineOptions(int Port, string Token)
+public sealed record EngineOptions(int Port, string Token, string? DataDir = null)
 {
     public const int DefaultPort = 47800;
 
@@ -14,6 +15,7 @@ public sealed record EngineOptions(int Port, string Token)
     {
         int port = DefaultPort;
         string? token = null;
+        string? dataDir = null;
 
         for (int i = 0; i < args.Length; i++)
         {
@@ -28,13 +30,20 @@ public sealed record EngineOptions(int Port, string Token)
                 case "--token" when i + 1 < args.Length:
                     token = args[++i];
                     break;
+
+                // Carpeta de dades (mode portable, D-044). Sense aquesta opció, %APPDATA%\OnaBages.
+                case "--data-dir" when i + 1 < args.Length:
+                    dataDir = args[++i];
+                    if (!Path.IsPathFullyQualified(dataDir))
+                        throw new ArgumentException($"La carpeta de dades ha de ser una ruta completa: {dataDir}");
+                    break;
             }
         }
 
         if (string.IsNullOrWhiteSpace(token))
             token = NewToken();
 
-        return new EngineOptions(port, token);
+        return new EngineOptions(port, token, dataDir);
     }
 
     /// <summary>Genera un testimoni aleatori (48 caràcters hexadecimals).</summary>

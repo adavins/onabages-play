@@ -34,6 +34,17 @@ Tauler de control → So (o `mmsys.cpl`), pestanyes **Reproducció** i **Enregis
 - [ ] Configurar les **hores actives** perquè cobreixin l'horari dels programes.
 - [ ] Activar «No molestar» (Focus Assist) durant els programes.
 
+### Instal·lar Ona Bages Play (versió portable, D-047)
+No hi ha instal·lador: l'aplicació és una carpeta que es copia.
+- [ ] Generar el paquet a l'ordinador de desenvolupament: `empaquetar.cmd` → `build\OnaBagesPlay-<versió>.zip`.
+- [ ] Si el zip arriba per internet o per correu: botó dret → Propietats → «Desbloquejar», **abans** de descomprimir-lo.
+- [ ] Descomprimir-lo en una carpeta on es pugui escriure, p. ex. `D:\OnaBagesPlay\` (**no** a `Program Files`).
+- [ ] Obrir `OnaBagesPlay.exe`. Si Windows avisa que no és una aplicació coneguda: «Més informació» → «Executa igualment». Acceptar la drecera a l'escriptori.
+- [ ] Windows «N»: instal·lar el Media Feature Pack (sense ell no sonen els MP3).
+- [ ] No cal instal·lar el .NET: el motor el porta inclòs.
+
+Tot es desa a la carpeta `dades\` de l'aplicació. **Còpia de seguretat:** copiar `dades\` (o tota la carpeta). **Actualitzar:** tancar amb «Aturar-ho tot», descomprimir la versió nova en una carpeta a part, copiar-hi la carpeta `dades\` de l'antiga i, quan funcioni, esborrar l'antiga. Les instruccions també són al `LLEGEIX-ME.txt` del paquet.
+
 ## 2. Inventari del maquinari
 
 Una taula per ordinador. Per al desenvolupament, cal omplir-la per als **ordinadors de proves** (és necessària per a la fase 1). Cada emissora la pot fer servir com a plantilla per documentar els seus equips; l'aplicació no depèn de cap targeta concreta i funciona com a mínim amb l'àudio integrat de la placa base.

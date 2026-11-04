@@ -13,6 +13,7 @@
     "bootstrap-icons": "^1.11.3"
   },
   "devDependencies": {
+    "@electron/packager": "^20.3.0",
     "electron": "^45.2.1"
   }
 }

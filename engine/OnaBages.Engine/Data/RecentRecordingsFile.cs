@@ -12,7 +12,7 @@ public static class RecentRecordingsFile
 {
     public const int SchemaVersion = 1;
 
-    public static string DefaultPath { get; } = Path.Combine(RuntimeFile.DirectoryPath, "enregistraments-recents.json");
+    public static string DefaultPath => Path.Combine(RuntimeFile.DirectoryPath, "enregistraments-recents.json");
 
     /// <summary>Desa la llista (escriptura atòmica).</summary>
     public static void Write(IEnumerable<RecordingItem> items, string? path = null)

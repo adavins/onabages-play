@@ -1,0 +1,3 @@
+Aquesta carpeta guarda totes les dades d'Ona Bages Play (versió portable):
+configuració, llistes, enregistraments recents, historial i registres.
+No l'esborris: sense ella l'aplicació començaria de zero i desaria les dades a %APPDATA%.

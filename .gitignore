@@ -10,6 +10,9 @@ node_modules/
 dist/
 out/
 
+# Paquet portable (empaquetar.cmd)
+build/
+
 # Sistema
 Thumbs.db
 .DS_Store

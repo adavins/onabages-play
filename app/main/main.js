@@ -14,7 +14,16 @@ const { spawn } = require('node:child_process');
 const DEFAULT_PORT = 47800;
 const ENGINE_START_TIMEOUT_MS = 60_000; // "dotnet run" pot trigar la primera vegada
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
-const RUNTIME_FILE = path.join(app.getPath('appData'), 'OnaBages', 'engine.json');
+
+// Carpeta de dades (D-044). Versió portable: si al costat de l'executable hi ha una carpeta
+// "dades", tot es desa allà (també la memòria cau d'Electron). Si no, a %APPDATA%\OnaBages.
+// Per provar el mode portable sense empaquetar: variable d'entorn ONABAGES_DATA_DIR.
+const PORTABLE_DATA_DIR = path.join(path.dirname(process.execPath), 'dades');
+const DATA_DIR = process.env.ONABAGES_DATA_DIR
+  || (app.isPackaged && fs.existsSync(PORTABLE_DATA_DIR) ? PORTABLE_DATA_DIR : path.join(app.getPath('appData'), 'OnaBages'));
+const IS_PORTABLE = DATA_DIR !== path.join(app.getPath('appData'), 'OnaBages');
+if (IS_PORTABLE) app.setPath('userData', path.join(DATA_DIR, 'electron')); // abans de res més
+const RUNTIME_FILE = path.join(DATA_DIR, 'engine.json');
 
 /** @type {BrowserWindow | null} */
 let mainWindow = null;
@@ -85,6 +94,53 @@ function createWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
+
+  mainWindow.webContents.once('did-finish-load', offerDesktopShortcut);
+}
+
+/**
+ * Versió portable: la primera vegada que s'obre des d'una carpeta, pregunta si vol una drecera
+ * a l'escriptori (o actualitzar-la, si apunta a una altra carpeta). Només una vegada per carpeta.
+ */
+async function offerDesktopShortcut() {
+  if (!app.isPackaged || !IS_PORTABLE || !mainWindow) return;
+
+  const shortcut = path.join(app.getPath('desktop'), 'Ona Bages Play.lnk');
+  const askedFile = path.join(app.getPath('userData'), 'drecera-preguntada.txt');
+  try {
+    if (fs.readFileSync(askedFile, 'utf8') === process.execPath) return; // ja s'ha preguntat des d'aquesta carpeta
+  } catch { /* encara no s'ha preguntat mai */ }
+
+  let current = null;
+  try { current = shell.readShortcutLink(shortcut).target; } catch { /* no n'hi ha */ }
+  if (current && path.resolve(current) === path.resolve(process.execPath)) return; // ja és correcta
+
+  const { response } = await dialog.showMessageBox(mainWindow, {
+    type: 'question',
+    title: 'Ona Bages Play',
+    message: current ? 'La drecera de l\'escriptori apunta a una altra carpeta. Vols que obri aquesta?' : 'Vols una drecera a l\'escriptori?',
+    detail: `Aplicació: ${path.dirname(process.execPath)}`,
+    buttons: [current ? 'Actualitzar la drecera' : 'Crear la drecera', 'No, gràcies'],
+    defaultId: 0,
+    cancelId: 1,
+  });
+
+  try { fs.writeFileSync(askedFile, process.execPath, 'utf8'); } catch { /* es tornarà a preguntar */ }
+  if (response !== 0) return;
+
+  const ok = shell.writeShortcutLink(shortcut, current ? 'replace' : 'create', {
+    target: process.execPath,
+    cwd: path.dirname(process.execPath),
+    description: 'Ona Bages Play',
+  });
+  if (!ok) {
+    await dialog.showMessageBox(mainWindow, {
+      type: 'warning',
+      title: 'Ona Bages Play',
+      message: 'No s\'ha pogut crear la drecera.',
+      detail: 'La pots crear a mà: botó dret a sobre d\'OnaBagesPlay.exe → Enviar a → Escriptori.',
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -116,7 +172,7 @@ async function isEngineAlive(port) {
 
 /** Decideix com s'arrenca el motor: executable compilat o, si no n'hi ha, "dotnet run". */
 function engineCommand(port, token) {
-  const engineArgs = ['--port', String(port), '--token', token];
+  const engineArgs = ['--port', String(port), '--token', token, '--data-dir', DATA_DIR];
 
   if (process.env.ONABAGES_ENGINE) {
     return { command: process.env.ONABAGES_ENGINE, args: engineArgs };
@@ -124,7 +180,7 @@ function engineCommand(port, token) {
 
   const exeName = process.platform === 'win32' ? 'OnaBages.Engine.exe' : 'OnaBages.Engine';
   const candidates = [
-    // Aplicació instal·lada (fase 2: l'instal·lador hi copiarà el motor).
+    // Aplicació empaquetada (empaquetar.cmd hi copia el motor publicat).
     path.join(process.resourcesPath || '', 'engine', exeName),
     // Desenvolupament: després de "dotnet build".
     path.join(REPO_ROOT, 'engine', 'OnaBages.Engine', 'bin', 'Debug', 'net10.0-windows', exeName),
@@ -158,7 +214,7 @@ async function ensureEngine() {
 
   let spawnError = null;
   const child = spawn(command, args, {
-    cwd: REPO_ROOT,
+    cwd: app.isPackaged ? path.dirname(command) : REPO_ROOT,
     detached: true,
     stdio: 'ignore',
     windowsHide: true,
@@ -248,9 +304,14 @@ ipcMain.handle('shell:open-folder', async (_event, folderPath) => {
   return shell.openPath(folderPath);
 });
 
-/** Carpeta per defecte de les llistes: Documents\Ona Bages Play\Llistes (es crea si no hi és). */
+/**
+ * Carpeta per defecte de les llistes (es crea si no hi és): Documents\Ona Bages Play\Llistes
+ * o, en la versió portable, dades\Llistes (perquè viatgin amb l'aplicació).
+ */
 function playlistsFolder() {
-  const folder = path.join(app.getPath('documents'), 'Ona Bages Play', 'Llistes');
+  const folder = IS_PORTABLE
+    ? path.join(DATA_DIR, 'Llistes')
+    : path.join(app.getPath('documents'), 'Ona Bages Play', 'Llistes');
   try { fs.mkdirSync(folder, { recursive: true }); } catch { /* si no es pot, el diàleg s'obrirà en una altra carpeta */ }
   return folder;
 }

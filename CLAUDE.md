@@ -86,6 +86,9 @@ dotnet run --project engine/OnaBages.Engine -- --port 47800
 # Interfície (des de app/)
 npm install
 npm start
+
+# Versió portable (des de l'arrel): build\OnaBagesPlay-<versió>.zip (D-047)
+.\empaquetar.cmd
 ```
 
 Per provar el motor sense interfície: arrenca'l i obre `tools/consola-proves.html` al navegador amb el port i el testimoni que mostra la consola.

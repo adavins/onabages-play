@@ -1,0 +1,32 @@
+ONA BAGES PLAY - VERSIÓ PORTABLE
+================================
+
+COM FER-LA SERVIR
+1. Descomprimeix el zip en una carpeta on es pugui escriure, per exemple D:\OnaBagesPlay.
+   No la posis a "Program Files": Windows no hi deixa escriure.
+   Si el zip ve d'internet o d'un correu, abans de descomprimir-lo: botó dret > Propietats >
+   marca "Desbloquejar" > D'acord.
+2. Obre OnaBagesPlay.exe. La primera vegada et preguntarà si vols una drecera a l'escriptori.
+   Si Windows avisa que l'aplicació no és coneguda: "Més informació" > "Executa igualment".
+
+ON ES GUARDA TOT
+A la carpeta "dades": configuració, últimes llistes, enregistraments recents, historial del
+que ha sonat (CSV) i registres del motor. Els enregistraments MP3 van a la carpeta que triïs a
+cada enregistrador (per defecte, Documents\Ona Bages Play\Enregistraments).
+
+CÒPIA DE SEGURETAT / UN ALTRE ORDINADOR
+Copia tota la carpeta de l'aplicació (o, com a mínim, la carpeta "dades").
+A l'altre ordinador: revisa la sortida de cada reproductor i l'entrada de cada enregistrador
+(les targetes de so poden ser diferents) i aplica la preparació de Windows
+(docs/installacio-windows.md).
+
+ACTUALITZAR
+1. Tanca l'aplicació amb "Aturar-ho tot".
+2. Descomprimeix la versió nova en una carpeta a part.
+3. Copia-hi la carpeta "dades" de la versió antiga (substituint la que porta).
+4. Quan comprovis que funciona, esborra la carpeta antiga.
+
+NO OBRIS DUES CÒPIES ALHORA (p. ex. la portable i una altra): farien servir el mateix port.
+
+Windows "N": cal instal·lar el Media Feature Pack perquè sonin els MP3.
+LAME (libmp3lame.dll) és LGPL: vegeu resources\engine\LAME-COPYING-LGPL-2.0.txt.

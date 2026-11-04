@@ -6,7 +6,7 @@ using OnaBages.Engine.Data;
 using OnaBages.Engine.Protocol;
 
 // Punt d'entrada del motor d'Ona Bages Play.
-// Ús: OnaBages.Engine [--port 47800] [--token <testimoni>]
+// Ús: OnaBages.Engine [--port 47800] [--token <testimoni>] [--data-dir <carpeta>]
 
 Console.OutputEncoding = Encoding.UTF8;
 
@@ -20,6 +20,10 @@ catch (ArgumentException ex)
     Console.Error.WriteLine(ex.Message);
     return 2;
 }
+
+// Mode portable (D-044): totes les dades a la carpeta que diu la interfície. Abans de llegir res.
+if (options.DataDir is { } dataDir)
+    RuntimeFile.UseDataDirectory(dataDir);
 
 var builder = WebApplication.CreateSlimBuilder();
 
@@ -40,7 +44,7 @@ builder.Logging.AddProvider(new EngineLogFileProvider(logFile));
 
 var app = builder.Build();
 var log = app.Logger;
-log.LogInformation("{Name} {Version} arrencant (port {Port}, PID {Pid})", EngineInfo.Name, EngineInfo.Version, options.Port, Environment.ProcessId);
+log.LogInformation("{Name} {Version} arrencant (port {Port}, PID {Pid}, dades a {DataDir})", EngineInfo.Name, EngineInfo.Version, options.Port, Environment.ProcessId, RuntimeFile.DirectoryPath);
 
 // Un error no previst que fes caure el motor: com a mínim, que quedi al registre.
 AppDomain.CurrentDomain.UnhandledException += (_, e) =>

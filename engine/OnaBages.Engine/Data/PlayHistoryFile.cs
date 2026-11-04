@@ -12,7 +12,7 @@ namespace OnaBages.Engine.Data;
 /// </summary>
 public static class PlayHistoryFile
 {
-    public static string DefaultFolder { get; } = Path.Combine(RuntimeFile.DirectoryPath, "historial");
+    public static string DefaultFolder => Path.Combine(RuntimeFile.DirectoryPath, "historial");
 
     public const string Header = "data;hora;programa;reproductor;títol;artista;fitxer;sonat;durada";
 

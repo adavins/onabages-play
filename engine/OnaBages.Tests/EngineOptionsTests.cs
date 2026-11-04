@@ -39,4 +39,27 @@ public class EngineOptionsTests
         Assert.False(EngineOptions.TokenMatches("", "abc"));
         Assert.False(EngineOptions.TokenMatches(null, "abc"));
     }
+
+    // --- Mode portable (D-044) ---
+
+    [Fact]
+    public void Sense_carpeta_de_dades_es_fa_servir_la_de_l_usuari()
+    {
+        Assert.Null(EngineOptions.Parse([]).DataDir);
+    }
+
+    [Fact]
+    public void Carpeta_de_dades_amb_ruta_completa()
+    {
+        var o = EngineOptions.Parse(["--data-dir", @"D:\OnaBagesPlay\dades", "--port", "50000"]);
+
+        Assert.Equal(@"D:\OnaBagesPlay\dades", o.DataDir);
+        Assert.Equal(50000, o.Port);
+    }
+
+    [Fact]
+    public void Carpeta_de_dades_relativa_no_s_accepta()
+    {
+        Assert.Throws<ArgumentException>(() => EngineOptions.Parse(["--data-dir", "dades"]));
+    }
 }

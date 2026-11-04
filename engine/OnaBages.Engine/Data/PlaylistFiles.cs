@@ -22,7 +22,7 @@ public static class PlaylistFiles
     public const string Extension = ".obpl";
 
     /// <summary>Carpeta on es desa sola l'última llista de cada reproductor.</summary>
-    public static string LastListsFolder { get; } = Path.Combine(RuntimeFile.DirectoryPath, "llistes");
+    public static string LastListsFolder => Path.Combine(RuntimeFile.DirectoryPath, "llistes");
 
     /// <summary>És un fitxer de llista (propi o M3U), no un fitxer d'àudio?</summary>
     public static bool IsPlaylistFile(string path) =>

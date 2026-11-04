@@ -38,7 +38,7 @@ public sealed class EngineLogFile : IDisposable
         _writer.Start();
     }
 
-    public static string DefaultFolder { get; } = Path.Combine(RuntimeFile.DirectoryPath, "logs");
+    public static string DefaultFolder => Path.Combine(RuntimeFile.DirectoryPath, "logs");
 
     public string Folder => _folder;
 

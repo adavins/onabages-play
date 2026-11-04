@@ -630,7 +630,7 @@ No calen Visual Studio Build Tools, MSVC ni CMake.
 - Enregistradors amb el flux Enregistrar → Aturar → Pendent → Desar/Descartar, i llista de recents.
 - Recuperació automàtica en arrencar i utilitat de recuperació independent.
 - Configuració desada en JSON. Historial CSV.
-- Instal·lador i versió portable (`.zip` amb la carpeta `dades\` i el .NET inclòs; D-044).
+- Versió portable en un `.zip` (carpeta `dades\` i .NET inclòs; D-044), en lloc d'un instal·lador (D-047).
 - Pendent de la fase 1 (D-026): prova de 3 hores amb `OnaBages.ToneCheck` i desconnexió d'un dispositiu USB real.
 
 **Criteri:** fer un programa real complet amb Ona Bages Play, primer en paral·lel amb Winamp i després substituint-lo.

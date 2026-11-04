@@ -96,10 +96,10 @@ public static class Mp3Frames
         return new Mp3Analysis(frames, sampleRate, bitrates.ToList(), xing, validEnd, length - validEnd, duration,
             firstFrameOffset, firstFrameLength);
     }
-    private readonly record struct FrameHeader(int BitrateKbps, int SampleRate, int Length, int SamplesPerFrame);
+    internal readonly record struct FrameHeader(int BitrateKbps, int SampleRate, int Length, int SamplesPerFrame);
 
     /// <summary>Capçalera de 4 bytes d'un fotograma de capa III.</summary>
-    private static bool TryParseHeader(ReadOnlySpan<byte> b, out FrameHeader header)
+    internal static bool TryParseHeader(ReadOnlySpan<byte> b, out FrameHeader header)
     {
         header = default;
         if (b.Length < 4 || b[0] != 0xFF || (b[1] & 0xE0) != 0xE0) return false;
@@ -122,11 +122,11 @@ public static class Mp3Frames
     }
 
     /// <summary>LAME escriu «Xing» (VBR) o «Info» (CBR) dins del primer fotograma.</summary>
-    private static bool ContainsXingTag(ReadOnlySpan<byte> frame) =>
+    internal static bool ContainsXingTag(ReadOnlySpan<byte> frame) =>
         frame.IndexOf("Xing"u8) >= 0 || frame.IndexOf("Info"u8) >= 0;
 
     /// <summary>Salta una etiqueta ID3v2 inicial, si n'hi ha.</summary>
-    private static long SkipId3v2(Stream stream, byte[] head)
+    internal static long SkipId3v2(Stream stream, byte[] head)
     {
         if (stream.Length < 10) return 0;
         stream.Position = 0;

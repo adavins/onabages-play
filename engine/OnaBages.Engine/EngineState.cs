@@ -52,6 +52,9 @@ public sealed class EngineState
     /// <summary>Reproductor amb aquest identificador, o null si no existeix.</summary>
     public Player? FindPlayer(string? id) => Players.FirstOrDefault(p => p.Id == id);
 
+    /// <summary>Editor (fase 3): un sol fitxer obert alhora.</summary>
+    public EditorSession Editor { get; } = new();
+
     public double UptimeSeconds => Math.Round(_uptime.Elapsed.TotalSeconds, 1);
 
     public int Clients => Volatile.Read(ref _clients);

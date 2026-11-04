@@ -172,6 +172,27 @@ foreach (var recorder in state.Recorders)
     };
 }
 
+// Editor (fase 3): cada canvi va a la interfície; al registre, obrir, desar i els errors.
+{
+    string lastLogged = "";
+    state.Editor.Changed += () =>
+    {
+        var editor = state.Editor;
+        string summary = $"{editor.Path}|{editor.Busy}|{editor.Error}|{editor.SavedPath}";
+        if (summary != lastLogged)
+        {
+            lastLogged = summary;
+            if (editor.Error is not null)
+                log.LogWarning("Editor: {Error}", editor.Error);
+            else if (editor.Busy is not null)
+                log.LogInformation("Editor: {Busy} {Path}", editor.Busy == "opening" ? "obrint" : "desant", editor.Path);
+            else if (editor.SavedPath is not null)
+                log.LogInformation("Editor: desat {Path}", editor.SavedPath);
+        }
+        Broadcast(EditorJson.ChangedEvent(editor));
+    };
+}
+
 // Enregistraments acabats: el pendent de cada enregistrador i els recents (D-036).
 // La llista es desa (com a molt cada 2 s) i es recupera en arrencar.
 var recordings = new RecordingList(isPending: path => state.Recorders.Any(r =>
@@ -342,6 +363,7 @@ app.Lifetime.ApplicationStopping.Register(() =>
 {
     log.LogInformation("Aturant el motor");
     watcher.Dispose();
+    state.Editor.Dispose(); // si s'estava desant, s'atura (el fitxer de destinació queda intacte)
     // Primer els enregistradors: tanquen els fitxers correctament (i esborren el marcador .rec).
     foreach (var recorder in state.Recorders)
     {

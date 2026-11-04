@@ -10,8 +10,8 @@ L'especificació completa és a `docs/especificacio.md`. Llegeix-ne la secció c
 
 ## Fase actual
 
-**Fase 2 — MVP utilitzable en directe** (vegeu `docs/especificacio.md`, secció 14.3).
-Pendent de la fase 1 (D-026): la prova de 3 hores i la desconnexió d'un USB real.
+**Fase 3 — Editor** (vegeu `docs/especificacio.md`, seccions 9 i 14.3).
+Pendent de les fases 1 i 2 (D-026, D-048): la prova de 3 hores, la desconnexió d'un USB real i un programa complet en paral·lel amb el Winamp.
 Ordinador de proves i repartiment de dispositius: `docs/inventari/`.
 Quan una fase s'acabi, actualitza aquesta línia i afegeix una entrada a `docs/decisions.md`.
 

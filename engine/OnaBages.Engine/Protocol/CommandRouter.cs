@@ -117,6 +117,14 @@ public sealed class CommandRouter
                 "cue.seek" => CueCommand(c => c.Seek(TimeSpan.FromSeconds(RequireNumber(msg, "position", "la posició en segons")))),
                 "cue.setVolume" => CueSetVolume(msg),
                 "cue.setDevice" => CueSetDevice(msg),
+                "editor.get" => EditorState(),
+                "editor.open" => EditorOpen(msg),
+                "editor.close" => EditorDo(e => e.Close()),
+                "editor.delete" => EditorChange(msg, (edit, start, end) => edit.Delete(start, end)),
+                "editor.keep" => EditorChange(msg, (edit, start, end) => edit.Keep(start, end)),
+                "editor.undo" => EditorDo(e => e.Change(edit => edit.Undo())),
+                "editor.redo" => EditorDo(e => e.Change(edit => edit.Redo())),
+                "editor.save" => EditorSave(msg),
                 _ => null,
             };
 
@@ -132,9 +140,14 @@ public sealed class CommandRouter
         {
             return Messages.Error(id, "bad_params", ex.Message);
         }
-        catch (Exception ex) when (ex is PlayerCommandException or RecorderCommandException or RecordingCommandException)
+        catch (Exception ex) when (ex is PlayerCommandException or RecorderCommandException or RecordingCommandException
+                                       or EditorStateException or Mp3EditException)
         {
             return Messages.Error(id, "bad_state", ex.Message);
+        }
+        catch (EditorFileExistsException ex)
+        {
+            return Messages.Error(id, "file_exists", ex.Message);
         }
         catch (RecordingActiveException ex)
         {
@@ -177,7 +190,68 @@ public sealed class CommandRouter
         ["cue"] = CueJson.Cue(_state),
         ["playlists"] = PlaylistJson.All(_state.Players),
         ["hardware"] = HardwareJson.Report(_hardware?.Report ?? HardwareReport.Empty),
+        ["editor"] = EditorJson.Editor(_state.Editor),
     };
+
+    // -----------------------------------------------------------------------
+    // Editor (fase 3; docs/protocol.md, 4.10)
+    // -----------------------------------------------------------------------
+
+    private JsonObject EditorState() => new() { ["editor"] = EditorJson.Editor(_state.Editor) };
+
+    private JsonObject EditorDo(Action<EditorSession> action)
+    {
+        action(_state.Editor);
+        return EditorState();
+    }
+
+    /// <summary>Obre un MP3. Mai un fitxer que s'està enregistrant (especificació 9.4).</summary>
+    private JsonObject EditorOpen(JsonObject msg)
+    {
+        string path = RequireString(msg, "path");
+        if (!Path.IsPathFullyQualified(path))
+            throw new BadParamsException("'path' ha de ser una ruta completa.");
+        if (!path.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase))
+            throw new BadParamsException("L'editor només obre fitxers MP3.");
+        RejectIfRecording(path);
+
+        _state.Editor.Open(path);
+        return EditorState();
+    }
+
+    /// <summary>Elimina o conserva [start, end) (segons de la versió editada; s'ajusten al fotograma més proper).</summary>
+    private JsonObject EditorChange(JsonObject msg, Func<Mp3Edit, int, int, bool> change)
+    {
+        double start = RequireNumber(msg, "start", "el començament en segons");
+        double end = RequireNumber(msg, "end", "el final en segons");
+        bool changed = _state.Editor.Change(edit => change(edit, edit.FrameAt(start), edit.FrameAt(end)));
+        var result = EditorState();
+        result["changed"] = changed;
+        return result;
+    }
+
+    /// <summary>Desa: a <c>path</c> (fitxer nou) o, sense <c>path</c>, a sobre de l'original. Sobreescriure demana <c>overwrite: true</c>.</summary>
+    private JsonObject EditorSave(JsonObject msg)
+    {
+        string? target = ReadString(msg["path"]);
+        if (target is not null && !Path.IsPathFullyQualified(target))
+            throw new BadParamsException("'path' ha de ser una ruta completa.");
+        bool overwrite = msg["overwrite"] is JsonValue v && v.TryGetValue(out bool b) && b;
+        if (target is not null) RejectIfRecording(target);
+
+        _state.Editor.Save(target, overwrite);
+        return EditorState();
+    }
+
+    private void RejectIfRecording(string path)
+    {
+        bool recording = _state.Recorders.Any(r => r.State == RecorderState.Recording
+            && string.Equals(r.FilePath, path, StringComparison.OrdinalIgnoreCase));
+        if (recording || File.Exists(path + ".rec"))
+            throw new EditorStateException(recording
+                ? "Aquest fitxer s'està enregistrant: no es pot obrir a l'editor fins que s'aturi."
+                : "Aquest fitxer és un enregistrament interromput (té el marcador .rec): cal recuperar-lo abans d'editar-lo.");
+    }
 
     /// <summary>Resum de l'arrencada: què ha passat amb els dispositius desats (especificació 5.6).</summary>
     private JsonObject HardwareReportGet() => new()

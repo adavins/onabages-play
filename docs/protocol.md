@@ -60,6 +60,7 @@ Tots els missatges són objectes JSON amb el camp `"v": 1`.
 | `recorder_error` | L'ordre s'ha fet, però l'enregistrador ha quedat en estat `error` (entrada no disponible, carpeta sense permís...). El missatge n'explica el motiu |
 | `recording_active` | `engine.shutdown` sense `force`, amb enregistraments en curs. No s'atura res |
 | `file_error` | No s'ha pogut llegir o escriure un fitxer de llista (no existeix, és malmès, no hi ha permís...). El missatge n'explica el motiu |
+| `file_exists` | `editor.save`: el fitxer de destinació ja existeix. No s'ha desat res; cal confirmar-ho i tornar-ho a enviar amb `overwrite: true` |
 | `unknown_command` | L'ordre no existeix |
 | `internal` | Error inesperat del motor (el motor continua funcionant) |
 
@@ -322,6 +323,35 @@ Objecte `settings` (resultat de `settings.get` i `settings.set`):
 - `layout` **s'aplica en tornar a arrencar el motor** (mai amb el motor en marxa, perquè no s'aturi res que soni o enregistri). Mentrestant, `restartNeeded` és `true`: el nombre desat no és el que té el motor ara.
 - Si es treuen reproductors o enregistradors, **la seva configuració no s'esborra** (sortida o entrada, nom, carpeta, volum i última llista): si es tornen a posar, tornen tal com eren. En arrencar, també es busquen enregistraments interromputs a les carpetes dels que s'han tret.
 
+### 4.10. Editor (fase 3, D-049)
+
+Un sol fitxer MP3 obert alhora. Les edicions no toquen l'original fins que es desa: el motor només guarda quins trossos (en fotogrames) es queden. Els temps (`start`, `end`) són **segons de la versió editada** i s'ajusten al fotograma més proper (24 ms a 48 kHz, 26 ms a 44,1 kHz).
+
+| Ordre | Paràmetres | Resultat |
+|---|---|---|
+| `editor.get` | — | `{ editor }` (vegeu més avall). També és a `state.get` |
+| `editor.open` | `path` (ruta completa d'un `.mp3`) | `{ editor }` amb `busy: "opening"`: s'indexa en segon pla i, en acabar, arriba `editor.changed` (obert, o `error` si no s'ha pogut). El que hi hagués obert es tanca **sense desar**. `bad_state` si el fitxer s'està enregistrant o té el marcador `.rec` |
+| `editor.delete` | `start`, `end` | `{ editor, changed }`. Elimina el fragment. `bad_state` si s'eliminaria tot. Retallar l'inici = `start: 0`; retallar el final = `end`: la durada |
+| `editor.keep` | `start`, `end` | `{ editor, changed }`. Es queda només amb el fragment (retalla l'inici i el final en un sol pas) |
+| `editor.undo`, `editor.redo` | — | `{ editor }`. Fins a 200 passos |
+| `editor.save` | opcionals: `path` (fitxer nou; sense `path`, a sobre de l'original) i `overwrite: true` | `{ editor }` amb `busy: "saving"`. Si la destinació ja existeix i no s'envia `overwrite: true`: **`file_exists`** i no es desa res (la interfície ho ha de confirmar i tornar a enviar). En acabar arriba `editor.changed`: `savedPath` (desat; l'editor continua amb aquest fitxer, sense desfer) o `error`. Escriptura segura: fitxer temporal a la mateixa carpeta + substitució |
+| `editor.close` | — | `{ editor }`. Tanca sense desar; si s'estava obrint o desant, s'atura (la destinació queda intacta) |
+
+Mentre `busy` no és `null`, `delete`, `keep`, `undo`, `redo` i `save` donen `bad_state`.
+
+```json
+{ "open": true, "path": "D:\\Enregistraments\\Matinal 2026-11-04 08.00.mp3",
+  "busy": null, "progress": 1, "error": null, "savedPath": null,
+  "sampleRate": 48000, "frameSeconds": 0.024, "bitrates": [320],
+  "originalDuration": 3600.0, "duration": 3412.536, "frames": 142189,
+  "segments": [[125, 90000], [97810, 52189]],
+  "canUndo": true, "canRedo": false, "modified": true }
+```
+
+- `segments`: trossos de l'original que es queden, `[primer fotograma, quants]`, en ordre.
+- `error`: motiu de l'última feina que ha fallat (obrir o desar). Es neteja amb l'ordre següent.
+- Es desen els fotogrames **tal qual** (sense recodificar). Les etiquetes ID3v2 i ID3v1 es conserven; el fotograma Xing/Info de LAME es treu (diria una durada falsa).
+
 ## 5. Esdeveniments
 
 | Esdeveniment | Camps | Freqüència | Des de |
@@ -338,6 +368,7 @@ Objecte `settings` (resultat de `settings.get` i `settings.set`):
 | `recordings.changed` | `recordings`: la llista sencera d'enregistraments acabats (vegeu 4.6) | quan s'hi afegeix, es desa, es descarta o se'n treu algun. Agrupat: com a molt 10 per segon | fase 2 |
 | `cue.state` | `cue`: objecte complet (vegeu 4.8) | quan canvia l'estat, la pista, la sortida, el volum o l'error de la preescolta | fase 2 |
 | `cue.position` | `position`, `duration` (segons), `format` (el de la pista, quan ja es coneix) | 10 per segon, només mentre la preescolta sona | fase 2 |
+| `editor.changed` | `editor`: objecte complet (vegeu 4.10) | a cada canvi: obrir, editar, desar, errors; el progrés d'obrir o desar, com a molt 4 per segon | fase 3 |
 
 ### 5.1. Canvis de dispositius
 

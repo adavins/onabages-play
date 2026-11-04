@@ -73,6 +73,15 @@ public sealed class ConfigRepository
             ["recorders"] = WriteAssignments(config.Recorders),
             ["knownDevices"] = new JsonArray(config.KnownDevices.Select(d => (JsonNode)WriteDevice(d)).ToArray()),
             ["ui"] = new JsonObject { ["zoom"] = config.UiZoom },
+            ["recorderSettings"] = new JsonArray(config.RecorderSettings
+                .OrderBy(s => s.Key, StringComparer.Ordinal)
+                .Select(s => (JsonNode)new JsonObject
+                {
+                    ["id"] = s.Key,
+                    ["name"] = s.Value.Name,
+                    ["folder"] = s.Value.Folder,
+                    ["gainDb"] = s.Value.GainDb,
+                }).ToArray()),
         };
         string text = root.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
 
@@ -108,6 +117,18 @@ public sealed class ConfigRepository
         // "ui" és opcional: els fitxers d'abans no el tenen i es fa servir el valor per defecte.
         if (root["ui"]?["zoom"] is JsonValue zoom && zoom.TryGetValue(out double z))
             config.UiZoom = Math.Clamp(z, EngineConfig.MinZoom, EngineConfig.MaxZoom);
+
+        // "recorderSettings" també és opcional (afegit a la fase 2).
+        if (root["recorderSettings"] is JsonArray recorderSettings)
+        {
+            foreach (var item in recorderSettings)
+            {
+                string? id = Text(item?["id"]);
+                if (string.IsNullOrEmpty(id)) continue;
+                double gain = item?["gainDb"] is JsonValue g && g.TryGetValue(out double db) ? db : 0;
+                config.RecorderSettings[id] = new RecorderSettings(Text(item?["name"]), Text(item?["folder"]), gain);
+            }
+        }
 
         if (root["knownDevices"] is JsonArray devices)
         {

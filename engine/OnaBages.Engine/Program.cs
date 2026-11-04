@@ -106,14 +106,42 @@ foreach (var player in state.Players)
 }
 foreach (var recorder in state.Recorders)
 {
+    string lastLogged = "";
     recorder.StateChanged += r =>
     {
-        if (r.State == RecorderState.Error)
-            log.LogWarning("Enregistrador {Id}: error — {Message} (detall: {Detail})", r.Id, r.ErrorMessage, r.ErrorDetail ?? "cap");
-        else
-            log.LogInformation("Enregistrador {Id}: {State} {File}", r.Id, RecorderJson.State(r.State), r.FilePath ?? "");
+        // Al registre només hi va el canvi d'estat, de fitxer o d'error (no cada moviment del fader).
+        string summary = $"{r.State}|{r.FilePath}|{r.ErrorMessage}";
+        if (summary != lastLogged)
+        {
+            lastLogged = summary;
+            if (r.State == RecorderState.Error)
+                log.LogWarning("Enregistrador {Id}: error — {Message} (detall: {Detail})", r.Id, r.ErrorMessage, r.ErrorDetail ?? "cap");
+            else
+                log.LogInformation("Enregistrador {Id}: {State} {File}", r.Id, RecorderJson.State(r.State), r.FilePath ?? "");
+        }
         Broadcast(RecorderJson.StateEvent(r));
     };
+}
+
+// Enregistraments acabats: el pendent de cada enregistrador i els recents (D-036).
+// La llista es desa (com a molt cada 2 s) i es recupera en arrencar.
+var recordings = new RecordingList(isPending: path => state.Recorders.Any(r =>
+    r.State == RecorderState.Pending && string.Equals(r.FilePath, path, StringComparison.OrdinalIgnoreCase)));
+recordings.AddLoaded(RecentRecordingsFile.Read());
+// 1 = ha canviat: cal enviar-la a la interfície (a la revisió de 100 ms) i desar-la (a la de 2 s).
+int recordingsToSend = 0, recordingsToSave = 0;
+recordings.Changed += () =>
+{
+    Interlocked.Exchange(ref recordingsToSend, 1);
+    Interlocked.Exchange(ref recordingsToSave, 1);
+};
+foreach (var recorder in state.Recorders)
+    recorder.Finished += finished => recordings.Add(finished);
+
+void SaveRecordings()
+{
+    try { RecentRecordingsFile.Write(recordings.Items); }
+    catch (Exception ex) { log.LogWarning("No s'ha pogut desar la llista d'enregistraments recents: {Message}", ex.Message); }
 }
 
 // Configuració desada (config.json): dispositiu de cada element i ajustos de la interfície.
@@ -122,7 +150,7 @@ config.Warning += message => log.LogWarning("Configuració: {Message}", message)
 var hardware = new HardwareAssignments(state, config);
 hardware.Warning += message => log.LogWarning("Maquinari: {Message}", message);
 
-var router = new CommandRouter(state, () => app.Lifetime.StopApplication(), hardware: hardware, config: config);
+var router = new CommandRouter(state, () => app.Lifetime.StopApplication(), hardware: hardware, config: config, recordings: recordings);
 
 // Vigilant de dispositius: avisa els clients quan es connecta o desconnecta alguna cosa.
 var watcher = new DeviceWatcher();
@@ -159,6 +187,21 @@ catch (Exception ex)
 
 // Comparació del maquinari amb la configuració desada (especificació 5.6).
 LogHardwareReport(hardware.Start(devicesAtStart));
+
+// Nom, carpeta i volum de cada enregistrador (config.json; ja s'ha llegit en començar el maquinari).
+foreach (var recorder in state.Recorders)
+{
+    if (config.Read(c => c.RecorderSettings.GetValueOrDefault(recorder.Id)) is not { } settings) continue;
+    try
+    {
+        recorder.Configure(settings.Name ?? "", settings.Folder);
+        recorder.SetGain(settings.GainDb);
+    }
+    catch (RecorderCommandException ex)
+    {
+        log.LogWarning("Enregistrador {Id}: ajustos desats no vàlids: {Message}", recorder.Id, ex.Message);
+    }
+}
 
 app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TimeSpan.FromSeconds(15) });
 
@@ -205,6 +248,7 @@ app.Lifetime.ApplicationStopping.Register(() =>
             log.LogInformation("Enregistrador {Id}: tancant {File}", recorder.Id, recorder.FilePath);
         recorder.Dispose();
     }
+    SaveRecordings(); // inclou els que s'acaben de tancar
     foreach (var player in state.Players)
         player.Dispose();
     foreach (var player in state.Players)
@@ -227,6 +271,8 @@ _ = Task.Run(async () =>
                 if (playlistsToSave.TryRemove(player, out _))
                     SaveLastList(player);
             }
+            if (Interlocked.Exchange(ref recordingsToSave, 0) == 1)
+                SaveRecordings();
         }
     }
     catch (OperationCanceledException)
@@ -360,6 +406,9 @@ _ = Task.Run(async () =>
                 if (playlistsChanged.TryRemove(player, out _))
                     await hub.BroadcastAsync(PlaylistJson.ChangedEvent(player), stopping);
             }
+
+            if (Interlocked.Exchange(ref recordingsToSend, 0) == 1)
+                await hub.BroadcastAsync(RecordingJson.ChangedEvent(recordings), stopping);
         }
     }
     catch (OperationCanceledException)

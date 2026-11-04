@@ -3,7 +3,7 @@ using System.Text.Json.Nodes;
 
 namespace OnaBages.Audio;
 
-/// <summary>Estats de l'enregistrador (especificació, 8.3). Fase 1: sense Desar/Descartar/Editar.</summary>
+/// <summary>Estats de l'enregistrador (especificació, 8.3). Desar i Descartar: RecordingList (motor); Editar: fase 3.</summary>
 public enum RecorderState
 {
     /// <summary>Sense enregistrament en curs ni fitxer pendent.</summary>
@@ -17,6 +17,11 @@ public enum RecorderState
 
 /// <summary>Ordre que no es pot fer en l'estat actual. El missatge és per a l'operador.</summary>
 public sealed class RecorderCommandException(string message) : Exception(message);
+
+/// <summary>Un enregistrament acabat (vegeu <see cref="Recorder.Finished"/>).</summary>
+/// <param name="ClosedCleanly">El fitxer s'ha tancat bé. Si és false, queda el marcador .rec per recuperar-lo.</param>
+public sealed record FinishedRecording(
+    string RecorderId, string Path, DateTimeOffset StartedAt, TimeSpan Duration, long FileSize, bool ClosedCleanly);
 
 /// <summary>
 /// Un enregistrador: una entrada → un fitxer MP3 escrit directament (LAME, 320 kbps CBR, estèreo).
@@ -67,6 +72,14 @@ public sealed class Recorder : IDisposable
     private long _fileSize;
     private int _inputChannels;
     private bool _changed;
+    // Volum d'enregistrament (lineal). El llegeixen el fil de captura (mesurador) i el de codificació.
+    private volatile float _gain = 1f;
+
+    /// <summary>Volum d'enregistrament mínim: a partir d'aquí és silenci.</summary>
+    public const double MinGainDb = -60;
+
+    /// <summary>Volum d'enregistrament màxim (+12 dB, per a fonts que entren fluixes).</summary>
+    public const double MaxGainDb = 12;
 
     /// <param name="id">Identificador ("1", "2"...).</param>
     /// <param name="openInput">Obre una entrada per identificador de dispositiu. Per defecte, WASAPI.</param>
@@ -74,11 +87,37 @@ public sealed class Recorder : IDisposable
     {
         Id = id;
         _openInput = openInput ?? (deviceId => WasapiAudioInput.Open(deviceId));
+        Name = DefaultName;
     }
 
     public string Id { get; }
     public RecorderState State { get; private set; } = RecorderState.Idle;
     public string? DeviceId { get; private set; }
+
+    /// <summary>Nom de l'enregistrador (p. ex. «Programa»): surt al panell i al nom dels fitxers.</summary>
+    public string Name { get; private set; }
+
+    /// <summary>Carpeta de treball, on es creen els enregistraments.</summary>
+    public string Folder { get; private set; } = DefaultFolder;
+
+    public string DefaultName => $"Enregistrador {Id}";
+
+    /// <summary>Volum d'enregistrament en dB (de <see cref="MinGainDb"/> a <see cref="MaxGainDb"/>; per defecte 0).</summary>
+    public double GainDb { get; private set; }
+
+    /// <summary>
+    /// Queda poc espai: menys de l'equivalent a <see cref="LowDiskHours"/> hores d'enregistrament.
+    /// </summary>
+    public bool LowDiskSpace => FreeDiskBytes is { } free && free < (long)(BitrateKbps * 1000L / 8 * 3600 * LowDiskHours);
+
+    /// <summary>Hores d'enregistrament per sota de les quals s'avisa que queda poc espai.</summary>
+    public double LowDiskHours { get; set; } = 2;
+
+    /// <summary>
+    /// S'ha acabat un enregistrament (aturat, entrada perduda o motor que s'atura) i el fitxer és tancat.
+    /// Es dispara fora del bloqueig.
+    /// </summary>
+    public event Action<FinishedRecording>? Finished;
 
     /// <summary>Fitxer de l'enregistrament en curs o de l'últim.</summary>
     public string? FilePath { get; private set; }
@@ -110,7 +149,8 @@ public sealed class Recorder : IDisposable
         {
             try
             {
-                string? root = Path.GetPathRoot(FilePath ?? DefaultFolder);
+                // Mentre s'enregistra, el disc del fitxer; si no, el de la carpeta on anirà el següent.
+                string? root = Path.GetPathRoot(State == RecorderState.Recording && FilePath is not null ? FilePath : Folder);
                 return string.IsNullOrEmpty(root) ? null : new DriveInfo(root).AvailableFreeSpace;
             }
             catch
@@ -152,11 +192,51 @@ public sealed class Recorder : IDisposable
     }
 
     /// <summary>
-    /// Comença un enregistrament nou. Es pot fer des d'Inactiu, Pendent o Error
-    /// (l'enregistrament anterior es queda on és).
+    /// Canvia el nom i/o la carpeta de treball (els que no siguin null). Es pot fer en qualsevol
+    /// moment: s'aplica a partir del pròxim enregistrament. Un nom buit torna al de per defecte.
     /// </summary>
-    /// <param name="folder">Carpeta de treball. Per defecte, <see cref="DefaultFolder"/>.</param>
-    /// <param name="name">Nom per al fitxer (p. ex. «Programa»). Per defecte, «Enregistrador N».</param>
+    public void Configure(string? name = null, string? folder = null)
+    {
+        lock (_sync)
+        {
+            if (folder is not null)
+            {
+                if (!Path.IsPathFullyQualified(folder))
+                    throw new RecorderCommandException("La carpeta ha de ser una ruta completa (p. ex. D:\\Enregistraments).");
+                Folder = folder;
+                _changed = true;
+            }
+            if (name is not null)
+            {
+                Name = string.IsNullOrWhiteSpace(name) ? DefaultName : name.Trim();
+                _changed = true;
+            }
+        }
+        RaiseStateChanged();
+    }
+
+    /// <summary>
+    /// Volum d'enregistrament, en dB. Fora de marge, es queda al límit; al mínim és silenci.
+    /// S'aplica de seguida (amb una rampa curta, sense clics), també a mig enregistrament.
+    /// </summary>
+    public void SetGain(double db)
+    {
+        lock (_sync)
+        {
+            GainDb = Math.Round(Math.Clamp(db, MinGainDb, MaxGainDb), 1);
+            _gain = GainDb <= MinGainDb ? 0f : (float)Math.Pow(10, GainDb / 20);
+            _changed = true;
+        }
+        RaiseStateChanged();
+    }
+
+    /// <summary>
+    /// Comença un enregistrament nou a la carpeta de treball, amb el nom de l'enregistrador.
+    /// Es pot fer des d'Inactiu, Pendent o Error (l'enregistrament anterior es queda on és).
+    /// Mai no se sobreescriu cap fitxer.
+    /// </summary>
+    /// <param name="folder">Només per a aquest enregistrament. Per defecte, <see cref="Folder"/>.</param>
+    /// <param name="name">Només per a aquest enregistrament. Per defecte, <see cref="Name"/>.</param>
     public void Start(string? folder = null, string? name = null)
     {
         lock (_sync)
@@ -168,7 +248,7 @@ public sealed class Recorder : IDisposable
 
             ErrorMessage = null;
             ErrorDetail = null;
-            BeginRecording(folder ?? DefaultFolder, name ?? $"Enregistrador {Id}");
+            BeginRecording(folder ?? Folder, name ?? Name);
         }
         RaiseStateChanged();
     }
@@ -176,16 +256,39 @@ public sealed class Recorder : IDisposable
     /// <summary>Atura l'enregistrament, tanca el fitxer (vàlid) i passa a Pendent.</summary>
     public void Stop()
     {
+        FinishedRecording? finished;
         lock (_sync)
         {
             if (State != RecorderState.Recording)
                 throw new RecorderCommandException("No s'està enregistrant.");
 
             bool ok = FinishRecording();
+            finished = Snapshot(ok);
             if (ok)
                 SetState(RecorderState.Pending);
             else
                 Fail("No s'ha pogut tancar bé el fitxer. Es podrà recuperar en tornar a arrencar.", _encoderError?.Message);
+        }
+        RaiseFinished(finished);
+        RaiseStateChanged();
+    }
+
+    /// <summary>
+    /// L'enregistrament pendent ja s'ha desat o descartat: l'enregistrador torna a Inactiu.
+    /// Si no és el fitxer pendent (p. ex. ja se n'ha començat un altre), no fa res.
+    /// </summary>
+    public void Release(string path)
+    {
+        lock (_sync)
+        {
+            if (State != RecorderState.Pending || !string.Equals(FilePath, path, StringComparison.OrdinalIgnoreCase))
+                return;
+            // L'enregistrament ja és a la llista: l'enregistrador queda net, com si fos nou.
+            FilePath = null;
+            StartedAt = null;
+            Interlocked.Exchange(ref _framesCaptured, 0);
+            Interlocked.Exchange(ref _fileSize, 0);
+            SetState(RecorderState.Idle);
         }
         RaiseStateChanged();
     }
@@ -196,6 +299,7 @@ public sealed class Recorder : IDisposable
     /// </summary>
     public void Tick()
     {
+        FinishedRecording? finished = null;
         lock (_sync)
         {
             if (State != RecorderState.Recording)
@@ -218,6 +322,7 @@ public sealed class Recorder : IDisposable
             {
                 // Especificació 5.3: es tanca el fitxer de manera neta i s'avisa.
                 bool ok = FinishRecording();
+                finished = Snapshot(ok);
                 Fail(ok
                     ? "Entrada no disponible: s'ha desconnectat. L'enregistrament s'ha desat fins aquí; pots començar-ne un de nou."
                     : "Entrada no disponible i no s'ha pogut tancar bé el fitxer. Es podrà recuperar en tornar a arrencar.",
@@ -226,21 +331,26 @@ public sealed class Recorder : IDisposable
             else if (_encoderError is { } encoderError)
             {
                 FinishRecording();
+                finished = Snapshot(ok: false);
                 Fail("No es pot escriure el fitxer (disc ple o inaccessible). Es podrà recuperar en tornar a arrencar.",
                     encoderError.Message);
             }
         }
+        RaiseFinished(finished);
         RaiseStateChanged();
     }
 
     public void Dispose()
     {
+        FinishedRecording? finished = null;
         lock (_sync)
         {
             if (State == RecorderState.Recording)
-                FinishRecording();
+                finished = Snapshot(FinishRecording());
             CloseInput();
         }
+        // En aturar el motor: l'enregistrament queda a la llista de recents per a la propera vegada.
+        RaiseFinished(finished);
     }
 
     // -----------------------------------------------------------------------
@@ -341,7 +451,8 @@ public sealed class Recorder : IDisposable
     {
         // El mesurador funciona sempre, s'enregistri o no.
         int channels = _inputChannels;
-        if (!silent) Meter.AddInterleaved(samples, channels);
+        // El mesurador ja mostra el nivell amb el volum d'enregistrament aplicat (el que queda al fitxer).
+        if (!silent) Meter.AddInterleaved(samples, channels, _gain);
 
         var ring = _ring;
         if (ring is null) return; // no s'enregistra
@@ -376,6 +487,7 @@ public sealed class Recorder : IDisposable
         var input = new float[ChunkFrames * channels];
         var stereo = new float[ChunkFrames * 2];
         var sinceFlush = Stopwatch.StartNew();
+        float appliedGain = _gain;
         bool ok = false;
 
         try
@@ -387,6 +499,7 @@ public sealed class Recorder : IDisposable
                 {
                     int frames = read / channels;
                     ToStereo(input, frames, channels, stereo);
+                    appliedGain = ApplyGain(stereo, frames, appliedGain, _gain);
                     var mp3 = encoder.Encode(stereo, frames * 2);
                     file.Write(mp3);
                     Interlocked.Exchange(ref _fileSize, file.Position);
@@ -438,6 +551,27 @@ public sealed class Recorder : IDisposable
             stereo[i * 2] = left;
             stereo[i * 2 + 1] = channels == 1 ? left : input[i * channels + 1];
         }
+    }
+
+    /// <summary>
+    /// Aplica el volum d'enregistrament a un bloc estèreo. Si ha canviat, passa del valor
+    /// anterior al nou al llarg del bloc (rampa: sense clics). Els valors que passen de ±1
+    /// (amb guany positiu) es retallen: el mesurador ja ho mostra com a saturació.
+    /// Retorna el guany aplicat al final del bloc.
+    /// </summary>
+    private static float ApplyGain(float[] stereo, int frames, float from, float to)
+    {
+        if (from == 1f && to == 1f) return to;
+
+        float step = frames > 0 ? (to - from) / frames : 0;
+        float gain = from;
+        for (int i = 0; i < frames; i++)
+        {
+            gain += step;
+            stereo[i * 2] = Math.Clamp(stereo[i * 2] * gain, -1f, 1f);
+            stereo[i * 2 + 1] = Math.Clamp(stereo[i * 2 + 1] * gain, -1f, 1f);
+        }
+        return to;
     }
 
     /// <summary>
@@ -541,6 +675,15 @@ public sealed class Recorder : IDisposable
     private static void TryDelete(string path)
     {
         try { File.Delete(path); } catch { /* no és greu */ }
+    }
+
+    /// <summary>Dades de l'enregistrament que s'acaba de tancar (dins de _sync).</summary>
+    private FinishedRecording? Snapshot(bool ok) => FilePath is null ? null : new FinishedRecording(
+        Id, FilePath, StartedAt ?? DateTimeOffset.Now, Elapsed, FileSize, ClosedCleanly: ok);
+
+    private void RaiseFinished(FinishedRecording? finished)
+    {
+        if (finished is not null) Finished?.Invoke(finished);
     }
 
     private void Fail(string message, string? detail)

@@ -388,6 +388,7 @@ Enregistrar programes i fonts de manera tan senzilla i ràpida com mp3DirectCut:
 - Nom (per exemple, «Programa», «Línia 2»), que s'utilitza en el nom del fitxer.
 - Carpeta de treball.
 - Format: **MP3, 320 kbps, CBR, estèreo**. És el valor per defecte; altres bitrates es poden configurar.
+- **Volum d'enregistrament**: de −∞ a +12 dB, per defecte 0 dB. S'aplica abans del mesurador i del fitxer (D-036).
 
 Nombre d'enregistradors configurable (inicialment fins a 4).
 
@@ -400,7 +401,7 @@ Nombre d'enregistradors configurable (inicialment fins a 4).
                     [Nou enregistrament] (des de Pendent)
 ```
 
-- **Enregistrar:** comença immediatament, sense diàlegs. El fitxer es crea a la carpeta de treball amb el nom `Nom_AAAA-MM-DD_HH-MM-SS.mp3`.
+- **Enregistrar:** comença immediatament, sense diàlegs, sempre en un **fitxer nou** (com a mp3DirectCut). El fitxer es crea a la carpeta de treball amb el nom `Nom_AAAA-MM-DD_HH-MM-SS.mp3`; si ja existeix, s'hi afegeix `_2`, `_3`... Mai no se sobreescriu res. Mentre s'enregistra, no se'n pot començar un altre al mateix enregistrador.
 - **Aturar:** demana confirmació amb una segona pulsació o mantenint premut, per evitar aturades accidentals. El fitxer es tanca i l'enregistrador passa a **Pendent**.
 - **Pendent** mostra el fitxer acabat amb tres accions:
   - **Editar:** l'obre a l'editor (fase 3).
@@ -711,6 +712,7 @@ Candidates: botonera de talls (cartwall), detector de silenci, punts cue d'inici
 - Mapa de dreceres de teclat per defecte.
 - Dispositiu de preescolta de cada estudi.
 - Convenció de noms i carpetes de destinació dels enregistraments.
+- **Còpia automàtica en aturar** (petició del 4 de novembre de 2026; sense fase assignada): poder indicar, per a un enregistrament, una ruta i un nom de fitxer; en prémer Aturar, se'n desa una còpia allà. L'original es queda sempre a la carpeta de treball.
 - Llicència del codi de l'aplicació (codi obert o només binari gratuït).
 - Si l'Audigy es manté o se substitueix, segons les proves de la fase 1.
 

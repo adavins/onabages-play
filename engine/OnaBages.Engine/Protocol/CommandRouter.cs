@@ -16,6 +16,7 @@ public sealed class CommandRouter
     private readonly Func<IReadOnlyList<AudioDevice>> _listDevices;
     private readonly HardwareAssignments? _hardware;
     private readonly ConfigStore? _config;
+    private readonly RecordingList _recordings;
 
     /// <param name="state">Estat del motor.</param>
     /// <param name="requestShutdown">Acció que atura el motor (s'executa poc després de respondre).</param>
@@ -25,18 +26,21 @@ public sealed class CommandRouter
     /// </param>
     /// <param name="hardware">Assignacions desades (config.json). Les proves que no en necessiten hi poden passar null.</param>
     /// <param name="config">Configuració (ajustos de la interfície). Igual.</param>
+    /// <param name="recordings">Enregistraments acabats (pendents i recents). Per defecte, una llista buida.</param>
     public CommandRouter(
         EngineState state,
         Action requestShutdown,
         Func<IReadOnlyList<AudioDevice>>? listDevices = null,
         HardwareAssignments? hardware = null,
-        ConfigStore? config = null)
+        ConfigStore? config = null,
+        RecordingList? recordings = null)
     {
         _state = state;
         _requestShutdown = requestShutdown;
         _listDevices = listDevices ?? DeviceList.GetAll;
         _hardware = hardware;
         _config = config;
+        _recordings = recordings ?? new RecordingList();
     }
 
     public JsonObject Handle(string text)
@@ -101,6 +105,11 @@ public sealed class CommandRouter
                 "recorder.setDevice" => RecorderSetDevice(msg),
                 "recorder.start" => RecorderStart(msg),
                 "recorder.stop" => RecorderCommand(msg, r => r.Stop()),
+                "recorder.configure" => RecorderConfigure(msg),
+                "recorder.setGain" => RecorderSetGain(msg),
+                "recording.save" => RecordingSave(msg),
+                "recording.discard" => RecordingDiscard(msg),
+                "recording.remove" => RecordingRemove(msg),
                 _ => null,
             };
 
@@ -116,7 +125,7 @@ public sealed class CommandRouter
         {
             return Messages.Error(id, "bad_params", ex.Message);
         }
-        catch (Exception ex) when (ex is PlayerCommandException or RecorderCommandException)
+        catch (Exception ex) when (ex is PlayerCommandException or RecorderCommandException or RecordingCommandException)
         {
             return Messages.Error(id, "bad_state", ex.Message);
         }
@@ -157,6 +166,7 @@ public sealed class CommandRouter
         ["engine"] = _state.ToJson(),
         ["players"] = PlayerJson.All(_state.Players),
         ["recorders"] = RecorderJson.All(_state.Recorders),
+        ["recordings"] = RecordingJson.All(_recordings),
         ["playlists"] = PlaylistJson.All(_state.Players),
         ["hardware"] = HardwareJson.Report(_hardware?.Report ?? HardwareReport.Empty),
     };
@@ -490,6 +500,88 @@ public sealed class CommandRouter
 
         recorder.Start(string.IsNullOrWhiteSpace(folder) ? null : folder, string.IsNullOrWhiteSpace(name) ? null : name);
         return RecorderResult(recorder);
+    }
+
+    /// <summary>Opcionals "name" (buit = el de per defecte) i "folder" (ruta completa). S'apliquen al pròxim enregistrament.</summary>
+    private JsonObject RecorderConfigure(JsonObject msg)
+    {
+        var recorder = GetRecorder(msg);
+        string? name = ReadString(msg["name"]);
+        string? folder = ReadString(msg["folder"]);
+        if (name is null && folder is null)
+            throw new BadParamsException("Cal enviar 'name' o 'folder'.");
+        if (folder is not null && !Path.IsPathFullyQualified(folder))
+            throw new BadParamsException("'folder' ha de ser una ruta completa (p. ex. D:\\Enregistraments).");
+
+        recorder.Configure(name, folder);
+        SaveRecorderSettings(recorder);
+        return new JsonObject { ["recorder"] = RecorderJson.Recorder(recorder) };
+    }
+
+    /// <summary>Paràmetre "db": volum d'enregistrament de −60 (silenci) a +12. Fora de marge, es queda al límit.</summary>
+    private JsonObject RecorderSetGain(JsonObject msg)
+    {
+        var recorder = GetRecorder(msg);
+        if (msg["db"] is not JsonValue v || !v.TryGetValue(out double db) || double.IsNaN(db))
+            throw new BadParamsException("'db' ha de ser un nombre (de −60 a +12).");
+
+        recorder.SetGain(db);
+        SaveRecorderSettings(recorder);
+        return new JsonObject { ["recorder"] = RecorderJson.Recorder(recorder) };
+    }
+
+    /// <summary>El nom, la carpeta i el volum de cada enregistrador es desen a config.json.</summary>
+    private void SaveRecorderSettings(Recorder recorder) =>
+        _config?.Update(c => c.RecorderSettings[recorder.Id] = new RecorderSettings(
+            recorder.Name == recorder.DefaultName ? null : recorder.Name,
+            recorder.Folder == Recorder.DefaultFolder ? null : recorder.Folder,
+            recorder.GainDb));
+
+    // -----------------------------------------------------------------------
+    // Enregistraments acabats: pendents i recents (D-036)
+    // -----------------------------------------------------------------------
+
+    private RecordingItem GetRecording(JsonObject msg)
+    {
+        string id = RequireString(msg, "recordingId");
+        return _recordings.Find(id) ?? throw new BadParamsException($"No hi ha cap enregistrament '{id}' a la llista.");
+    }
+
+    /// <summary>"recordingId" i "path" (ruta completa on desar-lo). Si era el pendent d'un enregistrador, aquest torna a Inactiu.</summary>
+    private JsonObject RecordingSave(JsonObject msg)
+    {
+        var item = GetRecording(msg);
+        string path = RequireString(msg, "path");
+        if (!Path.IsPathFullyQualified(path))
+            throw new BadParamsException("'path' ha de ser una ruta completa.");
+
+        string target = _recordings.Save(item.Id, path);
+        ReleasePending(item.Path);
+        return new JsonObject { ["path"] = target, ["recording"] = RecordingJson.Item(_recordings.Find(item.Id) ?? item) };
+    }
+
+    /// <summary>"recordingId": envia el fitxer a la paperera i el treu de la llista.</summary>
+    private JsonObject RecordingDiscard(JsonObject msg)
+    {
+        var item = GetRecording(msg);
+        _recordings.Discard(item.Id);
+        ReleasePending(item.Path);
+        return new JsonObject { ["discarded"] = item.Id };
+    }
+
+    /// <summary>"recordingId": el treu de la llista de recents (el fitxer no es toca).</summary>
+    private JsonObject RecordingRemove(JsonObject msg)
+    {
+        var item = GetRecording(msg);
+        _recordings.Remove(item.Id);
+        return new JsonObject { ["removed"] = item.Id };
+    }
+
+    /// <summary>L'enregistrador que tenia aquest fitxer com a pendent torna a Inactiu.</summary>
+    private void ReleasePending(string path)
+    {
+        foreach (var recorder in _state.Recorders)
+            recorder.Release(path);
     }
 
     private JsonObject RecorderCommand(JsonObject msg, Action<Recorder> action)

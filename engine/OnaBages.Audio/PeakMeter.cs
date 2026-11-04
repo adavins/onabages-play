@@ -26,7 +26,8 @@ public sealed class PeakMeter
     /// </summary>
     /// <param name="samples">Mostres intercalades.</param>
     /// <param name="channels">Canals del bloc. Es mesuren els dos primers (un sol canal compta per als dos).</param>
-    public void AddInterleaved(ReadOnlySpan<float> samples, int channels)
+    /// <param name="gain">Guany lineal que s'hi aplicarà després (p. ex. el volum d'enregistrament).</param>
+    public void AddInterleaved(ReadOnlySpan<float> samples, int channels, float gain = 1f)
     {
         float left = 0, right = 0;
         int second = channels > 1 ? 1 : 0;
@@ -37,7 +38,7 @@ public sealed class PeakMeter
             if (l > left) left = l;
             if (r > right) right = r;
         }
-        Add(left, right);
+        Add(left * gain, right * gain);
     }
 
     /// <summary>Retorna el pic des de l'última crida i el torna a posar a zero.</summary>

@@ -5,6 +5,9 @@ namespace OnaBages.Engine.Data;
 /// <summary>Dispositiu desat a la configuració: identificador de Windows i nom (per si l'identificador canvia).</summary>
 public sealed record DeviceRef(string Id, string Name);
 
+/// <summary>Ajustos d'un enregistrador. Null = el valor per defecte.</summary>
+public sealed record RecorderSettings(string? Name, string? Folder, double GainDb);
+
 /// <summary>
 /// Contingut de <c>config.json</c>. Només el llegeix i l'escriu <see cref="ConfigRepository"/>.
 /// </summary>
@@ -15,6 +18,9 @@ public sealed class EngineConfig
 
     /// <summary>Entrada que vol cada enregistrador (clau: identificador de l'enregistrador).</summary>
     public Dictionary<string, DeviceRef> Recorders { get; } = [];
+
+    /// <summary>Nom, carpeta de treball i volum de cada enregistrador (clau: identificador).</summary>
+    public Dictionary<string, RecorderSettings> RecorderSettings { get; } = [];
 
     /// <summary>Dispositius que hi havia l'última vegada: serveix per detectar els nous i els formats canviats.</summary>
     public List<AudioDevice> KnownDevices { get; set; } = [];

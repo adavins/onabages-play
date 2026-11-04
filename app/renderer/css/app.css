@@ -781,3 +781,34 @@ body.engine-offline .layout {
   color: rgb(255 255 255 / 0.06);
   cursor: not-allowed;
 }
+
+/* Peu de la llista: botons d'obrir i desar a l'esquerra, resum a la dreta. */
+.pl-footer {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.pl-footer:empty { display: flex; }
+
+.pl-action {
+  padding: 0 0.3rem;
+  font-size: 0.75rem;
+  color: var(--bs-secondary-color);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.pl-action:hover { color: var(--bs-body-color); }
+
+/* Panell estret: als botons del peu només s'hi veu la icona (el text surt en passar-hi el ratolí). */
+@container (max-width: 26rem) {
+  .pl-action-label { display: none; }
+}
+
+.pl-summary {
+  margin-left: auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

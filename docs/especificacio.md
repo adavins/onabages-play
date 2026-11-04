@@ -324,7 +324,7 @@ Definida pel desenvolupador en provar la fase 2 (D-031): es conserva el que func
 - **Colors:** la que sona, en verd; l'última reproduïda (quan s'atura), en blau; la seleccionada, una mica més clara o més fosca.
 - **Menú del botó dret:** informació (finestra amb les metadades) i «Mostrar a l'Explorador».
 - **Seguretat:** en afegir una pista, el motor la comprova (l'obre i en llegeix el principi). Si és malmesa o el format no és compatible, es mostra igualment però amb un fons diferent i una icona ⚠ que diu el motiu. **Si una pista no té cap avís, sonarà.** Cada 30 s es comprova en segon pla que els fitxers encara existeixen.
-- Desar i carregar llistes (format JSON propi; importació de M3U): pas 5.
+- **Desar i obrir llistes** en format propi `.obpl` (JSON, amb la ruta completa i la relativa de cada pista, i les marques de bucle i avanç automàtic) i **importar M3U/M3U8**. Una llista arrossegada a sobre de la llista hi insereix les seves pistes. Una **carpeta** arrossegada hi insereix tots els seus fitxers d'àudio, també els de les subcarpetes, en l'ordre de l'Explorador. L'última llista de cada reproductor es desa sola i es recupera en arrencar (D-035).
 
 Formats: MP3, WAV, AAC/M4A, FLAC, WMA (via Media Foundation) i OGG (via complement).
 

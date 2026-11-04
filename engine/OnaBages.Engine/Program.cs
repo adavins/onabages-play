@@ -49,8 +49,35 @@ var hub = new ClientHub(state, log);
 // Llistes que han canviat: s'envien agrupades a la revisió següent (com a molt 10 per segon),
 // encara que se n'hagin afegit cent pistes de cop.
 var playlistsChanged = new System.Collections.Concurrent.ConcurrentDictionary<Player, bool>();
+// L'última llista de cada reproductor es desa sola (com a molt cada 2 s) i es recupera en arrencar (D-035).
+var playlistsToSave = new System.Collections.Concurrent.ConcurrentDictionary<Player, bool>();
 foreach (var player in state.Players)
+{
     player.Playlist.Changed += () => playlistsChanged[player] = true;
+    player.Playlist.Changed += () => playlistsToSave[player] = true;
+}
+
+void SaveLastList(Player player)
+{
+    try { PlaylistFiles.Write(PlaylistFiles.LastListPath(player.Id), player.Playlist.Items); }
+    catch (PlaylistFileException ex) { log.LogWarning("Reproductor {Id}: no s'ha pogut desar la llista: {Message}", player.Id, ex.Message); }
+}
+
+foreach (var player in state.Players)
+{
+    string lastList = PlaylistFiles.LastListPath(player.Id);
+    if (!File.Exists(lastList)) continue;
+    try
+    {
+        var entries = PlaylistFiles.Read(lastList);
+        player.Playlist.AddEntries(entries);
+        log.LogInformation("Reproductor {Id}: recuperada la llista ({Count} pistes)", player.Id, entries.Count);
+    }
+    catch (PlaylistFileException ex)
+    {
+        log.LogWarning("Reproductor {Id}: no s'ha pogut recuperar la llista: {Message}", player.Id, ex.Message);
+    }
+}
 
 // Envia un esdeveniment a tots els clients sense esperar (no pot bloquejar qui el crida).
 void Broadcast(System.Text.Json.Nodes.JsonObject ev) => _ = Task.Run(async () =>
@@ -180,8 +207,32 @@ app.Lifetime.ApplicationStopping.Register(() =>
     }
     foreach (var player in state.Players)
         player.Dispose();
+    foreach (var player in state.Players)
+        SaveLastList(player); // l'última versió de cada llista, per recuperar-la en tornar a arrencar
     analyzer.Dispose();
     RuntimeFile.DeleteIfOwned();
+});
+
+// Cada 2 s, desa les llistes que han canviat (per recuperar-les si el motor es tanca o cau).
+_ = Task.Run(async () =>
+{
+    var stopping = app.Lifetime.ApplicationStopping;
+    using var timer = new PeriodicTimer(TimeSpan.FromSeconds(2));
+    try
+    {
+        while (await timer.WaitForNextTickAsync(stopping))
+        {
+            foreach (var player in playlistsToSave.Keys)
+            {
+                if (playlistsToSave.TryRemove(player, out _))
+                    SaveLastList(player);
+            }
+        }
+    }
+    catch (OperationCanceledException)
+    {
+        // El motor s'està aturant (en aturar-se, les llistes es desen igualment).
+    }
 });
 
 // Cada 30 s, comprova que els fitxers de les llistes encara existeixen (només si hi són, sense obrir-los).

@@ -59,6 +59,7 @@ Tots els missatges són objectes JSON amb el camp `"v": 1`.
 | `player_error` | L'ordre s'ha fet, però el reproductor ha quedat en estat `error` (dispositiu no disponible, fitxer il·legible). El missatge n'explica el motiu |
 | `recorder_error` | L'ordre s'ha fet, però l'enregistrador ha quedat en estat `error` (entrada no disponible, carpeta sense permís...). El missatge n'explica el motiu |
 | `recording_active` | `engine.shutdown` sense `force`, amb enregistraments en curs. No s'atura res |
+| `file_error` | No s'ha pogut llegir o escriure un fitxer de llista (no existeix, és malmès, no hi ha permís...). El missatge n'explica el motiu |
 | `unknown_command` | L'ordre no existeix |
 | `internal` | Error inesperat del motor (el motor continua funcionant) |
 
@@ -196,12 +197,14 @@ Cada reproductor té una llista. Viu al motor: la interfície la mostra i hi env
 | Ordre | Paràmetres | Resultat |
 |---|---|---|
 | `playlist.get` | `player` | `{ playlist }` |
-| `playlist.add` | `player`, `paths` (llista de rutes completes); opcional `beforeId` (s'insereixen davant d'aquesta pista; per defecte, al final) | `{ ids }`: els `itemId` nous, en ordre. Cada pista es comprova en segon pla (`status: "analyzing"` → `ok` o `error`) |
+| `playlist.add` | `player`, `paths` (llista de rutes completes); opcional `beforeId` (s'insereixen davant d'aquesta pista; per defecte, al final) | `{ ids }`: els `itemId` nous. Si un dels fitxers és una llista (`.obpl`, `.m3u`, `.m3u8`), s'hi afegeixen les seves pistes (p. ex. en arrossegar una llista a sobre), en ordre. Si és una carpeta, s'hi afegeixen els seus fitxers d'àudio i els de les subcarpetes, en l'ordre de l'Explorador (per nom, «2» abans de «10»; primer els fitxers i després cada subcarpeta); se salten els ocults i les llistes que hi hagi a dins. Cada pista es comprova en segon pla (`status: "analyzing"` → `ok` o `error`) |
 | `playlist.move` | `player`, `ids` (es mouen en l'ordre de la llista); opcional `beforeId` (per defecte, al final). Es pot moure la pista que sona | `{ playlist }` |
 | `playlist.remove` | `player`, `ids`. Si s'esborra la pista que sona, acaba igualment | `{ playlist }` |
 | `playlist.setFlags` | `player`, `itemId`; opcionals `loop`, `autoNext`, `cue` (`true`/`false`; els que no s'envien no canvien). Bucle i avanç automàtic no poden anar junts: activar `loop` apaga `autoNext`, i `autoNext: true` en una pista amb bucle dona `bad_state` (D-034) | `{ playlist }` |
 | `playlist.duplicate` | `player`, `ids`. Cada pista es duplica just a sota de l'original (amb les marques de bucle i avanç automàtic; el cue no) | `{ ids }`: les còpies |
 | `playlist.transfer` | `player` (origen), `ids`, `toPlayer` (destí; pot ser el mateix); opcionals `beforeId` (de la llista de destí; per defecte, al final) i `copy` (`true`: copia; per defecte es **mou**). Conserva bucle, avanç automàtic i el resultat de la comprovació. És el que fa arrossegar pistes d'una llista a una altra (amb Ctrl, copiar) | `{ ids }`: les pistes a la llista de destí |
+| `playlist.load` | `player`, `path` (ruta completa d'un `.obpl`, `.m3u` o `.m3u8`); opcional `replace` (per defecte `true`: substitueix la llista; `false`: afegeix al final). La pista que sona continua sonant | `{ ids, missing }`: les pistes noves i quantes no existeixen |
+| `playlist.save` | `player`, `path` (ruta completa; si no acaba en `.obpl`, s'hi afegeix) | `{ path, count }` |
 | `track.info` | `path` | `{ info: { path, fileSize, duration, format, title, artist, album, year, genre, comment } }` (metadades amb TagLib#; els camps que no hi són, `null`) |
 
 Objecte `playlist` (també a `state.get` → `playlists` i a l'esdeveniment `playlist.changed`):

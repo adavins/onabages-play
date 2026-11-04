@@ -31,6 +31,9 @@ public sealed record PlaylistItem(
     bool Loop,
     bool AutoNext);
 
+/// <summary>Una pista per afegir a una llista: el fitxer i les seves marques (p. ex. llegida d'una llista desada).</summary>
+public sealed record PlaylistEntry(string Path, bool Loop = false, bool AutoNext = false);
+
 /// <summary>
 /// Llista de reproducció d'un reproductor (especificació 6.3 i 6.4, D-031). Només dades i regles: no fa so.
 ///
@@ -80,21 +83,27 @@ public sealed class Playlist
     /// Afegeix fitxers abans de la pista <paramref name="beforeId"/> (o al final, si és null).
     /// Cada pista es comprova en segon pla. Retorna els identificadors nous, en ordre.
     /// </summary>
-    public IReadOnlyList<string> Add(IEnumerable<string> paths, string? beforeId = null)
+    public IReadOnlyList<string> Add(IEnumerable<string> paths, string? beforeId = null) =>
+        AddEntries(paths.Select(p => new PlaylistEntry(p)), beforeId);
+
+    /// <summary>
+    /// Com <see cref="Add"/>, però amb les marques de cada pista (p. ex. d'una llista desada).
+    /// </summary>
+    public IReadOnlyList<string> AddEntries(IEnumerable<PlaylistEntry> entries, string? beforeId = null)
     {
         var added = new List<PlaylistItem>();
         lock (_sync)
         {
             int index = IndexOrEnd(beforeId);
-            foreach (string path in paths)
+            foreach (var entry in entries)
             {
                 var item = new PlaylistItem(
                     Id: $"t{++_nextId}",
-                    Path: path,
-                    Name: System.IO.Path.GetFileNameWithoutExtension(path),
+                    Path: entry.Path,
+                    Name: System.IO.Path.GetFileNameWithoutExtension(entry.Path),
                     Duration: null, Format: null,
                     Status: TrackStatus.Analyzing, Problem: null,
-                    Loop: false, AutoNext: false);
+                    Loop: entry.Loop, AutoNext: entry.AutoNext && !entry.Loop);
                 _items.Insert(index++, item);
                 added.Add(item);
             }

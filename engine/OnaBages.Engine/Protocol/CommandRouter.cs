@@ -95,6 +95,8 @@ public sealed class CommandRouter
                 "playlist.setFlags" => PlaylistSetFlags(msg),
                 "playlist.duplicate" => PlaylistDuplicate(msg),
                 "playlist.transfer" => PlaylistTransfer(msg),
+                "playlist.load" => PlaylistLoad(msg),
+                "playlist.save" => PlaylistSave(msg),
                 "track.info" => TrackInfoGet(msg),
                 "recorder.setDevice" => RecorderSetDevice(msg),
                 "recorder.start" => RecorderStart(msg),
@@ -105,6 +107,10 @@ public sealed class CommandRouter
             return result is null
                 ? Messages.Error(id, "unknown_command", $"Ordre desconeguda: {cmd}")
                 : Messages.Ok(id, result);
+        }
+        catch (PlaylistFileException ex)
+        {
+            return Messages.Error(id, "file_error", ex.Message);
         }
         catch (BadParamsException ex)
         {
@@ -255,7 +261,8 @@ public sealed class CommandRouter
         if (paths.Any(p => !Path.IsPathFullyQualified(p)))
             throw new BadParamsException("Cada element de 'paths' ha de ser una ruta completa.");
 
-        var ids = player.Playlist.Add(paths, ExistingItem(player, ReadString(msg["beforeId"])));
+        // Si hi ha llistes (.obpl, .m3u) o carpetes, s'hi afegeixen les seves pistes (D-035).
+        var ids = player.Playlist.AddEntries(ExpandPlaylists(paths), ExistingItem(player, ReadString(msg["beforeId"])));
         return new JsonObject { ["ids"] = new JsonArray(ids.Select(id => (JsonNode)id).ToArray()) };
     }
 
@@ -284,6 +291,61 @@ public sealed class CommandRouter
         string id = ExistingItem(player, RequireString(msg, "itemId"))!;
         player.Playlist.SetFlags(id, ReadBool(msg["loop"]), ReadBool(msg["autoNext"]), ReadBool(msg["cue"]));
         return new JsonObject { ["playlist"] = PlaylistJson.Playlist(player) };
+    }
+
+    /// <summary>
+    /// Obre una llista desada (.obpl) o un M3U: "path"; "replace" (per defecte true) substitueix
+    /// la llista actual; si és false, s'afegeix al final. La pista que sona continua sonant.
+    /// </summary>
+    private JsonObject PlaylistLoad(JsonObject msg)
+    {
+        var player = GetPlayer(msg);
+        string path = RequireString(msg, "path");
+        if (!Path.IsPathFullyQualified(path))
+            throw new BadParamsException("'path' ha de ser una ruta completa.");
+
+        var entries = PlaylistFiles.Read(path);
+        bool replace = ReadBool(msg["replace"]) ?? true;
+        if (replace)
+            player.Playlist.Remove(player.Playlist.Items.Select(i => i.Id).ToList());
+        var ids = player.Playlist.AddEntries(entries);
+
+        return new JsonObject
+        {
+            ["ids"] = new JsonArray(ids.Select(id => (JsonNode)id).ToArray()),
+            ["missing"] = entries.Count(e => !File.Exists(e.Path)),
+        };
+    }
+
+    /// <summary>Desa la llista d'un reproductor en format .obpl: "path" (ruta completa; s'hi afegeix .obpl si no en té).</summary>
+    private JsonObject PlaylistSave(JsonObject msg)
+    {
+        var player = GetPlayer(msg);
+        string path = RequireString(msg, "path");
+        if (!Path.IsPathFullyQualified(path))
+            throw new BadParamsException("'path' ha de ser una ruta completa.");
+        if (!path.EndsWith(PlaylistFiles.Extension, StringComparison.OrdinalIgnoreCase))
+            path += PlaylistFiles.Extension;
+
+        PlaylistFiles.Write(path, player.Playlist.Items);
+        return new JsonObject { ["path"] = path, ["count"] = player.Playlist.Items.Count };
+    }
+
+    /// <summary>
+    /// Fitxers d'àudio tal qual; les llistes (.obpl, .m3u), substituïdes per les seves pistes;
+    /// les carpetes, pels seus fitxers d'àudio (també els de les subcarpetes).
+    /// </summary>
+    private static List<PlaylistEntry> ExpandPlaylists(IEnumerable<string> paths)
+    {
+        var entries = new List<PlaylistEntry>();
+        foreach (string path in paths)
+        {
+            if (Directory.Exists(path))
+                entries.AddRange(PlaylistFiles.AudioFilesInFolder(path).Select(f => new PlaylistEntry(f)));
+            else if (PlaylistFiles.IsPlaylistFile(path)) entries.AddRange(PlaylistFiles.Read(path));
+            else entries.Add(new PlaylistEntry(path));
+        }
+        return entries;
     }
 
     /// <summary>"ids": cada pista es duplica just a sota de l'original.</summary>

@@ -196,6 +196,7 @@ ipcMain.handle('engine:ensure', async () => {
 
 /** Formats que el motor pot llegir (especificació 6.3). */
 const AUDIO_EXTENSIONS = ['mp3', 'wav', 'm4a', 'aac', 'flac', 'wma', 'ogg'];
+const PLAYLIST_EXTENSIONS = ['obpl', 'm3u', 'm3u8'];
 let lastAudioFolder = undefined;
 
 /** Diàleg per triar fitxers d'àudio (un o diversos). Recorda l'última carpeta mentre l'aplicació és oberta. */
@@ -207,6 +208,7 @@ ipcMain.handle('dialog:open-audio', async () => {
     properties: ['openFile', 'multiSelections'],
     filters: [
       { name: 'Àudio', extensions: AUDIO_EXTENSIONS },
+      { name: 'Llistes (s\'hi afegeixen les seves pistes)', extensions: PLAYLIST_EXTENSIONS },
       { name: 'Tots els fitxers', extensions: ['*'] },
     ],
   });
@@ -230,4 +232,43 @@ ipcMain.on('app:close-confirmed', () => {
 /** Obre l'Explorador de Windows amb el fitxer seleccionat (menú contextual de la llista). */
 ipcMain.handle('shell:show-in-folder', (_event, filePath) => {
   if (typeof filePath === 'string' && path.isAbsolute(filePath)) shell.showItemInFolder(filePath);
+});
+
+/** Carpeta per defecte de les llistes: Documents\Ona Bages Play\Llistes (es crea si no hi és). */
+function playlistsFolder() {
+  const folder = path.join(app.getPath('documents'), 'Ona Bages Play', 'Llistes');
+  try { fs.mkdirSync(folder, { recursive: true }); } catch { /* si no es pot, el diàleg s'obrirà en una altra carpeta */ }
+  return folder;
+}
+let lastPlaylistFolder = undefined;
+
+/** Diàleg per obrir una llista (.obpl, .m3u, .m3u8). Retorna la ruta, o null. */
+ipcMain.handle('dialog:open-playlist', async () => {
+  if (!mainWindow) return null;
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Obrir una llista',
+    defaultPath: lastPlaylistFolder ?? playlistsFolder(),
+    properties: ['openFile'],
+    filters: [
+      { name: 'Llistes', extensions: PLAYLIST_EXTENSIONS },
+      { name: 'Tots els fitxers', extensions: ['*'] },
+    ],
+  });
+  if (result.canceled || result.filePaths.length === 0) return null;
+  lastPlaylistFolder = path.dirname(result.filePaths[0]);
+  return result.filePaths[0];
+});
+
+/** Diàleg per desar una llista (.obpl). Retorna la ruta, o null. */
+ipcMain.handle('dialog:save-playlist', async (_event, suggestedName) => {
+  if (!mainWindow) return null;
+  const name = typeof suggestedName === 'string' && suggestedName ? suggestedName : 'Llista';
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: 'Desar la llista',
+    defaultPath: path.join(lastPlaylistFolder ?? playlistsFolder(), `${name}.obpl`),
+    filters: [{ name: 'Llistes d\'Ona Bages Play', extensions: ['obpl'] }],
+  });
+  if (result.canceled || !result.filePath) return null;
+  lastPlaylistFolder = path.dirname(result.filePath);
+  return result.filePath;
 });

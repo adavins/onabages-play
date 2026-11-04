@@ -13,7 +13,7 @@
 
 import { escapeHtml, formatDuration } from './format.js';
 import { showContextMenu } from './context-menu.js';
-import { showInfo } from './dialogs.js';
+import { choose, showInfo } from './dialogs.js';
 
 /** @typedef {(cmd: string, params?: object) => Promise<any>} Request */
 
@@ -56,9 +56,23 @@ export class PlaylistView {
     this.element.className = 'playlist';
     this.element.innerHTML = `
       <div class="pl-rows" tabindex="0" aria-label="Llista de reproducció"></div>
-      <div class="pl-footer"></div>`;
+      <div class="pl-footer">
+        <button class="btn btn-sm btn-link pl-action js-open-list" type="button" title="Obrir una llista desada (.obpl) o un M3U">
+          <i class="bi bi-folder2-open"></i><span class="pl-action-label"> Obrir llista</span>
+        </button>
+        <button class="btn btn-sm btn-link pl-action js-save-list" type="button" title="Desar aquesta llista">
+          <i class="bi bi-save"></i><span class="pl-action-label"> Desar llista</span>
+        </button>
+        <button class="btn btn-sm btn-link pl-action js-clear-list" type="button" title="Treure totes les pistes de la llista">
+          <i class="bi bi-trash3"></i><span class="pl-action-label"> Netejar llista</span>
+        </button>
+        <span class="pl-summary"></span>
+      </div>`;
     this.#rows = /** @type {HTMLElement} */ (this.element.querySelector('.pl-rows'));
-    this.#footer = /** @type {HTMLElement} */ (this.element.querySelector('.pl-footer'));
+    this.#footer = /** @type {HTMLElement} */ (this.element.querySelector('.pl-summary'));
+    /** @type {HTMLElement} */ (this.element.querySelector('.js-open-list')).addEventListener('click', () => this.#openList());
+    /** @type {HTMLElement} */ (this.element.querySelector('.js-save-list')).addEventListener('click', () => this.#saveList());
+    /** @type {HTMLElement} */ (this.element.querySelector('.js-clear-list')).addEventListener('click', () => this.#clearList());
 
     this.#rows.addEventListener('click', (e) => this.#onClick(/** @type {MouseEvent} */ (e)));
     this.#rows.addEventListener('dblclick', (e) => this.#onDoubleClick(/** @type {MouseEvent} */ (e)));
@@ -457,6 +471,75 @@ export class PlaylistView {
       marked.classList.remove('drop-before', 'drop-after');
     this.#rows.classList.toggle('drop-end', !!position && !position.row);
     if (position?.row) position.row.classList.add(position.after ? 'drop-after' : 'drop-before');
+  }
+
+  // -------------------------------------------------------------------------
+  // Llistes desades (D-035)
+  // -------------------------------------------------------------------------
+
+  /** Obrir una llista: si l'actual no és buida, es pregunta si se substitueix o s'hi afegeix. */
+  async #openList() {
+    const path = await bridge?.openPlaylistFile();
+    if (!path) return;
+
+    let replace = true;
+    if (this.#playlist.items.length > 0) {
+      const choice = await choose({
+        title: 'Obrir una llista',
+        icon: 'bi-folder2-open',
+        message: `La llista del Reproductor ${this.#playerId} no és buida.\n\nQuè vols fer amb la llista nova?` +
+          (this.#player.state === 'playing' ? '\n\nLa pista que sona continuarà sonant.' : ''),
+        buttons: [
+          { label: 'Cancel·lar', value: 'cancel' },
+          { label: 'Afegir-la al final', value: 'append', style: 'secondary', icon: 'bi-plus-lg' },
+          { label: 'Substituir l\'actual', value: 'replace', style: 'primary', icon: 'bi-arrow-repeat' },
+        ],
+      });
+      if (choice === 'cancel') return;
+      replace = choice === 'replace';
+    }
+
+    try {
+      const result = await this.#request('playlist.load', { player: this.#playerId, path, replace });
+      if (result.missing > 0)
+        this.#onMessage(`${result.missing} ${result.missing === 1 ? 'pista no s\'ha trobat' : 'pistes no s\'han trobat'} (marcades amb ⚠).`);
+    } catch (err) {
+      this.#onMessage(/** @type {Error} */ (err).message);
+    }
+  }
+
+  async #saveList() {
+    if (this.#playlist.items.length === 0) {
+      this.#onMessage('La llista és buida: no hi ha res per desar.');
+      return;
+    }
+    const path = await bridge?.savePlaylistFile(`Reproductor ${this.#playerId}`);
+    if (!path) return;
+    try {
+      const result = await this.#request('playlist.save', { player: this.#playerId, path });
+      this.#onMessage(`Llista desada: ${result.path.split(/[\\/]/).pop()} (${result.count} pistes).`);
+    } catch (err) {
+      this.#onMessage(/** @type {Error} */ (err).message);
+    }
+  }
+
+  /** Netejar la llista: treu totes les pistes, amb confirmació. La pista que sona continua sonant. */
+  async #clearList() {
+    const ids = this.#playlist.items.map((i) => i.id);
+    if (ids.length === 0) return;
+
+    const choice = await choose({
+      title: 'Netejar la llista',
+      icon: 'bi-trash3',
+      message: `Vols treure les ${ids.length} pistes de la llista del Reproductor ${this.#playerId}?\n\nEls fitxers no s'esborren del disc.` +
+        (this.#player.state === 'playing' ? '\n\nLa pista que sona continuarà sonant fins al final.' : ''),
+      buttons: [
+        { label: 'Cancel·lar', value: 'cancel' },
+        { label: 'Netejar', value: 'clear', style: 'danger', icon: 'bi-trash3' },
+      ],
+    });
+    if (choice !== 'clear') return;
+    this.#send('playlist.remove', { player: this.#playerId, ids });
   }
 
   /** Afegeix fitxers al final (botó «Afegir» o fitxers deixats anar fora de la llista). */

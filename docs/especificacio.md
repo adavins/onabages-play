@@ -713,6 +713,12 @@ Candidates: botonera de talls (cartwall), detector de silenci, punts cue d'inici
 - Dispositiu de preescolta de cada estudi.
 - Convenció de noms i carpetes de destinació dels enregistraments.
 - **Còpia automàtica en aturar** (petició del 4 de novembre de 2026; sense fase assignada): poder indicar, per a un enregistrament, una ruta i un nom de fitxer; en prémer Aturar, se'n desa una còpia allà. L'original es queda sempre a la carpeta de treball.
+- **Enregistrament automàtic en començar a reproduir** (petició del 4 de novembre de 2026; sense fase assignada): opcionalment, quan s'arrenca l'aplicació i es posa a sonar una pista, un enregistrador comença a enregistrar sol. Queda per definir:
+  - quin reproductor (o reproductors) el dispara i quin enregistrador enregistra;
+  - si només ho fa la primera pista després d'arrencar o cada vegada que l'enregistrador està inactiu;
+  - el nom i la carpeta del fitxer (els de l'enregistrador o uns de propis);
+  - com es veu clarament a la interfície que està activat, i com s'atura (l'aturada continuaria sent manual i amb doble pulsació);
+  - què passa si l'enregistrador ja enregistra o té un pendent (no s'ha de perdre ni sobreescriure res).
 - Llicència del codi de l'aplicació (codi obert o només binari gratuït).
 - Si l'Audigy es manté o se substitueix, segons les proves de la fase 1.
 

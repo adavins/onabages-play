@@ -102,7 +102,10 @@ public class RecorderCommandsTests
         var r = Send("""{ "v": 1, "id": 5, "cmd": "engine.shutdown", "force": true }""");
 
         Assert.True(r["ok"]!.GetValue<bool>());
-        await Task.Delay(400);
+        // El motor s'atura 200 ms després de respondre. Amb l'ordinador carregat (moltes proves alhora)
+        // pot trigar més: s'espera fins a 5 s.
+        for (int i = 0; i < 50 && !_shutdownRequested; i++)
+            await Task.Delay(100);
         Assert.True(_shutdownRequested);
         _state.FindRecorder("1")!.Dispose(); // el motor ho fa en aturar-se
         Assert.False(File.Exists(_state.FindRecorder("1")!.FilePath + ".rec"));

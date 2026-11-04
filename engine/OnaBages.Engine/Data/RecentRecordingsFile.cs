@@ -29,6 +29,7 @@ public static class RecentRecordingsFile
                 ["fileSize"] = item.FileSize,
                 ["saved"] = item.Saved,
                 ["closedCleanly"] = item.ClosedCleanly,
+                ["recovered"] = item.Recovered,
             });
         }
         var root = new JsonObject { ["schemaVersion"] = SchemaVersion, ["items"] = list };
@@ -63,7 +64,9 @@ public static class RecentRecordingsFile
                     Saved: o["saved"]?.GetValue<bool>() ?? false,
                     Busy: false,
                     ClosedCleanly: o["closedCleanly"]?.GetValue<bool>() ?? true,
-                    Problem: null));
+                    Problem: null,
+                    // Camp afegit al pas 7 (opcional: els fitxers d'abans no el tenen; no cal canviar de versió).
+                    Recovered: o["recovered"]?.GetValue<bool>() ?? false));
             }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException or FormatException)

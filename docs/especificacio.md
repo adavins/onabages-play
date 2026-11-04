@@ -430,6 +430,8 @@ Aquest mètode substitueix l'escriptura segmentada de la v1.0: dona la mateixa p
   2. corregeix o elimina l'etiqueta Xing/Info;
   3. elimina el marcador;
   4. afegeix l'enregistrament a la llista de recents amb l'etiqueta **«Recuperat»**.
+
+  També busca a la carpeta per defecte i a les carpetes dels enregistraments de la llista. Mai no toca un fitxer que un altre programa té obert (un enregistrament que continua), ni un fitxer on no trobi cap fotograma MP3: en aquest cas el marcador es manté i queda escrit al registre (D-038).
 - **Utilitat independent** (`OnaBages.Recovery.exe`): fa la mateixa operació sobre un fitxer o una carpeta sense obrir l'aplicació. Comparteix el mateix codi.
 - Com que el motor és un procés separat, **un tancament de la interfície no atura l'enregistrament**. La recuperació només és necessària si cau el motor o el sistema.
 

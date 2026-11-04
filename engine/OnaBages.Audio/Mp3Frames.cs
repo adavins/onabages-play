@@ -8,6 +8,8 @@ namespace OnaBages.Audio;
 /// <param name="ValidLength">Bytes des de l'inici fins al final de l'últim fotograma complet.</param>
 /// <param name="TrailingBytes">Bytes de després de l'últim fotograma complet (un fotograma tallat).</param>
 /// <param name="Duration">Durada segons els fotogrames complets.</param>
+/// <param name="FirstFrameOffset">On comença el primer fotograma (després d'una etiqueta ID3v2, si n'hi ha).</param>
+/// <param name="FirstFrameLength">Bytes del primer fotograma (0 si no n'hi ha cap).</param>
 public sealed record Mp3Analysis(
     int Frames,
     int SampleRate,
@@ -15,7 +17,9 @@ public sealed record Mp3Analysis(
     bool HasXingTag,
     long ValidLength,
     long TrailingBytes,
-    TimeSpan Duration);
+    TimeSpan Duration,
+    long FirstFrameOffset = 0,
+    int FirstFrameLength = 0);
 
 /// <summary>
 /// Lectura de les capçaleres dels fotogrames MP3 (MPEG-1 i MPEG-2 capa III), sense descodificar.
@@ -44,12 +48,14 @@ public static class Mp3Frames
     public static Mp3Analysis Analyze(Stream stream)
     {
         int frames = 0, sampleRate = 0, samplesPerFrame = 1152;
+        int firstFrameLength = 0;
         var bitrates = new SortedSet<int>();
         bool xing = false;
         long length = stream.Length;
         var head = new byte[10];
 
         long pos = SkipId3v2(stream, head);
+        long firstFrameOffset = pos;
         long validEnd = pos;
 
         while (pos + 4 <= length)
@@ -70,6 +76,7 @@ public static class Mp3Frames
             {
                 sampleRate = header.SampleRate;
                 samplesPerFrame = header.SamplesPerFrame;
+                firstFrameLength = header.Length;
                 var first = new byte[header.Length];
                 stream.Position = pos;
                 stream.ReadExactly(first);
@@ -86,7 +93,8 @@ public static class Mp3Frames
             ? TimeSpan.FromSeconds((double)frames * samplesPerFrame / sampleRate)
             : TimeSpan.Zero;
 
-        return new Mp3Analysis(frames, sampleRate, bitrates.ToList(), xing, validEnd, length - validEnd, duration);
+        return new Mp3Analysis(frames, sampleRate, bitrates.ToList(), xing, validEnd, length - validEnd, duration,
+            firstFrameOffset, firstFrameLength);
     }
     private readonly record struct FrameHeader(int BitrateKbps, int SampleRate, int Length, int SamplesPerFrame);
 

@@ -986,6 +986,7 @@ body.engine-offline .layout {
 .rc-missing { color: var(--obp-warn); }
 .rc-busy    { color: var(--obp-info); }
 .rc-cut     { color: var(--obp-warn); }
+.rc-recovered { color: var(--obp-warn); }
 
 .rc-problem { font-size: 0.75rem; }
 

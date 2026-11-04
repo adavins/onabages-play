@@ -16,6 +16,7 @@ public static class RecordingJson
         ["saved"] = item.Saved,
         ["busy"] = item.Busy,
         ["closedCleanly"] = item.ClosedCleanly,
+        ["recovered"] = item.Recovered,
         ["exists"] = item.Busy || File.Exists(item.Path),
         ["problem"] = item.Problem,
     };

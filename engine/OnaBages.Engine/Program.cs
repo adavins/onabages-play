@@ -203,6 +203,16 @@ foreach (var recorder in state.Recorders)
     }
 }
 
+// Enregistraments interromputs (el motor o l'ordinador van caure): es recuperen abans de res
+// i surten a «Recents» amb l'etiqueta «Recuperat» (especificació 8.5).
+foreach (var result in StartupRecovery.Run(StartupRecovery.FoldersToScan(state.Recorders, recordings), recordings))
+{
+    if (result.Outcome == RecoveryOutcome.Recovered)
+        log.LogWarning("Enregistrament interromput recuperat: {Path} ({Duration:hh\\:mm\\:ss}) — {Message}", result.Path, result.Duration, result.Message);
+    else
+        log.LogWarning("Enregistrament interromput {Path}: {Message}", result.Path, result.Message);
+}
+
 app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TimeSpan.FromSeconds(15) });
 
 // Comprovació de vida (sense testimoni): la fa servir Electron per saber si el motor ja funciona.

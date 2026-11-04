@@ -10,11 +10,12 @@ public sealed class RecordingCommandException(string message) : Exception(messag
 /// <param name="Path">On és ara el fitxer (després de desar-lo, la ruta nova).</param>
 /// <param name="Saved">L'operador l'ha desat (mogut o reanomenat).</param>
 /// <param name="Busy">S'està movent (desant) en segon pla.</param>
-/// <param name="ClosedCleanly">El fitxer es va tancar bé. Si no, cal recuperar-lo (pas 7).</param>
+/// <param name="ClosedCleanly">El fitxer es va tancar bé. Si no, es va tallar (entrada perduda, disc ple) o s'ha hagut de recuperar.</param>
 /// <param name="Problem">L'últim error en desar-lo, si n'hi ha hagut.</param>
+/// <param name="Recovered">Es va recuperar en arrencar el motor: l'enregistrament s'havia interromput (especificació 8.5).</param>
 public sealed record RecordingItem(
     string Id, string Path, string RecorderId, DateTimeOffset StartedAt, TimeSpan Duration, long FileSize,
-    bool Saved, bool Busy, bool ClosedCleanly, string? Problem);
+    bool Saved, bool Busy, bool ClosedCleanly, string? Problem, bool Recovered = false);
 
 /// <summary>
 /// Enregistraments acabats: el pendent de cada enregistrador i els recents (D-036).
@@ -83,6 +84,40 @@ public sealed class RecordingList
             Trim();
         }
         Changed?.Invoke();
+    }
+
+    /// <summary>
+    /// Un enregistrament interromput que s'acaba de recuperar (en arrencar el motor).
+    /// Si ja era a la llista (p. ex. es va tallar per disc ple), s'hi actualitza; si no, s'hi afegeix
+    /// al lloc que li toca per la data. En tots dos casos queda marcat com a «Recuperat».
+    /// </summary>
+    public RecordingItem AddRecovered(RecoveryResult recovered)
+    {
+        RecordingItem item;
+        lock (_sync)
+        {
+            int index = _items.FindIndex(i => string.Equals(i.Path, recovered.Path, StringComparison.OrdinalIgnoreCase));
+            if (index >= 0)
+            {
+                item = _items[index] with
+                {
+                    Duration = recovered.Duration, FileSize = recovered.FileSize,
+                    ClosedCleanly = false, Recovered = true, Busy = false, Problem = null,
+                };
+                _items[index] = item;
+            }
+            else
+            {
+                item = new RecordingItem(NewId(), recovered.Path, recovered.RecorderId, recovered.StartedAt, recovered.Duration,
+                    recovered.FileSize, Saved: false, Busy: false, ClosedCleanly: false, Problem: null, Recovered: true);
+                // El més nou primer: just abans del primer que és més antic.
+                int position = _items.FindIndex(i => i.StartedAt < item.StartedAt);
+                _items.Insert(position < 0 ? _items.Count : position, item);
+                Trim();
+            }
+        }
+        Changed?.Invoke();
+        return item;
     }
 
     /// <summary>

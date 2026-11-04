@@ -85,7 +85,8 @@ export class RecentsPanel {
     if (item.busy) badges.push('<span class="rc-badge rc-busy"><i class="bi bi-arrow-repeat"></i> Movent…</span>');
     else if (!item.exists) badges.push('<span class="rc-badge rc-missing"><i class="bi bi-exclamation-triangle-fill"></i> No trobat</span>');
     if (item.saved) badges.push('<span class="rc-badge rc-saved"><i class="bi bi-check2"></i> Desat</span>');
-    if (!item.closedCleanly) badges.push('<span class="rc-badge rc-cut" title="L\'enregistrament es va tallar (entrada perduda o error): el fitxer és vàlid fins a aquell moment."><i class="bi bi-scissors"></i> Interromput</span>');
+    if (item.recovered) badges.push('<span class="rc-badge rc-recovered" title="L\'enregistrament es va interrompre (el motor o l\'ordinador van caure) i s\'ha recuperat en arrencar: el fitxer és vàlid fins on es va poder desar."><i class="bi bi-bandaid"></i> Recuperat</span>');
+    else if (!item.closedCleanly) badges.push('<span class="rc-badge rc-cut" title="L\'enregistrament es va tallar (entrada perduda o error): el fitxer és vàlid fins a aquell moment."><i class="bi bi-scissors"></i> Interromput</span>');
 
     const meta = [startTime(item.startedAt), formatDuration(item.duration), formatBytes(item.fileSize), recorderName];
     const disabled = (/** @type {boolean} */ off) => (off ? ' disabled' : '');

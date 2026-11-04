@@ -246,13 +246,21 @@ Element (a `state.get` → `recordings` i a l'esdeveniment `recordings.changed`;
 { "id": "e3", "path": "D:\\Enregistraments\\Programa_2026-11-04_10-00-00.mp3",
   "recorder": "1", "startedAt": "2026-11-04T10:00:00.000+01:00",
   "duration": 3725.4, "fileSize": 149016000,
-  "saved": false, "busy": false, "closedCleanly": true, "exists": true, "problem": null }
+  "saved": false, "busy": false, "closedCleanly": true, "recovered": false,
+  "exists": true, "problem": null }
 ```
 
 - `id`: canvia en reiniciar el motor.
 - `saved`: ja s'ha desat (`path` és la ruta nova). `busy`: s'està movent.
-- `closedCleanly`: `false` si el fitxer no es va poder tancar bé (queda el marcador `.rec`; el pas 7 el recuperarà).
+- `closedCleanly`: `false` si l'enregistrament es va tallar (entrada perduda, disc ple) o es va interrompre.
+- `recovered` (des del pas 7, D-038): s'ha recuperat en arrencar el motor (vegeu 4.7). Sempre amb `closedCleanly: false`.
 - `exists`: el fitxer encara hi és. `problem`: l'últim error en desar-lo (p. ex. sense permís a la carpeta), en català.
+
+### 4.7. Recuperació d'enregistraments interromputs (D-038)
+
+No hi ha cap ordre: el motor ho fa sol **en arrencar**, abans d'acceptar connexions. Busca marcadors `*.mp3.rec` a la carpeta de treball de cada enregistrador, a la de per defecte i a les carpetes dels enregistraments de la llista. Per a cada un: retalla el fitxer fins a l'últim fotograma MP3 complet, en treu l'etiqueta Xing/Info si n'hi ha, esborra el marcador i l'afegeix a la llista amb `recovered: true` (si ja hi era, s'hi actualitzen la durada i la mida). No toca mai un fitxer que un altre procés té obert, ni un fitxer on no trobi cap fotograma MP3 (en aquest cas el marcador es manté). Els resultats s'escriuen al registre del motor.
+
+La utilitat `OnaBages.Recovery.exe` fa el mateix sense el motor: `OnaBages.Recovery [carpeta | fitxer.mp3 | fitxer.mp3.rec]` (sense res, la carpeta per defecte). No toca la llista de recents.
 
 ## 5. Esdeveniments
 

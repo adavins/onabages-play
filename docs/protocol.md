@@ -304,7 +304,7 @@ Objecte `cue` (a `state.get` i a l'esdeveniment `cue.state`):
 | `playlist.changed` | `playlist`: la llista sencera (vegeu 4.5) | quan canvia alguna cosa (pistes, ordre, marques, resultat d'una comprovació). Agrupat: com a molt 10 per segon per reproductor | fase 2 |
 | `recordings.changed` | `recordings`: la llista sencera d'enregistraments acabats (vegeu 4.6) | quan s'hi afegeix, es desa, es descarta o se'n treu algun. Agrupat: com a molt 10 per segon | fase 2 |
 | `cue.state` | `cue`: objecte complet (vegeu 4.8) | quan canvia l'estat, la pista, la sortida, el volum o l'error de la preescolta | fase 2 |
-| `cue.position` | `position`, `duration` (segons) | 10 per segon, només mentre la preescolta sona | fase 2 |
+| `cue.position` | `position`, `duration` (segons), `format` (el de la pista, quan ja es coneix) | 10 per segon, només mentre la preescolta sona | fase 2 |
 
 ### 5.1. Canvis de dispositius
 

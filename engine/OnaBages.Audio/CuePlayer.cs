@@ -24,9 +24,10 @@ public sealed class CuePlayer : IDisposable
     private readonly Lock _sync = new();
 
     /// <param name="openOutput">Obre una sortida per identificador de dispositiu. Per defecte, WASAPI.</param>
-    public CuePlayer(Func<string, IAudioOutput>? openOutput = null)
+    /// <param name="analyzer">Llegeix el format de la pista en segon pla (sense, el format no es coneix).</param>
+    public CuePlayer(Func<string, IAudioOutput>? openOutput = null, TrackAnalyzer? analyzer = null)
     {
-        _player = new Player("preescolta", openOutput);
+        _player = new Player("preescolta", openOutput, analyzer);
         _player.StateChanged += player =>
         {
             // La durada es guarda mentre la pista és oberta: quan s'atura, el reproductor la posa a zero.
@@ -69,8 +70,8 @@ public sealed class CuePlayer : IDisposable
     /// <summary>Posició dins la pista (0 si no sona).</summary>
     public TimeSpan Position => State == CueState.Playing ? _player.Position : TimeSpan.Zero;
 
-    /// <summary>Format abreujat de la pista, si ja es coneix.</summary>
-    public string? Format => _player.Format;
+    /// <summary>Format abreujat de la pista (també quan està aturada), si ja es coneix.</summary>
+    public string? Format => _player.Format ?? _player.Playlist.Items.FirstOrDefault()?.Format;
 
     /// <summary>
     /// Fa sonar una pista des de <paramref name="startAt"/> (si ja en sonava una, la substitueix).

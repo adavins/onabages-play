@@ -23,6 +23,7 @@
   --obp-recording: #e5484d;
   --obp-info: #3d8bfd;
   --obp-idle: #6c757d;
+  --obp-cue: #f07c1a;              /* preescolta (taronja): panell, rètol i fila que hi sona */
 
   /* Mides de la distribució */
   --obp-topbar-h: calc(4rem * var(--obp-ui-scale));
@@ -57,6 +58,7 @@
   --obp-pl-last-bg: #1d4f8c;        /* l'última reproduïda (blau) */
   --obp-pl-selected-bg: #3a4048;    /* seleccionada (més clara) */
   --obp-pl-problem-bg: #5c2a17;     /* malmesa o desapareguda */
+  --obp-pl-preview-bg: #6e3608;     /* la que sona a la preescolta (taronja) */
   --obp-pl-loop-on: #3d8bfd;
   --obp-pl-cue-on: #e0a526;
   --obp-pl-auto-on: #2fb36b;
@@ -672,6 +674,7 @@ body.engine-offline .layout {
 .pl-row:hover { background: rgb(255 255 255 / 0.04); }
 .pl-row.pl-selected { background: var(--obp-pl-selected-bg); }
 .pl-row.pl-last     { background: var(--obp-pl-last-bg); }
+.pl-row.pl-previewing { background: var(--obp-pl-preview-bg); }
 .pl-row.pl-playing,
 .pl-row.pl-current  { background: var(--obp-pl-playing-bg); font-weight: 600; }
 .pl-row.pl-problem  { background: var(--obp-pl-problem-bg); }
@@ -1016,4 +1019,75 @@ body.engine-offline .layout {
 
 .obp-form .form-control[readonly] {
   font-size: 0.85rem;
+}
+
+/* Preescolta (js/ui/cue-panel.js, botons 🎧) ------------------------------ */
+
+/* Sonant: el panell es posa taronja i el rètol «PREESCOLTA» parpelleja. */
+.cue.cue-playing {
+  border-color: var(--obp-cue);
+  box-shadow: 0 0 0 2px var(--obp-cue);
+}
+
+.cue.cue-playing > .card-header {
+  background: rgb(240 124 26 / 0.25);
+}
+
+.state-cue {
+  background: var(--obp-cue);
+  color: #000;
+  animation: obp-blink 1s steps(2, start) infinite;
+}
+
+/* Avís fix: la preescolta comparteix sortida amb un reproductor (se sentiria per antena). */
+.cue-antenna {
+  background: var(--obp-error);
+  color: #fff;
+  font-weight: 700;
+  padding: 0.3rem 0.5rem;
+  border-radius: 0.3rem;
+}
+
+.cue-remaining.dim { color: var(--bs-secondary-color); }
+
+.cue-progress .progress-bar { background: var(--obp-cue); }
+
+/* Salts (−10, +10, inici, últims 15 s): més estrets que el botó principal. */
+.cue-controls .cue-small {
+  flex: 0.7;
+  font-size: calc(1.05rem * var(--obp-ui-scale));
+  font-weight: 700;
+}
+
+.btn-cue {
+  background: var(--obp-cue);
+  border-color: var(--obp-cue);
+  color: #000;
+}
+
+.btn-cue:hover:not(:disabled) {
+  background: #ff9233;
+  border-color: #ff9233;
+  color: #000;
+}
+
+.cue-hint {
+  font-size: 0.8rem;
+  color: var(--bs-secondary-color);
+  font-style: italic;
+}
+
+/* Botó 🎧 encès: aquesta pista sona a la preescolta. */
+.pl-flag.preview-btn.on,
+.rc-btn.preview-btn.on { color: var(--obp-cue); }
+
+/* Fila que sona a la preescolta: fons taronja i franja a l'esquerra (també si sona a antena). */
+.pl-row.pl-previewing,
+.rc-row.rc-previewing { box-shadow: inset 4px 0 0 var(--obp-cue); }
+.rc-row.rc-previewing { background: var(--obp-pl-preview-bg); }
+
+.rec-preview.on {
+  background: var(--obp-cue);
+  border-color: var(--obp-cue);
+  color: #000;
 }

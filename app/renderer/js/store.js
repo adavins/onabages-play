@@ -12,6 +12,8 @@
 //   'playlist'         ha canviat la llista d'un reproductor (detail: id del reproductor)
 //   'recordings'       ha canviat la llista d'enregistraments acabats (pendents i recents)
 //   'devices'          ha canviat la llista de dispositius
+//   'cue'              ha canviat la preescolta (estat, pista, sortida, volum)
+//   'cuePosition'      posició nova de la preescolta (10 per segon, mentre sona)
 //   'meters'           nivells nous dels mesuradors (25 per segon)
 
 /** @typedef {import('./engine-client.js').EngineClient} EngineClient */
@@ -23,6 +25,8 @@ export class Store extends EventTarget {
   playlists = new Map();
   /** Enregistraments acabats, el més nou primer (docs/protocol.md, 4.6). @type {any[]} */
   recordings = [];
+  /** Preescolta (docs/protocol.md, 4.8). @type {any} */
+  cue = null;
   /** @type {any[]} */ devices = [];
   /** @type {any} */ hardware = null;
   /** @type {any} */ engine = null;
@@ -54,6 +58,16 @@ export class Store extends EventTarget {
       this.recordings = /** @type {any} */ (e).detail.recordings;
       this.#emit('recordings');
     });
+    client.addEventListener('ev:cue.state', (e) => {
+      this.cue = /** @type {any} */ (e).detail.cue;
+      this.#emit('cue');
+    });
+    client.addEventListener('ev:cue.position', (e) => {
+      const { position, duration, format } = /** @type {any} */ (e).detail;
+      if (!this.cue) return;
+      Object.assign(this.cue, { position, duration, format: format ?? this.cue.format });
+      this.#emit('cuePosition');
+    });
     client.addEventListener('ev:meters', (e) => {
       this.meters = /** @type {any} */ (e).detail;
       this.#emit('meters');
@@ -74,6 +88,7 @@ export class Store extends EventTarget {
     this.recorders = new Map(state.recorders.map((/** @type {any} */ r) => [r.id, r]));
     this.playlists = new Map(state.playlists.map((/** @type {any} */ l) => [l.player, l]));
     this.recordings = state.recordings ?? [];
+    this.cue = state.cue ?? null;
     this.devices = devices.devices;
     this.#emit('reset');
   }
@@ -103,6 +118,20 @@ export class Store extends EventTarget {
   /** És el pendent d'algun enregistrador? (Aquests no surten a «Recents»: es gestionen des del seu panell.) */
   isPending(/** @type {any} */ recording) {
     return [...this.recorders.values()].some((r) => r.state === 'pending' && samePath(r.file, recording.path));
+  }
+
+  /** Aquesta pista és la que sona ara a la preescolta? */
+  isPreviewing(/** @type {string | null | undefined} */ path) {
+    return this.cue?.state === 'playing' && samePath(this.cue.file, path ?? null);
+  }
+
+  /**
+   * La preescolta surt per la mateixa sortida que algun reproductor (és a dir, per antena)?
+   * Es calcula aquí perquè canvia també quan es canvia la sortida d'un reproductor.
+   */
+  get cueSharesPlayerOutput() {
+    const id = this.cue?.deviceId;
+    return !!id && [...this.players.values()].some((p) => p.deviceId === id);
   }
 
   /** Hi ha res sonant o enregistrant? (per decidir si cal confirmar en tancar) */

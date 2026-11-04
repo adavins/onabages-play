@@ -114,7 +114,7 @@ export class PlayerPanel {
     this.#el['meter-slot'].appendChild(this.#meter.element);
     this.#fader = new VolumeFader((db) => this.#send('player.setVolume', { db }));
     this.#el['fader-slot'].appendChild(this.#fader.element);
-    this.#playlist = new PlaylistView(id, request, (text) => this.#showMessage(text));
+    this.#playlist = new PlaylistView(id, request, (text) => this.#showMessage(text), store);
     this.#el['playlist-slot'].appendChild(this.#playlist.element);
 
     this.#el.remaining.addEventListener('click', () => {

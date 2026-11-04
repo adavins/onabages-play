@@ -1,9 +1,10 @@
 // @ts-check
 // Panell «Recents»: enregistraments acabats que ja no són el pendent de cap enregistrador
 // (especificació 8.3, docs/protocol.md 4.6). El més nou, a dalt.
-// Accions de cada un: Desar, Mostrar a l'Explorador, Descartar i Treure de la llista.
+// Accions de cada un: Preescoltar, Desar, Mostrar a l'Explorador, Descartar i Treure de la llista.
 
 import { saveRecording, discardRecording } from './recording-actions.js';
+import { togglePreview, previewButton } from './cue-actions.js';
 import { escapeHtml, fileName, formatBytes, formatDuration } from './format.js';
 
 /** @typedef {import('../store.js').Store} Store */
@@ -60,7 +61,9 @@ export class RecentsPanel {
 
     // Els noms dels enregistradors també surten a la llista: si canvien, cal tornar-la a dibuixar.
     const names = [...this.#store.recorders.values()].map((r) => r.name);
-    const key = JSON.stringify([items, names]);
+    const cue = this.#store.cue;
+    const previewing = cue?.state === 'playing' ? cue.file : null;
+    const key = JSON.stringify([items, names, previewing]);
     if (key === this.#key) return;
     this.#key = key;
 
@@ -90,15 +93,17 @@ export class RecentsPanel {
 
     const meta = [startTime(item.startedAt), formatDuration(item.duration), formatBytes(item.fileSize), recorderName];
     const disabled = (/** @type {boolean} */ off) => (off ? ' disabled' : '');
+    const previewing = this.#store.isPreviewing(item.path);
 
     return `
-      <div class="rc-row${item.exists ? '' : ' rc-row-missing'}" data-id="${escapeHtml(item.id)}">
+      <div class="rc-row${item.exists ? '' : ' rc-row-missing'}${previewing ? ' rc-previewing' : ''}" data-id="${escapeHtml(item.id)}">
         <div class="rc-main">
           <div class="rc-name" title="${escapeHtml(item.path)}">${escapeHtml(fileName(item.path))}</div>
           <div class="rc-meta">${escapeHtml(meta.join(' · '))} ${badges.join(' ')}</div>
           ${item.problem ? `<div class="error-text rc-problem">${escapeHtml(item.problem)}</div>` : ''}
         </div>
         <div class="rc-actions">
+          ${previewButton(previewing, `data-action="preview"${disabled(!usable)}`, 'rc-btn')}
           <button class="rc-btn" data-action="save" type="button" title="Desar: triar el nom i la carpeta"${disabled(!usable)}><i class="bi bi-floppy"></i></button>
           <button class="rc-btn" data-action="show" type="button" title="Mostrar a l'Explorador"${disabled(!usable)}><i class="bi bi-folder2-open"></i></button>
           <button class="rc-btn rc-btn-danger" data-action="discard" type="button" title="Descartar: enviar a la paperera"${disabled(!usable)}><i class="bi bi-trash3"></i></button>
@@ -117,6 +122,9 @@ export class RecentsPanel {
 
     let message = null;
     switch (button.dataset.action) {
+      case 'preview':
+        message = await togglePreview(this.#store, this.#request, item.path);
+        break;
       case 'save':
         message = await saveRecording(item, this.#request);
         break;

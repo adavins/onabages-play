@@ -8,13 +8,17 @@
 // - Doble clic: fa sonar la pista.
 // - Arrossegar: fitxers de l'Explorador (s'insereixen on es deixen anar) o pistes de la
 //   llista (es mouen, també d'una llista a una altra; amb Ctrl, es copien).
-// - Teclat: Supr, ↑/↓ (Maj: ampliar la selecció), C cue, D duplicar, B bucle, A avanç automàtic.
-// - Botó dret: informació i «Mostrar a l'Explorador».
+// - Teclat: Supr, ↑/↓ (Maj: ampliar la selecció), C cue, D duplicar, B bucle, A avanç automàtic,
+//   P preescoltar.
+// - Botó 🎧 de cada fila: preescoltar (la fila que sona a la preescolta es marca en taronja).
+// - Botó dret: preescoltar, informació, duplicar i «Mostrar a l'Explorador».
 
 import { escapeHtml, formatDuration } from './format.js';
 import { showContextMenu } from './context-menu.js';
 import { choose, showInfo } from './dialogs.js';
+import { togglePreview, previewButton } from './cue-actions.js';
 
+/** @typedef {import('../store.js').Store} Store */
 /** @typedef {(cmd: string, params?: object) => Promise<any>} Request */
 
 /** Tipus de dades d'un arrossegament de pistes entre llistes (no de l'Explorador). */
@@ -28,6 +32,7 @@ export class PlaylistView {
   #playerId;
   #request;
   #onMessage;
+  #store;
   /** @type {HTMLElement} */ #rows;
   /** @type {HTMLElement} */ #footer;
   /** @type {any} */ #playlist = { items: [], cueId: null, totalDuration: 0 };
@@ -46,9 +51,11 @@ export class PlaylistView {
    * @param {string} playerId
    * @param {Request} request  envia una ordre al motor
    * @param {(text: string) => void} onMessage  mostra un avís breu al panell (p. ex. si el motor rebutja una ordre)
+   * @param {Store} store  per saber què sona a la preescolta
    */
-  constructor(playerId, request, onMessage) {
+  constructor(playerId, request, onMessage, store) {
     this.#playerId = playerId;
+    this.#store = store;
     this.#request = request;
     this.#onMessage = onMessage;
 
@@ -95,7 +102,9 @@ export class PlaylistView {
     const ids = new Set(this.#playlist.items.map((/** @type {any} */ i) => i.id));
     for (const id of this.#selected) if (!ids.has(id)) this.#selected.delete(id);
 
-    const key = JSON.stringify([this.#playlist, this.#player.currentItemId, this.#player.lastPlayedId, this.#player.state]);
+    const cue = this.#store.cue;
+    const previewing = cue?.state === 'playing' ? cue.file : null;
+    const key = JSON.stringify([this.#playlist, this.#player.currentItemId, this.#player.lastPlayedId, this.#player.state, previewing]);
     if (key !== this.#renderKey) {
       // Mentre s'arrossega no es redibuixa (el navegador cancel·laria l'arrossegament): es fa en acabar.
       if (this.#dragging) {
@@ -127,6 +136,8 @@ export class PlaylistView {
         if (item.id === last && item.id !== current) classes.push('pl-last');
         if (item.status === 'error' || item.status === 'missing') classes.push('pl-problem');
         if (item.status === 'analyzing') classes.push('pl-analyzing');
+        const previewing = this.#store.isPreviewing(item.path);
+        if (previewing) classes.push('pl-previewing');
 
         const status = item.status === 'error' || item.status === 'missing'
           ? `<span class="pl-warn" title="${escapeHtml(item.problem ?? 'Problema amb el fitxer')}"><i class="bi bi-exclamation-triangle-fill"></i></span>`
@@ -140,6 +151,7 @@ export class PlaylistView {
             <span class="pl-num">${index + 1}</span>
             <span class="pl-name">${escapeHtml(item.name)}</span>
             ${status}
+            ${previewButton(previewing, 'data-flag="preview"', 'pl-flag pl-flag-preview')}
             ${flag('cue', item.id === cueId, 'bi-flag-fill', 'Cue: serà la següent a sonar')}
             ${flag('auto', item.autoNext, 'bi-skip-forward-fill', 'Avanç automàtic: en acabar, sona la següent (o la del cue)',
               item.loop ? 'Avanç automàtic: no disponible amb el bucle activat' : null)}
@@ -278,6 +290,8 @@ export class PlaylistView {
       this.#toggleSelected('loop');
     } else if (plain && key === 'a') {
       this.#toggleSelected('autoNext');
+    } else if (plain && key === 'p') {
+      this.#previewSelected();
     } else {
       return;
     }
@@ -288,6 +302,17 @@ export class PlaylistView {
   #cueSelected() {
     const item = this.#selectedItems()[0];
     if (item) this.#toggleFlag(item.id, 'cue');
+  }
+
+  /** P: preescolta la (primera) pista seleccionada; si ja hi sona, l'atura. */
+  #previewSelected() {
+    const item = this.#selectedItems()[0];
+    if (item) this.#preview(item.path);
+  }
+
+  async #preview(/** @type {string} */ path) {
+    const message = await togglePreview(this.#store, this.#request, path);
+    if (message) this.#onMessage(message);
   }
 
   /** D: duplica les seleccionades, cada una just a sota. */
@@ -328,6 +353,11 @@ export class PlaylistView {
     const selected = this.#selectedItems();
 
     showContextMenu(e, [
+      {
+        label: this.#store.isPreviewing(item.path) ? 'Aturar la preescolta (P)' : 'Preescoltar (P)',
+        icon: 'bi-headphones',
+        action: () => this.#preview(item.path),
+      },
       {
         label: selected.length > 1 ? `Informació (${selected.length} pistes)` : 'Informació',
         icon: 'bi-info-circle',
@@ -378,6 +408,10 @@ export class PlaylistView {
   #toggleFlag(/** @type {string} */ id, /** @type {string} */ flag) {
     const item = this.#playlist.items.find((/** @type {any} */ i) => i.id === id);
     if (!item) return;
+    if (flag === 'preview') {
+      this.#preview(item.path);
+      return;
+    }
     const params = { player: this.#playerId, itemId: id };
     if (flag === 'loop') Object.assign(params, { loop: !item.loop });
     else if (flag === 'auto') Object.assign(params, { autoNext: !item.autoNext });

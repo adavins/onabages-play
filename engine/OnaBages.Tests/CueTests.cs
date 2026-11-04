@@ -281,4 +281,22 @@ public class CueTests : IDisposable
 
         Assert.Equal(2, ev["cue"]!.AsArray().Count);
     }
+
+    [Fact]
+    public void La_posicio_porta_la_durada_i_el_format()
+    {
+        using var cue = new CuePlayer(_ => new FakeOutput(), new TrackAnalyzer(synchronous: true));
+        cue.SetDevice(CueOut);
+        cue.Play(Wav());
+
+        var ev = CueJson.PositionEvent(cue);
+
+        Assert.Equal("cue.position", ev["ev"]!.GetValue<string>());
+        Assert.InRange(ev["duration"]!.GetValue<double>(), 1.9, 2.1);
+        Assert.Contains("WAV", ev["format"]!.GetValue<string>(), StringComparison.OrdinalIgnoreCase);
+
+        // Aturada, el format de l'última pista es conserva.
+        cue.Stop();
+        Assert.NotNull(cue.Format);
+    }
 }

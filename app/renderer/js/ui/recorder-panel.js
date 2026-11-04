@@ -4,7 +4,7 @@
 //
 // - Enregistrar: comença de seguida, sempre en un fitxer nou (també des de «Pendent»).
 // - Aturar: cal prémer-lo dues vegades (la primera el «arma» uns segons), per evitar aturades accidentals.
-// - Pendent: Desar (diàleg de Windows) o Descartar (paperera, amb confirmació).
+// - Pendent: Escoltar (preescolta), Desar (diàleg de Windows) o Descartar (paperera, amb confirmació).
 
 import { RECORDER_STATES, stateBadge } from './states.js';
 import { deviceWarning } from './device-line.js';
@@ -13,6 +13,7 @@ import { LevelMeter } from './meter.js';
 import { VolumeFader } from './fader.js';
 import { editRecorderSettings } from './recorder-settings.js';
 import { saveRecording, discardRecording } from './recording-actions.js';
+import { togglePreview } from './cue-actions.js';
 import { escapeHtml, fileName, formatBytes, formatDuration } from './format.js';
 
 /** @typedef {import('../store.js').Store} Store */
@@ -85,6 +86,9 @@ export class RecorderPanel {
           <button class="btn btn-outline-light btn-control rec-stop js-stop" type="button" title="Aturar (cal prémer-lo dues vegades)">
             <i class="bi bi-stop-fill"></i><span class="rec-label js-stop-label"> Aturar</span>
           </button>
+          <button class="btn btn-outline-light btn-control rec-action rec-preview preview-btn js-preview d-none" type="button" title="Escoltar-lo per la preescolta">
+            <i class="bi bi-headphones"></i><span class="rec-label js-preview-label"> Escoltar</span>
+          </button>
           <button class="btn btn-primary btn-control rec-action js-save d-none" type="button" title="Desar: triar el nom i la carpeta">
             <i class="bi bi-floppy"></i><span class="rec-label"> Desar</span>
           </button>
@@ -114,6 +118,7 @@ export class RecorderPanel {
     this.#el.title.addEventListener('click', () => this.#editSettings());
     this.#el.start.addEventListener('click', () => this.#send('recorder.start'));
     this.#el.stop.addEventListener('click', () => this.#stopPressed());
+    this.#el.preview.addEventListener('click', () => this.#preview());
     this.#el.save.addEventListener('click', () => this.#save());
     this.#el.discard.addEventListener('click', () => this.#discard());
 
@@ -163,6 +168,12 @@ export class RecorderPanel {
     setEnabled(el.stop, recording);
     if (!recording) this.#disarmStop();
     const item = pending ? this.#store.pendingRecording(this.#id) : undefined;
+    const previewing = !!item && this.#store.isPreviewing(item.path);
+    el.preview.classList.toggle('d-none', !pending);
+    el.preview.classList.toggle('on', previewing);
+    el.preview.title = previewing ? 'Aturar la preescolta' : 'Escoltar-lo per la preescolta';
+    el['preview-label'].textContent = previewing ? ' Aturar' : ' Escoltar';
+    setEnabled(el.preview, !!item?.exists && !item?.busy);
     el.save.classList.toggle('d-none', !pending);
     el.discard.classList.toggle('d-none', !pending);
     setEnabled(el.save, !!item?.exists && !item?.busy);
@@ -229,6 +240,13 @@ export class RecorderPanel {
     this.#stopArmedTimer = undefined;
     this.#el.stop.classList.remove('armed');
     this.#el['stop-label'].textContent = ' Aturar';
+  }
+
+  async #preview() {
+    const item = this.#store.pendingRecording(this.#id);
+    if (!item) return;
+    const message = await togglePreview(this.#store, this.#request, item.path);
+    if (message) this.#showMessage(message);
   }
 
   async #save() {

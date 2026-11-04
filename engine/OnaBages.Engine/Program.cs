@@ -43,7 +43,8 @@ var analyzer = new TrackAnalyzer();
 // Fase 1: dos reproductors i dos enregistradors fixos. Més endavant, el nombre sortirà de la configuració.
 var state = new EngineState(
     [new Player("1", analyzer: analyzer), new Player("2", analyzer: analyzer)],
-    [new Recorder("1"), new Recorder("2")]);
+    [new Recorder("1"), new Recorder("2")],
+    new CuePlayer(analyzer: analyzer));
 var hub = new ClientHub(state, log);
 
 // Llistes que han canviat: s'envien agrupades a la revisió següent (com a molt 10 per segon),

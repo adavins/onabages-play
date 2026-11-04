@@ -37,6 +37,7 @@ public static class CueJson
         var ev = Messages.Event("cue.position");
         ev["position"] = Seconds(cue.Position);
         ev["duration"] = Seconds(cue.Duration);
+        ev["format"] = cue.Format; // es coneix uns instants després de començar (en acabar l'anàlisi)
         return ev;
     }
 

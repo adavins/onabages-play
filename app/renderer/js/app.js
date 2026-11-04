@@ -8,6 +8,7 @@ import { Store } from './store.js';
 import { PlayerPanel } from './ui/player-panel.js';
 import { RecorderPanel } from './ui/recorder-panel.js';
 import { RecentsPanel } from './ui/recents-panel.js';
+import { CuePanel } from './ui/cue-panel.js';
 import { choose } from './ui/dialogs.js';
 import { setupZoom, applyZoom } from './ui/zoom.js';
 import { formatDuration } from './ui/format.js';
@@ -30,6 +31,7 @@ const els = {
   players: $('players'),
   recorders: $('recorders'),
   recents: $('recents'),
+  cue: $('cue'),
 };
 
 const STATUS = {
@@ -51,6 +53,8 @@ let playerPanels = new Map();
 let recorderPanels = new Map();
 /** @type {RecentsPanel | null} */
 let recentsPanel = null;
+/** @type {CuePanel | null} */
+let cuePanel = null;
 
 startClock();
 setupClose();
@@ -178,7 +182,10 @@ function setupPanels() {
   window.addEventListener('drop', (e) => e.preventDefault());
 
   store.addEventListener('reset', buildPanels);
-  store.addEventListener('player', (e) => playerPanels.get(/** @type {any} */ (e).detail)?.render());
+  store.addEventListener('player', (e) => {
+    playerPanels.get(/** @type {any} */ (e).detail)?.render();
+    cuePanel?.render(); // l'avís «surt per antena» depèn de la sortida dels reproductors
+  });
   store.addEventListener('recorder', (e) => {
     recorderPanels.get(/** @type {any} */ (e).detail)?.render();
     recentsPanel?.render(); // el pendent d'un enregistrador no surt a «Recents»
@@ -188,10 +195,14 @@ function setupPanels() {
     recentsPanel?.render();
   });
   store.addEventListener('playlist', (e) => playerPanels.get(/** @type {any} */ (e).detail)?.renderPlaylist());
+  // La preescolta: el seu panell i, a les llistes, la fila que hi sona (taronja).
+  store.addEventListener('cue', renderAll);
+  store.addEventListener('cuePosition', () => cuePanel?.render());
   store.addEventListener('devices', renderAll);
   store.addEventListener('meters', () => {
     for (const [id, panel] of playerPanels) panel.updateMeter(store.meters.players?.[id]);
     for (const [id, panel] of recorderPanels) panel.updateMeter(store.meters.recorders?.[id]);
+    cuePanel?.updateMeter(store.meters.cue);
   });
 }
 
@@ -200,17 +211,21 @@ function buildPanels() {
   playerPanels = new Map([...store.players.keys()].map((id) => [id, new PlayerPanel(store, id, request)]));
   recorderPanels = new Map([...store.recorders.keys()].map((id) => [id, new RecorderPanel(store, id, request)]));
   recentsPanel = new RecentsPanel(store, request);
+  cuePanel = new CuePanel(store, request);
 
   els.players.replaceChildren(...[...playerPanels.values()].map((p) => p.element));
   els.recorders.replaceChildren(...[...recorderPanels.values()].map((r) => r.element));
   els.recents.replaceWith(recentsPanel.element);
   els.recents = recentsPanel.element;
+  els.cue.replaceWith(cuePanel.element);
+  els.cue = cuePanel.element;
 }
 
 function renderAll() {
   for (const panel of playerPanels.values()) panel.render();
   for (const panel of recorderPanels.values()) panel.render();
   recentsPanel?.render();
+  cuePanel?.render();
 }
 
 // ---------------------------------------------------------------------------

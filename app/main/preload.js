@@ -26,6 +26,12 @@ contextBridge.exposeInMainWorld('onabages', {
   /** Diàleg per desar una llista. Retorna la ruta triada, o null. */
   savePlaylistFile: (suggestedName) => ipcRenderer.invoke('dialog:save-playlist', suggestedName),
 
+  /** Diàleg per desar un enregistrament (proposa el nom actual). Retorna la ruta triada, o null. */
+  saveRecordingFile: (currentPath) => ipcRenderer.invoke('dialog:save-recording', currentPath),
+
+  /** Diàleg per triar una carpeta. Retorna la ruta, o null. */
+  chooseFolder: (currentFolder) => ipcRenderer.invoke('dialog:choose-folder', currentFolder),
+
   /** Obre l'Explorador amb aquest fitxer seleccionat. */
   showInFolder: (filePath) => ipcRenderer.invoke('shell:show-in-folder', filePath),
 

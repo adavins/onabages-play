@@ -7,6 +7,7 @@ import { EngineClient } from './engine-client.js';
 import { Store } from './store.js';
 import { PlayerPanel } from './ui/player-panel.js';
 import { RecorderPanel } from './ui/recorder-panel.js';
+import { RecentsPanel } from './ui/recents-panel.js';
 import { choose } from './ui/dialogs.js';
 import { setupZoom, applyZoom } from './ui/zoom.js';
 import { formatDuration } from './ui/format.js';
@@ -28,6 +29,7 @@ const els = {
   restart: $('btn-restart-engine'),
   players: $('players'),
   recorders: $('recorders'),
+  recents: $('recents'),
 };
 
 const STATUS = {
@@ -47,6 +49,8 @@ let engineVersion = '';
 let playerPanels = new Map();
 /** @type {Map<string, RecorderPanel>} */
 let recorderPanels = new Map();
+/** @type {RecentsPanel | null} */
+let recentsPanel = null;
 
 startClock();
 setupClose();
@@ -175,7 +179,14 @@ function setupPanels() {
 
   store.addEventListener('reset', buildPanels);
   store.addEventListener('player', (e) => playerPanels.get(/** @type {any} */ (e).detail)?.render());
-  store.addEventListener('recorder', (e) => recorderPanels.get(/** @type {any} */ (e).detail)?.render());
+  store.addEventListener('recorder', (e) => {
+    recorderPanels.get(/** @type {any} */ (e).detail)?.render();
+    recentsPanel?.render(); // el pendent d'un enregistrador no surt a «Recents»
+  });
+  store.addEventListener('recordings', () => {
+    for (const panel of recorderPanels.values()) panel.render();
+    recentsPanel?.render();
+  });
   store.addEventListener('playlist', (e) => playerPanels.get(/** @type {any} */ (e).detail)?.renderPlaylist());
   store.addEventListener('devices', renderAll);
   store.addEventListener('meters', () => {
@@ -187,15 +198,19 @@ function setupPanels() {
 /** Crea un panell per a cada reproductor i enregistrador que té el motor. */
 function buildPanels() {
   playerPanels = new Map([...store.players.keys()].map((id) => [id, new PlayerPanel(store, id, request)]));
-  recorderPanels = new Map([...store.recorders.keys()].map((id) => [id, new RecorderPanel(store, id)]));
+  recorderPanels = new Map([...store.recorders.keys()].map((id) => [id, new RecorderPanel(store, id, request)]));
+  recentsPanel = new RecentsPanel(store, request);
 
   els.players.replaceChildren(...[...playerPanels.values()].map((p) => p.element));
   els.recorders.replaceChildren(...[...recorderPanels.values()].map((r) => r.element));
+  els.recents.replaceWith(recentsPanel.element);
+  els.recents = recentsPanel.element;
 }
 
 function renderAll() {
   for (const panel of playerPanels.values()) panel.render();
   for (const panel of recorderPanels.values()) panel.render();
+  recentsPanel?.render();
 }
 
 // ---------------------------------------------------------------------------

@@ -259,6 +259,38 @@ ipcMain.handle('dialog:open-playlist', async () => {
   return result.filePaths[0];
 });
 
+let lastRecordingFolder = undefined;
+
+/**
+ * Diàleg per desar un enregistrament. Proposa el nom actual, a l'última carpeta on s'ha desat
+ * (o, la primera vegada, a la mateixa carpeta on és). Retorna la ruta triada, o null.
+ * Si el fitxer triat ja existeix, el motor no el sobreescriu: hi afegeix _2, _3...
+ */
+ipcMain.handle('dialog:save-recording', async (_event, currentPath) => {
+  if (!mainWindow || typeof currentPath !== 'string') return null;
+  const folder = lastRecordingFolder ?? path.dirname(currentPath);
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: 'Desar l\'enregistrament',
+    defaultPath: path.join(folder, path.basename(currentPath)),
+    filters: [{ name: 'MP3', extensions: ['mp3'] }],
+  });
+  if (result.canceled || !result.filePath) return null;
+  lastRecordingFolder = path.dirname(result.filePath);
+  return result.filePath;
+});
+
+/** Diàleg per triar una carpeta (p. ex. la carpeta de treball d'un enregistrador). Retorna la ruta, o null. */
+ipcMain.handle('dialog:choose-folder', async (_event, currentFolder) => {
+  if (!mainWindow) return null;
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Triar la carpeta',
+    defaultPath: typeof currentFolder === 'string' ? currentFolder : undefined,
+    properties: ['openDirectory', 'createDirectory'],
+  });
+  if (result.canceled || result.filePaths.length === 0) return null;
+  return result.filePaths[0];
+});
+
 /** Diàleg per desar una llista (.obpl). Retorna la ruta, o null. */
 ipcMain.handle('dialog:save-playlist', async (_event, suggestedName) => {
   if (!mainWindow) return null;

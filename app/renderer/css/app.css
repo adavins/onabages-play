@@ -812,3 +812,207 @@ body.engine-offline .layout {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* Volum per sobre de 0 dB (fader d'enregistrament): es diu amb color i amb el «+» del valor. */
+.fader.boosted .fader-value { color: var(--obp-info); font-weight: 600; }
+
+/* Enregistrador (js/ui/recorder-panel.js) ------------------------------- */
+
+/* El títol és un botó (canviar el nom i la carpeta), però sense aspecte de botó. */
+.rec-title {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: inherit;
+  font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rec-title .rec-edit {
+  font-size: 0.75rem;
+  color: var(--bs-secondary-color);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.rec-title:hover .rec-edit,
+.rec-title:focus-visible .rec-edit {
+  opacity: 1;
+}
+
+/* Temps gran a l'esquerra; nom del fitxer, mida i espai lliure a la dreta. */
+.rec-info {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.rec-info .elapsed {
+  line-height: 1;
+}
+
+.elapsed.recording { color: var(--obp-recording); }
+.elapsed.dim,
+.track.dim { color: var(--bs-secondary-color); font-weight: 400; }
+
+.rec-file {
+  flex: 1;
+  min-width: 0;
+}
+
+.rec-sizes {
+  font-size: 0.8rem;
+  color: var(--bs-secondary-color);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rec-low-disk {
+  color: var(--obp-warn);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.rec-low-disk:empty { display: none; }
+
+/* Botons de l'enregistrador: icona i text (més petits que els del reproductor). */
+.recorder .btn-control {
+  font-size: 1rem;
+  white-space: nowrap;
+}
+
+.recorder .btn-control .bi {
+  font-size: 1.2rem;
+  vertical-align: -0.15em;
+}
+
+/* Enregistrar: el botó principal, més ample. */
+.btn-control.rec-start { flex: 1.4; }
+
+/* Aturar després de la primera pulsació: groc i parpellejant fins a la segona. */
+.btn-control.rec-stop.armed {
+  background: var(--obp-warn);
+  border-color: var(--obp-warn);
+  color: #000;
+  animation: obp-blink 0.5s steps(2, start) infinite;
+}
+
+/* Panell estret: als botons només s'hi veu la icona (el text surt en passar-hi el ratolí),
+   menys a «Prem de nou per aturar», que s'ha de llegir sempre. */
+@container (max-width: 20rem) {
+  .recorder .rec-label { display: none; }
+  .recorder .rec-stop.armed .rec-label { display: inline; }
+}
+
+/* Enregistraments recents (js/ui/recents-panel.js) ----------------------- */
+
+/* La seva alçada la marquen els enregistradors del costat: si la llista és llarga, es desplaça
+   (sense «contain», la llista faria créixer la fila i encongiria els reproductors). */
+.recents {
+  contain: size;
+  display: flex;
+  flex-direction: column;
+}
+
+@media (max-width: 48rem) {
+  .recents { min-height: calc(14rem * var(--obp-ui-scale)); }
+}
+
+.rc-body {
+  flex: 1;
+  padding: 0 !important;
+}
+
+.rc-body > .message-text {
+  padding: 0.3rem var(--obp-pad) 0;
+}
+
+.rc-count {
+  font-size: 0.8rem;
+  color: var(--bs-secondary-color);
+  font-variant-numeric: tabular-nums;
+}
+
+.rc-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  font-size: 0.85rem;
+}
+
+.rc-row {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.3rem 0.4rem 0.3rem var(--obp-pad);
+  border-bottom: 1px solid rgb(255 255 255 / 0.06);
+}
+
+.rc-row:hover { background: rgb(255 255 255 / 0.04); }
+.rc-row-missing .rc-name { color: var(--bs-secondary-color); text-decoration: line-through; }
+
+.rc-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.rc-name {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rc-meta {
+  font-size: 0.75rem;
+  color: var(--bs-secondary-color);
+  font-variant-numeric: tabular-nums;
+}
+
+.rc-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.rc-saved   { color: var(--obp-ok); }
+.rc-missing { color: var(--obp-warn); }
+.rc-busy    { color: var(--obp-info); }
+.rc-cut     { color: var(--obp-warn); }
+
+.rc-problem { font-size: 0.75rem; }
+
+.rc-actions {
+  display: flex;
+  flex-shrink: 0;
+}
+
+.rc-btn {
+  border: 0;
+  background: none;
+  padding: 0.15rem 0.3rem;
+  line-height: 1;
+  color: var(--bs-secondary-color);
+  font-size: 0.95rem;
+  border-radius: 0.25rem;
+}
+
+.rc-btn:hover:not(:disabled) { color: var(--bs-body-color); background: rgb(255 255 255 / 0.08); }
+.rc-btn-danger:hover:not(:disabled) { color: var(--obp-error); }
+.rc-btn:disabled { opacity: 0.25; }
+
+/* Diàleg amb formulari (js/ui/recorder-settings.js) */
+.obp-form {
+  width: 30rem;
+}
+
+.obp-form .form-control[readonly] {
+  font-size: 0.85rem;
+}

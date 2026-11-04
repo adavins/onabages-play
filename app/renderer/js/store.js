@@ -10,6 +10,7 @@
 //   'player'           ha canviat un reproductor        (detail: id)
 //   'recorder'         ha canviat un enregistrador      (detail: id)
 //   'playlist'         ha canviat la llista d'un reproductor (detail: id del reproductor)
+//   'recordings'       ha canviat la llista d'enregistraments acabats (pendents i recents)
 //   'devices'          ha canviat la llista de dispositius
 //   'meters'           nivells nous dels mesuradors (25 per segon)
 
@@ -20,6 +21,8 @@ export class Store extends EventTarget {
   /** @type {Map<string, any>} */ recorders = new Map();
   /** Llista de cada reproductor (clau: id del reproductor). @type {Map<string, any>} */
   playlists = new Map();
+  /** Enregistraments acabats, el més nou primer (docs/protocol.md, 4.6). @type {any[]} */
+  recordings = [];
   /** @type {any[]} */ devices = [];
   /** @type {any} */ hardware = null;
   /** @type {any} */ engine = null;
@@ -47,6 +50,10 @@ export class Store extends EventTarget {
       this.playlists.set(playlist.player, playlist);
       this.#emit('playlist', playlist.player);
     });
+    client.addEventListener('ev:recordings.changed', (e) => {
+      this.recordings = /** @type {any} */ (e).detail.recordings;
+      this.#emit('recordings');
+    });
     client.addEventListener('ev:meters', (e) => {
       this.meters = /** @type {any} */ (e).detail;
       this.#emit('meters');
@@ -66,6 +73,7 @@ export class Store extends EventTarget {
     this.players = new Map(state.players.map((/** @type {any} */ p) => [p.id, p]));
     this.recorders = new Map(state.recorders.map((/** @type {any} */ r) => [r.id, r]));
     this.playlists = new Map(state.playlists.map((/** @type {any} */ l) => [l.player, l]));
+    this.recordings = state.recordings ?? [];
     this.devices = devices.devices;
     this.#emit('reset');
   }
@@ -83,6 +91,18 @@ export class Store extends EventTarget {
   /** Dispositiu amb aquest identificador, o undefined si Windows ja no el té. */
   device(/** @type {string | null} */ id) {
     return id ? this.devices.find((d) => d.id === id) : undefined;
+  }
+
+  /** L'enregistrament pendent d'un enregistrador (el que acaba d'aturar), o undefined. */
+  pendingRecording(/** @type {string} */ recorderId) {
+    const r = this.recorders.get(recorderId);
+    if (r?.state !== 'pending' || !r.file) return undefined;
+    return this.recordings.find((i) => samePath(i.path, r.file));
+  }
+
+  /** És el pendent d'algun enregistrador? (Aquests no surten a «Recents»: es gestionen des del seu panell.) */
+  isPending(/** @type {any} */ recording) {
+    return [...this.recorders.values()].some((r) => r.state === 'pending' && samePath(r.file, recording.path));
   }
 
   /** Hi ha res sonant o enregistrant? (per decidir si cal confirmar en tancar) */
@@ -120,4 +140,9 @@ export class Store extends EventTarget {
   #emit(/** @type {string} */ type, /** @type {any} */ detail = undefined) {
     this.dispatchEvent(new CustomEvent(type, { detail }));
   }
+}
+
+/** Windows no distingeix majúscules de minúscules a les rutes. */
+function samePath(/** @type {string | null} */ a, /** @type {string | null} */ b) {
+  return !!a && !!b && a.toLowerCase() === b.toLowerCase();
 }

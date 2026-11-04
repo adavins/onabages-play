@@ -17,7 +17,8 @@ public class EditorCommandsTests : IDisposable
     public EditorCommandsTests()
     {
         Directory.CreateDirectory(_folder);
-        _state = new EngineState([], [new Recorder("1", _ => new FakeInput())]);
+        _state = new EngineState([], [new Recorder("1", _ => new FakeInput())],
+            editor: new EditorSession(Path.Combine(_folder, "cache")));
         _router = new CommandRouter(_state, () => { }, () => []);
     }
 

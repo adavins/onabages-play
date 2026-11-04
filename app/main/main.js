@@ -93,6 +93,8 @@ function createWindow() {
 
   mainWindow.on('closed', () => {
     mainWindow = null;
+    // L'editor no té sentit sense la finestra principal (la principal ja ha avisat dels canvis sense desar).
+    editorWindow?.destroy();
   });
 
   mainWindow.webContents.once('did-finish-load', offerDesktopShortcut);
@@ -283,6 +285,114 @@ ipcMain.handle('ui:set-zoom', (_event, factor) => {
 ipcMain.on('app:close-confirmed', () => {
   closeConfirmed = true;
   mainWindow?.close();
+});
+
+// ---------------------------------------------------------------------------
+// Editor (fase 3): una finestra pròpia, que es pot portar a un altre monitor
+// ---------------------------------------------------------------------------
+
+/** @type {BrowserWindow | null} */
+let editorWindow = null;
+let editorCloseConfirmed = false;
+/** Fitxer que s'ha d'obrir quan la finestra de l'editor acabi de carregar. */
+let editorPendingFile = null;
+
+/** Obre (o porta al davant) la finestra de l'editor; si es passa un fitxer, l'hi obre. */
+function openEditorWindow(filePath) {
+  if (editorWindow) {
+    if (editorWindow.isMinimized()) editorWindow.restore();
+    editorWindow.focus();
+    if (filePath) editorWindow.webContents.send('editor:open-file', filePath);
+    return;
+  }
+
+  editorCloseConfirmed = false;
+  editorPendingFile = filePath ?? null;
+  editorWindow = new BrowserWindow({
+    width: 1400,
+    height: 640,
+    minWidth: 700,
+    minHeight: 360,
+    title: 'Editor — Ona Bages Play',
+    backgroundColor: '#121417',
+    autoHideMenuBar: true,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  });
+  editorWindow.removeMenu();
+  editorWindow.loadFile(path.join(__dirname, '..', 'renderer', 'editor.html'));
+
+  editorWindow.webContents.on('before-input-event', (event, input) => {
+    if (input.type === 'keyDown' && input.key === 'F12' && !app.isPackaged) {
+      editorWindow?.webContents.toggleDevTools();
+      event.preventDefault();
+    }
+  });
+
+  editorWindow.webContents.once('did-finish-load', () => {
+    if (editorPendingFile) editorWindow?.webContents.send('editor:open-file', editorPendingFile);
+    editorPendingFile = null;
+  });
+
+  // Com la principal: primer pregunta a la interfície (si hi ha canvis sense desar, ho confirma).
+  editorWindow.on('close', (event) => {
+    if (editorCloseConfirmed) return;
+    event.preventDefault();
+    editorWindow?.webContents.send('editor:close-requested');
+  });
+  editorWindow.webContents.on('render-process-gone', () => {
+    editorCloseConfirmed = true;
+  });
+  editorWindow.on('closed', () => {
+    editorWindow = null;
+  });
+}
+
+ipcMain.handle('editor:open', (_event, filePath) => {
+  openEditorWindow(typeof filePath === 'string' && path.isAbsolute(filePath) ? filePath : null);
+});
+
+ipcMain.on('editor:close-confirmed', () => {
+  editorCloseConfirmed = true;
+  editorWindow?.close();
+});
+
+let lastEditorFolder = undefined;
+
+/** Diàleg per obrir un MP3 a l'editor. Retorna la ruta, o null. */
+ipcMain.handle('dialog:open-mp3', async (event) => {
+  const owner = BrowserWindow.fromWebContents(event.sender);
+  if (!owner) return null;
+  const result = await dialog.showOpenDialog(owner, {
+    title: 'Obrir un MP3 a l\'editor',
+    defaultPath: lastEditorFolder,
+    properties: ['openFile'],
+    filters: [{ name: 'MP3', extensions: ['mp3'] }],
+  });
+  if (result.canceled || result.filePaths.length === 0) return null;
+  lastEditorFolder = path.dirname(result.filePaths[0]);
+  return result.filePaths[0];
+});
+
+/**
+ * Diàleg «Desar com…» de l'editor. Proposa «<nom> (editat).mp3» a la mateixa carpeta.
+ * Retorna la ruta, o null. Si ja existeix, el diàleg de Windows ja demana si es vol substituir.
+ */
+ipcMain.handle('dialog:save-mp3', async (event, currentPath) => {
+  const owner = BrowserWindow.fromWebContents(event.sender);
+  if (!owner || typeof currentPath !== 'string') return null;
+  const base = path.basename(currentPath, path.extname(currentPath));
+  const result = await dialog.showSaveDialog(owner, {
+    title: 'Desar com…',
+    defaultPath: path.join(path.dirname(currentPath), `${base} (editat).mp3`),
+    filters: [{ name: 'MP3', extensions: ['mp3'] }],
+  });
+  if (result.canceled || !result.filePath) return null;
+  return result.filePath;
 });
 
 /** Obre l'Explorador de Windows amb el fitxer seleccionat (menú contextual de la llista). */

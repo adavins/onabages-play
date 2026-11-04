@@ -82,6 +82,12 @@ public sealed class ConfigRepository
             },
             ["layout"] = new JsonObject { ["players"] = config.PlayerCount, ["recorders"] = config.RecorderCount },
             ["program"] = new JsonObject { ["name"] = config.ProgramName },
+            ["editor"] = new JsonObject
+            {
+                ["device"] = config.EditorDevice is { } editorDevice
+                    ? new JsonObject { ["id"] = editorDevice.Id, ["name"] = editorDevice.Name }
+                    : null,
+            },
             ["recorderSettings"] = new JsonArray(config.RecorderSettings
                 .OrderBy(s => s.Key, StringComparer.Ordinal)
                 .Select(s => (JsonNode)new JsonObject
@@ -144,6 +150,10 @@ public sealed class ConfigRepository
         // "program" és opcional (afegit al pas 10 de la fase 2). Un nom massa llarg es retalla.
         if (Text(root["program"]?["name"]) is { } programName)
             config.ProgramName = CleanProgramName(programName);
+
+        // "editor" és opcional (fase 3): sortida de l'editor; sense, la de la preescolta.
+        if (Text(root["editor"]?["device"]?["id"]) is { Length: > 0 } editorId)
+            config.EditorDevice = new DeviceRef(editorId, Text(root["editor"]?["device"]?["name"]) ?? "");
 
         // "recorderSettings" també és opcional (afegit a la fase 2).
         if (root["recorderSettings"] is JsonArray recorderSettings)

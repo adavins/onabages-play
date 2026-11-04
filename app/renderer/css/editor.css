@@ -1,0 +1,208 @@
+/* Finestra de l'editor (fase 3). Fa servir els colors i l'estat del motor de app.css. */
+
+.editor-body {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  user-select: none;
+}
+
+/* Barra superior ------------------------------------------------------ */
+
+.ed-topbar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--bs-border-color);
+  background: var(--bs-tertiary-bg);
+  white-space: nowrap;
+}
+
+.ed-title {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+  flex: 1;
+  font-weight: 600;
+}
+
+.ed-file {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 1.05rem;
+}
+
+.ed-modified,
+.ed-saved {
+  flex: none;
+  padding: 0.15rem 0.5rem;
+  border-radius: 0.3rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.ed-modified { background: var(--bs-warning); color: #000; }
+.ed-saved { background: var(--bs-success); color: #fff; }
+.ed-modified.d-none,
+.ed-saved.d-none { display: none; }
+
+.ed-actions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+/* Forma d'ona --------------------------------------------------------- */
+
+.ed-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 0.5rem 0.75rem 0;
+  gap: 0.4rem;
+}
+
+.ed-wave-box {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.3rem;
+  overflow: hidden;
+}
+
+.ed-wave {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: text;
+}
+
+.ed-overview {
+  display: block;
+  width: 100%;
+  height: 42px;
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.3rem;
+  cursor: pointer;
+}
+
+.ed-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  color: var(--bs-secondary-color);
+  font-style: italic;
+  pointer-events: none;
+}
+
+.ed-empty .bi { font-size: 2.5rem; }
+.ed-empty.d-none { display: none; }
+
+.ed-busy {
+  position: absolute;
+  top: 0.75rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.9rem;
+  border-radius: 0.3rem;
+  background: rgba(0, 0, 0, 0.75);
+  font-weight: 600;
+}
+
+.ed-busy.d-none { display: none; }
+
+/* Controls ------------------------------------------------------------ */
+
+.ed-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem 1.2rem;
+  padding: 0.6rem 0.75rem;
+}
+
+.ed-group {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.ed-play {
+  min-width: 3.2rem;
+  font-size: 1.1rem;
+}
+
+.ed-times {
+  display: flex;
+  gap: 1.2rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.ed-time {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+
+.ed-time-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--bs-secondary-color);
+}
+
+.ed-time-value {
+  font-size: 1rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Desactivat: ben apagat i sense color, perquè no es confongui amb un botó que es pot prémer. */
+.editor-body .btn:disabled {
+  opacity: 0.3;
+  filter: grayscale(1);
+}
+
+.ed-output { margin-left: auto; }
+.ed-output-label { font-size: 1.1rem; color: var(--bs-secondary-color); }
+.ed-output select { max-width: 18rem; }
+
+/* Missatges (errors, desat) ------------------------------------------- */
+
+.ed-message {
+  position: fixed;
+  left: 50%;
+  bottom: 4.2rem;
+  transform: translateX(-50%);
+  max-width: 80vw;
+  padding: 0.45rem 0.9rem;
+  border-radius: 0.3rem;
+  background: var(--bs-success-bg-subtle);
+  border: 1px solid var(--bs-success-border-subtle);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s;
+}
+
+.ed-message-visible { opacity: 1; }
+.ed-message-error {
+  background: var(--bs-danger-bg-subtle);
+  border-color: var(--bs-danger-border-subtle);
+}
+
+/* Sense motor, tot apagat (com la finestra principal). */
+.editor-body.engine-offline .ed-main,
+.editor-body.engine-offline .ed-controls {
+  opacity: 0.45;
+}

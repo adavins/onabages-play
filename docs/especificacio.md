@@ -469,7 +469,7 @@ Editar ràpidament un enregistrament acabat, com amb mp3DirectCut: retallar, tre
 - Un MP3 està format per fotogrames d'1.152 mostres: uns 26 ms a 44,1 kHz i uns 24 ms a 48 kHz. Els punts de tall s'ajusten al fotograma més proper. És la mateixa precisió que mp3DirectCut, i és suficient per a l'edició de programes.
 - Retallar i eliminar = copiar fotogrames sencers a un fitxer nou. És instantani i no hi ha pèrdua de qualitat. NAudio permet llegir els fotogrames MP3 individualment.
 - Els fosos requereixen descodificar i tornar a codificar només els fotogrames afectats. Es deixen per a la segona versió perquè cal provar els efectes a les vores (bit reservoir del MP3).
-- La forma d'ona es calcula descodificant el fitxer un sol cop i es desa en un fitxer de pics al costat de l'MP3, perquè les obertures següents siguin immediates.
+- La forma d'ona es calcula descodificant el fitxer un sol cop i es desa en un fitxer de pics a la memòria cau (`cache\formes-ona\` de la carpeta de dades; no al costat de l'MP3, per no omplir les carpetes d'enregistraments), perquè les obertures següents siguin immediates (D-050).
 
 ## 9.4. Convivència amb els enregistraments
 
@@ -573,7 +573,7 @@ Les dues opcions poden conviure: configuració i perfils en JSON (fàcils de cop
 | Historial de reproducció | CSV diari | `%APPDATA%\OnaBages\historial\` |
 | Enregistraments | MP3 | Carpetes de treball i de destinació |
 | Marcadors de recuperació | `.rec` (JSON) | Al costat de l'enregistrament |
-| Formes d'ona | Fitxer de pics | Al costat de l'MP3 o a la memòria cau |
+| Formes d'ona | Fitxer de pics (`.obpk`), es guarden 60 dies des de l'últim ús | `%APPDATA%\OnaBages\cache\formes-ona\` |
 | Anàlisi de sonoritat | JSON (memòria cau) | `%APPDATA%\OnaBages\cache\` |
 | Registre tècnic del motor | Text, un fitxer per dia (`motor-AAAA-MM-DD.log`), es guarden 30 dies (D-045) | `%APPDATA%\OnaBages\logs\` |
 

@@ -104,6 +104,7 @@ export class RecentsPanel {
         </div>
         <div class="rc-actions">
           ${previewButton(previewing, `data-action="preview"${disabled(!usable)}`, 'rc-btn')}
+          <button class="rc-btn" data-action="edit" type="button" title="Editar: obrir-lo a l'editor"${disabled(!usable)}><i class="bi bi-scissors"></i></button>
           <button class="rc-btn" data-action="save" type="button" title="Desar: triar el nom i la carpeta"${disabled(!usable)}><i class="bi bi-floppy"></i></button>
           <button class="rc-btn" data-action="show" type="button" title="Mostrar a l'Explorador"${disabled(!usable)}><i class="bi bi-folder2-open"></i></button>
           <button class="rc-btn rc-btn-danger" data-action="discard" type="button" title="Descartar: enviar a la paperera"${disabled(!usable)}><i class="bi bi-trash3"></i></button>
@@ -133,6 +134,9 @@ export class RecentsPanel {
         break;
       case 'show':
         bridge?.showInFolder(item.path);
+        break;
+      case 'edit':
+        bridge?.openEditor(item.path); // finestra de l'editor (fase 3)
         break;
       case 'remove':
         try {

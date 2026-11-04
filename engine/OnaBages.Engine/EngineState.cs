@@ -17,8 +17,11 @@ public sealed class EngineState
     /// <param name="players">Reproductors del motor. Les proves en poden passar de falsos, o cap.</param>
     /// <param name="recorders">Enregistradors del motor. Igual.</param>
     /// <param name="cue">Preescolta. Les proves en poden passar una amb una sortida falsa.</param>
-    public EngineState(IEnumerable<Player>? players = null, IEnumerable<Recorder>? recorders = null, CuePlayer? cue = null)
+    /// <param name="editor">Editor. Les proves en passen un amb la memòria cau en una carpeta temporal.</param>
+    public EngineState(IEnumerable<Player>? players = null, IEnumerable<Recorder>? recorders = null, CuePlayer? cue = null,
+        EditorSession? editor = null)
     {
+        Editor = editor ?? new EditorSession();
         Players = (players ?? []).ToList();
         Recorders = (recorders ?? []).ToList();
         Cue = cue ?? new CuePlayer();
@@ -53,7 +56,7 @@ public sealed class EngineState
     public Player? FindPlayer(string? id) => Players.FirstOrDefault(p => p.Id == id);
 
     /// <summary>Editor (fase 3): un sol fitxer obert alhora.</summary>
-    public EditorSession Editor { get; } = new();
+    public EditorSession Editor { get; }
 
     public double UptimeSeconds => Math.Round(_uptime.Elapsed.TotalSeconds, 1);
 

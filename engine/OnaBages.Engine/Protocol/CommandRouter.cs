@@ -125,6 +125,10 @@ public sealed class CommandRouter
                 "editor.undo" => EditorDo(e => e.Change(edit => edit.Undo())),
                 "editor.redo" => EditorDo(e => e.Change(edit => edit.Redo())),
                 "editor.save" => EditorSave(msg),
+                "editor.peaks" => EditorPeaks(msg),
+                "editor.play" => EditorPlay(msg),
+                "editor.stop" => EditorDo(e => e.StopPlayback()),
+                "editor.setDevice" => EditorSetDevice(msg),
                 _ => null,
             };
 
@@ -190,14 +194,14 @@ public sealed class CommandRouter
         ["cue"] = CueJson.Cue(_state),
         ["playlists"] = PlaylistJson.All(_state.Players),
         ["hardware"] = HardwareJson.Report(_hardware?.Report ?? HardwareReport.Empty),
-        ["editor"] = EditorJson.Editor(_state.Editor),
+        ["editor"] = EditorJson.Editor(_state.Editor, _config?.Read(c => c.EditorDevice)),
     };
 
     // -----------------------------------------------------------------------
     // Editor (fase 3; docs/protocol.md, 4.10)
     // -----------------------------------------------------------------------
 
-    private JsonObject EditorState() => new() { ["editor"] = EditorJson.Editor(_state.Editor) };
+    private JsonObject EditorState() => new() { ["editor"] = EditorJson.Editor(_state.Editor, _config?.Read(c => c.EditorDevice)) };
 
     private JsonObject EditorDo(Action<EditorSession> action)
     {
@@ -240,6 +244,72 @@ public sealed class CommandRouter
         if (target is not null) RejectIfRecording(target);
 
         _state.Editor.Save(target, overwrite);
+        return EditorState();
+    }
+
+    /// <summary>Pics de la forma d'ona (fotogrames de l'original): opcionals <c>from</c> i <c>count</c>; per defecte, tots els que hi ha.</summary>
+    private JsonObject EditorPeaks(JsonObject msg)
+    {
+        int from = msg["from"] is null ? 0 : (int)RequireNumber(msg, "from", "el primer fotograma (0 o més)");
+        int count = msg["count"] is null ? int.MaxValue : (int)Math.Min(int.MaxValue, RequireNumber(msg, "count", "quants fotogrames"));
+        if (from < 0 || count < 0)
+            throw new BadParamsException("'from' i 'count' han de ser 0 o més.");
+        var (start, data) = _state.Editor.ReadPeaks(from, count);
+        return new JsonObject { ["peaks"] = EditorJson.Peaks(start, data) };
+    }
+
+    /// <summary>Fa sonar la versió editada: opcionals <c>from</c> i <c>to</c> (segons; per defecte, de l'inici al final).</summary>
+    private JsonObject EditorPlay(JsonObject msg)
+    {
+        double from = msg["from"] is null ? 0 : RequireNumber(msg, "from", "la posició en segons");
+        double? to = msg["to"] is null ? null : RequireNumber(msg, "to", "la posició en segons");
+        string deviceId = EditorOutput();
+
+        _state.Editor.Play(deviceId, from, to);
+        if (_state.Editor.Player.State == EditorPlayState.Error)
+            throw new PlayerFailedException(_state.Editor.Player.ErrorMessage ?? "Error en reproduir a l'editor.");
+        return EditorState();
+    }
+
+    /// <summary>
+    /// Sortida de l'editor: la triada (per identificador o, si ha canviat, pel nom) o, si no se n'ha triat
+    /// cap, la de la preescolta. Mai el dispositiu predeterminat de Windows.
+    /// </summary>
+    private string EditorOutput()
+    {
+        if (_config?.Read(c => c.EditorDevice) is not { } saved)
+            return _state.Cue.DeviceId
+                ?? throw new EditorStateException("Cal triar una sortida per a l'editor (o per a la preescolta).");
+
+        var outputs = _listDevices().Where(d => d.Kind == DeviceKind.Output).ToList();
+        var byId = outputs.FirstOrDefault(d => d.Id == saved.Id);
+        if (byId is not null) return byId.Id;
+        var byName = outputs.Where(d => d.Name == saved.Name).ToList();
+        if (byName.Count == 1) return byName[0].Id;
+        throw new EditorStateException($"La sortida de l'editor («{saved.Name}») no hi és. Tria'n una altra.");
+    }
+
+    /// <summary>Tria la sortida de l'editor. <c>deviceId: null</c> = la de la preescolta (per defecte).</summary>
+    private JsonObject EditorSetDevice(JsonObject msg)
+    {
+        var config = RequireConfig();
+        if (!msg.ContainsKey("deviceId"))
+            throw new BadParamsException("Falta el camp 'deviceId' (una sortida, o null per fer servir la de la preescolta).");
+
+        DeviceRef? device = null;
+        if (ReadString(msg["deviceId"]) is { } id)
+        {
+            var found = _listDevices().FirstOrDefault(d => d.Id == id && d.Kind == DeviceKind.Output)
+                ?? throw new BadParamsException("No hi ha cap sortida amb aquest identificador.");
+            device = new DeviceRef(found.Id, found.Name);
+        }
+        else if (msg["deviceId"] is not null)
+        {
+            throw new BadParamsException("'deviceId' ha de ser un text o null.");
+        }
+
+        _state.Editor.StopPlayback(); // si sonava, per la sortida d'abans
+        config.Update(c => c.EditorDevice = device);
         return EditorState();
     }
 

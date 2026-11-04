@@ -317,6 +317,11 @@ export class PlaylistView {
     return this.#selectedItems().filter((/** @type {any} */ i) => !isSection(i));
   }
 
+  /** Rutes de les pistes seleccionades, en ordre (p. ex. per obrir-ne una a l'editor). @returns {string[]} */
+  selectedPaths() {
+    return this.#selectedTracks().map((/** @type {any} */ i) => i.path);
+  }
+
   /** @param {MouseEvent} e */
   #onDoubleClick(e) {
     const target = /** @type {HTMLElement} */ (e.target);
@@ -494,6 +499,9 @@ export class PlaylistView {
       { label: 'Duplicar (D)', icon: 'bi-copy', action: () => this.#duplicateSelected() },
       { label: 'Inserir una secció a sobre… (S)', icon: 'bi-bookmark-plus', action: () => this.#addSection(item.id) },
       { label: 'Mostrar a l\'Explorador', icon: 'bi-folder2-open', action: () => bridge?.showInFolder(item.path) },
+      ...(/\.mp3$/i.test(item.path)
+        ? [{ label: 'Obrir a l\'editor', icon: 'bi-scissors', action: () => bridge?.openEditor(item.path) }]
+        : []),
     ]);
   }
 

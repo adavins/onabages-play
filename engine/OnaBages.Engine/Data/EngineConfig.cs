@@ -22,6 +22,9 @@ public sealed class EngineConfig
     /// <summary>Sortida de la preescolta (clau: <c>EngineState.CueId</c>; només n'hi ha una).</summary>
     public Dictionary<string, DeviceRef> Cue { get; } = [];
 
+    /// <summary>Sortida de la reproducció de l'editor (fase 3). Null = la mateixa que la preescolta.</summary>
+    public DeviceRef? EditorDevice { get; set; }
+
     /// <summary>Volum de la preescolta, en dB (de −60 a 0). Es recorda perquè depèn dels auriculars.</summary>
     public double CueVolumeDb { get; set; }
 

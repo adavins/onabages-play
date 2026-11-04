@@ -935,6 +935,12 @@ body.engine-offline .layout {
   .recorder .rec-stop.armed .rec-label { display: inline; }
 }
 
+/* Amb un enregistrament pendent hi ha cinc botons (Enregistrar, Escoltar, Editar, Desar, Descartar):
+   si el panell no és prou ample, Escoltar, Editar i Descartar només porten la icona. */
+@container (max-width: 40rem) {
+  .recorder .rec-action:not(.js-save) .rec-label { display: none; }
+}
+
 /* Enregistraments recents (js/ui/recents-panel.js) ----------------------- */
 
 /* La seva alçada la marquen els enregistradors del costat: si la llista és llarga, es desplaça

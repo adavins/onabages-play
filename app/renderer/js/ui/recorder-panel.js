@@ -89,6 +89,9 @@ export class RecorderPanel {
           <button class="btn btn-outline-light btn-control rec-action rec-preview preview-btn js-preview d-none" type="button" title="Escoltar-lo per la preescolta">
             <i class="bi bi-headphones"></i><span class="rec-label js-preview-label"> Escoltar</span>
           </button>
+          <button class="btn btn-outline-light btn-control rec-action js-edit d-none" type="button" title="Obrir-lo a l'editor">
+            <i class="bi bi-scissors"></i><span class="rec-label"> Editar</span>
+          </button>
           <button class="btn btn-primary btn-control rec-action js-save d-none" type="button" title="Desar: triar el nom i la carpeta">
             <i class="bi bi-floppy"></i><span class="rec-label"> Desar</span>
           </button>
@@ -119,6 +122,10 @@ export class RecorderPanel {
     this.#el.start.addEventListener('click', () => this.#send('recorder.start'));
     this.#el.stop.addEventListener('click', () => this.#stopPressed());
     this.#el.preview.addEventListener('click', () => this.#preview());
+    this.#el.edit.addEventListener('click', () => {
+      const item = this.#store.pendingRecording(this.#id);
+      if (item) /** @type {any} */ (window).onabages?.openEditor(item.path); // finestra de l'editor (fase 3)
+    });
     this.#el.save.addEventListener('click', () => this.#save());
     this.#el.discard.addEventListener('click', () => this.#discard());
 
@@ -174,6 +181,8 @@ export class RecorderPanel {
     el.preview.title = previewing ? 'Aturar la preescolta' : 'Escoltar-lo per la preescolta';
     el['preview-label'].textContent = previewing ? ' Aturar' : ' Escoltar';
     setEnabled(el.preview, !!item?.exists && !item?.busy);
+    el.edit.classList.toggle('d-none', !pending);
+    setEnabled(el.edit, !!item?.exists && !item?.busy);
     el.save.classList.toggle('d-none', !pending);
     el.discard.classList.toggle('d-none', !pending);
     setEnabled(el.save, !!item?.exists && !item?.busy);

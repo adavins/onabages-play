@@ -46,4 +46,28 @@ contextBridge.exposeInMainWorld('onabages', {
 
   /** La interfície confirma que la finestra es pot tancar. */
   confirmClose: () => ipcRenderer.send('app:close-confirmed'),
+
+  // --- Editor (fase 3) ---
+
+  /** Obre la finestra de l'editor (o la porta al davant), opcionalment amb un fitxer. */
+  openEditor: (filePath) => ipcRenderer.invoke('editor:open', filePath ?? null),
+
+  /** Finestra de l'editor: s'hi ha d'obrir aquest fitxer (des de Recents o «Editar»). */
+  onEditorOpenFile: (callback) => {
+    ipcRenderer.on('editor:open-file', (_event, filePath) => callback(filePath));
+  },
+
+  /** Finestra de l'editor: l'usuari la vol tancar. */
+  onEditorCloseRequested: (callback) => {
+    ipcRenderer.on('editor:close-requested', () => callback());
+  },
+
+  /** Finestra de l'editor: es pot tancar. */
+  confirmEditorClose: () => ipcRenderer.send('editor:close-confirmed'),
+
+  /** Diàleg per obrir un MP3 a l'editor. Retorna la ruta, o null. */
+  openMp3File: () => ipcRenderer.invoke('dialog:open-mp3'),
+
+  /** Diàleg «Desar com…» de l'editor. Retorna la ruta, o null. */
+  saveMp3File: (currentPath) => ipcRenderer.invoke('dialog:save-mp3', currentPath),
 });

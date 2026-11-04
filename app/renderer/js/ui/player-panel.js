@@ -67,6 +67,9 @@ export class PlayerPanel {
 
         <div class="track-row">
           <div class="track js-track"></div>
+          <button class="btn btn-sm btn-outline-secondary js-edit" type="button" title="Obrir a l'editor la pista actual (o la seleccionada a la llista)">
+            <i class="bi bi-scissors"></i>
+          </button>
           <button class="btn btn-sm btn-outline-secondary js-open" type="button" title="Afegir pistes al final de la llista">
             <i class="bi bi-plus-lg"></i> Afegir
           </button>
@@ -137,6 +140,7 @@ export class PlayerPanel {
     this.#setupSeek();
     this.#el.retry.addEventListener('click', () => this.#send('player.retry'));
     this.#el.open.addEventListener('click', () => this.#open());
+    this.#el.edit.addEventListener('click', () => this.#edit());
     this.#setupDrop();
 
     this.render();
@@ -207,6 +211,24 @@ export class PlayerPanel {
       this.#lastItemId = p.currentItemId;
       this.#meter.resetClip();
     }
+  }
+
+  /**
+   * Botó ✂: obre a l'editor (fase 3) la pista actual del reproductor o, si no n'hi ha,
+   * la primera seleccionada a la llista. L'editor només obre MP3.
+   */
+  #edit() {
+    const p = this.#store.players.get(this.#id);
+    const path = p?.file ?? this.#playlist.selectedPaths()[0];
+    if (!path) {
+      this.#showMessage('Selecciona una pista de la llista per obrir-la a l\'editor.');
+      return;
+    }
+    if (!/\.mp3$/i.test(path)) {
+      this.#showMessage('L\'editor només obre fitxers MP3.');
+      return;
+    }
+    bridge?.openEditor(path);
   }
 
   /** Avís breu al panell (p. ex. una drecera de teclat que el motor ha rebutjat). */

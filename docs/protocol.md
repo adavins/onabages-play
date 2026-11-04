@@ -336,19 +336,27 @@ Un sol fitxer MP3 obert alhora. Les edicions no toquen l'original fins que es de
 | `editor.undo`, `editor.redo` | — | `{ editor }`. Fins a 200 passos |
 | `editor.save` | opcionals: `path` (fitxer nou; sense `path`, a sobre de l'original) i `overwrite: true` | `{ editor }` amb `busy: "saving"`. Si la destinació ja existeix i no s'envia `overwrite: true`: **`file_exists`** i no es desa res (la interfície ho ha de confirmar i tornar a enviar). En acabar arriba `editor.changed`: `savedPath` (desat; l'editor continua amb aquest fitxer, sense desfer) o `error`. Escriptura segura: fitxer temporal a la mateixa carpeta + substitució |
 | `editor.close` | — | `{ editor }`. Tanca sense desar; si s'estava obrint o desant, s'atura (la destinació queda intacta) |
+| `editor.peaks` | opcionals: `from` (primer fotograma, per defecte 0) i `count` (per defecte, tots) | `{ peaks: { start, count, data } }`: forma d'ona en fotogrames **de l'original** (no de la versió editada: la interfície la munta amb `segments`). `data` en base64, 2 bytes per fotograma (pic de l'esquerre i del dret, de 0 a 255, lineal). Només dona els que ja estan calculats (`peaksDone`) |
+| `editor.play` | opcionals: `from` i `to` (segons de la versió editada; per defecte, de l'inici al final) | `{ editor }`. Fa sonar la **versió editada** (els trossos eliminats no sonen) per la sortida de l'editor. Si ja sonava, torna a començar des de `from`. Si `from` és al final, comença de l'inici. `bad_state` si no hi ha cap sortida (ni de l'editor ni de la preescolta) o si la triada no hi és; `player_error` si no s'ha pogut obrir la sortida o el fitxer. Qualsevol edició, desar, obrir o tancar atura la reproducció |
+| `editor.stop` | — | `{ editor }`. La posició queda on era |
+| `editor.setDevice` | `deviceId`: una **sortida**, o `null` per fer servir la de la preescolta (per defecte) | `{ editor }`. Si sonava, s'atura. Es desa a `config.json` (`editor.device`). Si en arrencar la sortida té un altre identificador, es busca pel nom |
 
 Mentre `busy` no és `null`, `delete`, `keep`, `undo`, `redo` i `save` donen `bad_state`.
 
 ```json
-{ "open": true, "path": "D:\\Enregistraments\\Matinal 2026-11-04 08.00.mp3",
+{ "playback": { "state": "playing", "position": 754.32, "error": null, "output": null },
+  "open": true, "path": "D:\\Enregistraments\\Matinal 2026-11-04 08.00.mp3",
   "busy": null, "progress": 1, "error": null, "savedPath": null,
   "sampleRate": 48000, "frameSeconds": 0.024, "bitrates": [320],
-  "originalDuration": 3600.0, "duration": 3412.536, "frames": 142189,
+  "originalFrames": 150000, "originalDuration": 3600.0, "duration": 3412.536, "frames": 142189,
   "segments": [[125, 90000], [97810, 52189]],
+  "peaksDone": 150000, "peaksError": null,
   "canUndo": true, "canRedo": false, "modified": true }
 ```
 
+- `playback`: reproducció de l'editor. `state`: `stopped`, `playing` o `error` (amb el motiu a `error`). `position`: segons de la versió editada (on sona o on s'ha aturat). `output`: la sortida triada (`{ id, name }`) o `null` si fa servir la de la preescolta.
 - `segments`: trossos de l'original que es queden, `[primer fotograma, quants]`, en ordre.
+- `peaksDone`: fotogrames de l'original que ja tenen forma d'ona. Es calcula en segon pla després d'obrir (uns 25 s per hora en un ordinador normal) i es pot editar mentrestant; quan és igual a `originalFrames` (fotogrames de l'original), és completa. La segona vegada que s'obre un fitxer surt de la memòria cau i és completa de seguida. `peaksError`: no s'ha pogut calcular (el fitxer es pot editar igualment).
 - `error`: motiu de l'última feina que ha fallat (obrir o desar). Es neteja amb l'ordre següent.
 - Es desen els fotogrames **tal qual** (sense recodificar). Les etiquetes ID3v2 i ID3v1 es conserven; el fotograma Xing/Info de LAME es treu (diria una durada falsa).
 
@@ -368,7 +376,8 @@ Mentre `busy` no és `null`, `delete`, `keep`, `undo`, `redo` i `save` donen `ba
 | `recordings.changed` | `recordings`: la llista sencera d'enregistraments acabats (vegeu 4.6) | quan s'hi afegeix, es desa, es descarta o se'n treu algun. Agrupat: com a molt 10 per segon | fase 2 |
 | `cue.state` | `cue`: objecte complet (vegeu 4.8) | quan canvia l'estat, la pista, la sortida, el volum o l'error de la preescolta | fase 2 |
 | `cue.position` | `position`, `duration` (segons), `format` (el de la pista, quan ja es coneix) | 10 per segon, només mentre la preescolta sona | fase 2 |
-| `editor.changed` | `editor`: objecte complet (vegeu 4.10) | a cada canvi: obrir, editar, desar, errors; el progrés d'obrir o desar, com a molt 4 per segon | fase 3 |
+| `editor.changed` | `editor`: objecte complet (vegeu 4.10) | a cada canvi: obrir, editar, desar, reproduir, errors; el progrés d'obrir, desar o fer la forma d'ona, com a molt 4 per segon | fase 3 |
+| `editor.position` | `position` (segons de la versió editada) | 10 per segon, només mentre l'editor reprodueix | fase 3 |
 
 ### 5.1. Canvis de dispositius
 

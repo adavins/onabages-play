@@ -62,6 +62,13 @@ public sealed class Mp3Edit
         return Index.FrameCount; // final
     }
 
+    /// <summary>Trossos de l'original que hi ha entre <paramref name="start"/> i <paramref name="end"/> de la versió editada (per reproduir-los).</summary>
+    public IReadOnlyList<FrameRange> SegmentsBetween(int start, int end)
+    {
+        (start, end) = Clamp(start, end);
+        return Slice(Segments, start, end);
+    }
+
     /// <summary>Elimina els fotogrames [start, end) de la versió editada. Retorna false si no hi ha res a eliminar.</summary>
     /// <exception cref="Mp3EditException">Si s'eliminaria tot.</exception>
     public bool Delete(int start, int end)

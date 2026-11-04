@@ -1,4 +1,5 @@
 using OnaBages.Audio;
+using OnaBages.Engine.Data;
 
 namespace OnaBages.Engine;
 
@@ -13,12 +14,63 @@ public sealed class EditorFileExistsException(string message) : Exception(messag
 /// Obrir (indexar) i desar poden trigar uns segons amb un fitxer d'una hora: es fan en un
 /// fil propi de prioritat baixa, perquè mai no frenin els reproductors ni els enregistradors,
 /// i mentrestant <see cref="Busy"/> diu què s'està fent. Les edicions són instantànies.
+///
+/// La forma d'ona (pas 2) es calcula després d'obrir, en un altre fil de prioritat baixa, i es
+/// pot editar mentrestant. Es desa a la memòria cau (<see cref="PeakCacheFile"/>).
 /// </summary>
 public sealed class EditorSession : IDisposable
 {
     private readonly Lock _sync = new();
+    private readonly string? _cacheFolder;
     private CancellationTokenSource? _job;
+    private CancellationTokenSource? _peaksJob;
     private DateTime _lastProgressEvent;
+    private DateTime _lastPeaksEvent;
+    private byte[]? _peaks;      // pics del fitxer obert (de l'original, no de la versió editada)
+    private int _peaksDone;      // fotogrames que ja tenen pic
+
+    /// <param name="cacheFolder">Carpeta de la memòria cau de formes d'ona. Per defecte, la de l'usuari; les proves en passen una de temporal.</param>
+    /// <param name="openOutput">Sortida de la reproducció de l'editor. Per defecte, WASAPI; les proves en passen una de falsa.</param>
+    public EditorSession(string? cacheFolder = null, Func<string, IAudioOutput>? openOutput = null)
+    {
+        _cacheFolder = cacheFolder;
+        Player = new EditorPlayer(openOutput);
+        Player.StateChanged += _ => RaiseChanged();
+    }
+
+    /// <summary>Reproducció de l'editor (pas 3): la versió editada, per una sortida pròpia.</summary>
+    public EditorPlayer Player { get; }
+
+    /// <summary>
+    /// Fa sonar la versió editada des de <paramref name="from"/> fins a <paramref name="to"/> (segons;
+    /// sense <paramref name="to"/>, fins al final) per <paramref name="deviceId"/>.
+    /// </summary>
+    public void Play(string deviceId, double from, double? to)
+    {
+        string path;
+        List<PlayPiece> pieces;
+        double start;
+        lock (_sync)
+        {
+            var edit = RequireReady();
+            int startFrame = edit.FrameAt(from);
+            int endFrame = to is { } t ? edit.FrameAt(t) : edit.FrameCount;
+            if (startFrame >= edit.FrameCount)
+                startFrame = 0; // al final: torna a començar (com els reproductors en prémer Play)
+            if (endFrame <= startFrame)
+                endFrame = edit.FrameCount;
+            double frame = edit.Index.FrameSeconds;
+            pieces = edit.SegmentsBetween(startFrame, endFrame)
+                .Select(s => new PlayPiece(s.Start * frame, s.Count * frame))
+                .ToList();
+            path = edit.Index.Path;
+            start = edit.SecondsAt(startFrame);
+        }
+        Player.Play(deviceId, path, pieces, start); // fora del bloqueig: obre la sortida i espera el so preparat
+    }
+
+    /// <summary>Atura la reproducció de l'editor.</summary>
+    public void StopPlayback() => Player.Stop();
 
     /// <summary>Fitxer obert (o que s'està obrint). Null si no n'hi ha cap.</summary>
     public string? Path { get; private set; }
@@ -38,22 +90,31 @@ public sealed class EditorSession : IDisposable
     /// <summary>Fitxer on s'ha desat l'última vegada (fins al canvi següent).</summary>
     public string? SavedPath { get; private set; }
 
+    /// <summary>Fotogrames de l'original que ja tenen forma d'ona (es pot anar dibuixant).</summary>
+    public int PeaksDone => Volatile.Read(ref _peaksDone);
+
+    /// <summary>La forma d'ona no s'ha pogut calcular (el fitxer es pot editar igualment).</summary>
+    public string? PeaksError { get; private set; }
+
     /// <summary>Qualsevol canvi (també el progrés, com a molt 4 vegades per segon).</summary>
     public event Action? Changed;
 
     /// <summary>Obre un fitxer (en segon pla). El que hi hagués obert es tanca sense desar.</summary>
     public void Open(string path)
     {
+        Player.Stop(); // el que sonava és d'un altre fitxer
         lock (_sync)
         {
             CancelJob();
+            CancelPeaks();
             Path = path;
             Edit = null;
             Error = null;
             SavedPath = null;
-            StartJob("opening", token => Index(path, token), onDone: index =>
+            StartJob("opening", token => Mp3FrameIndex.Build(path, token), onDone: index =>
             {
                 Edit = new Mp3Edit(index);
+                StartPeaks(index);
             });
         }
         RaiseChanged();
@@ -62,9 +123,11 @@ public sealed class EditorSession : IDisposable
     /// <summary>Tanca el fitxer (sense desar). Si s'estava obrint o desant, s'atura.</summary>
     public void Close()
     {
+        Player.Stop();
         lock (_sync)
         {
             CancelJob();
+            CancelPeaks();
             Path = null;
             Edit = null;
             Busy = null;
@@ -77,6 +140,7 @@ public sealed class EditorSession : IDisposable
     /// <summary>Fa un canvi a l'edició (eliminar, conservar, desfer, refer). Retorna si ha canviat res.</summary>
     public bool Change(Func<Mp3Edit, bool> change)
     {
+        Player.Stop(); // després del canvi, les posicions ja no serien les mateixes
         bool changed;
         lock (_sync)
         {
@@ -96,6 +160,7 @@ public sealed class EditorSession : IDisposable
     /// </summary>
     public void Save(string? target, bool overwrite)
     {
+        Player.Stop();
         lock (_sync)
         {
             var edit = RequireReady();
@@ -107,24 +172,62 @@ public sealed class EditorSession : IDisposable
 
             Error = null;
             string saved = target;
+            var segments = edit.Segments;
             StartJob("saving", token =>
             {
                 edit.Save(saved, p => ReportProgress(p), token);
-                return Index(saved, token);
+                return Mp3FrameIndex.Build(saved, token);
             }, onDone: index =>
             {
+                // Forma d'ona del fitxer desat: si la de l'original ja era completa, es munta amb els
+                // trossos que s'han quedat (sense tornar a descodificar). Si no, es calcula de nou.
+                byte[]? derived = _peaks is { } peaks && _peaksDone == edit.Index.FrameCount
+                    ? WaveformPeaks.Splice(peaks, segments)
+                    : null;
+                CancelPeaks();
                 Path = saved;
                 Edit = new Mp3Edit(index);
                 SavedPath = saved;
+                if (derived is not null && derived.Length == index.FrameCount * WaveformPeaks.BytesPerFrame)
+                {
+                    _peaks = derived;
+                    Volatile.Write(ref _peaksDone, index.FrameCount);
+                    PeakCacheFile.Write(index, derived, _cacheFolder);
+                }
+                else
+                {
+                    StartPeaks(index);
+                }
             });
         }
         RaiseChanged();
     }
 
-    public void Dispose()
+    /// <summary>
+    /// Pics de la forma d'ona, en fotogrames de l'<b>original</b>: a partir de <paramref name="from"/>,
+    /// com a molt <paramref name="count"/> (només els que ja estan calculats).
+    /// </summary>
+    public (int Start, byte[] Data) ReadPeaks(int from, int count)
     {
         lock (_sync)
+        {
+            if (Edit is null || _peaks is null)
+                throw new EditorStateException("No hi ha cap fitxer obert a l'editor.");
+            int done = _peaksDone;
+            from = Math.Clamp(from, 0, done);
+            count = Math.Clamp(count, 0, done - from);
+            return (from, _peaks.AsSpan(from * WaveformPeaks.BytesPerFrame, count * WaveformPeaks.BytesPerFrame).ToArray());
+        }
+    }
+
+    public void Dispose()
+    {
+        Player.Dispose();
+        lock (_sync)
+        {
             CancelJob();
+            CancelPeaks();
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -136,8 +239,6 @@ public sealed class EditorSession : IDisposable
         return Edit ?? throw new EditorStateException("No hi ha cap fitxer obert a l'editor.");
     }
 
-    private Mp3FrameIndex Index(string path, CancellationToken token) => Mp3FrameIndex.Build(path, token);
-
     /// <summary>Feina en segon pla. En acabar (dins del bloqueig): <paramref name="onDone"/> o l'error a <see cref="Error"/>.</summary>
     private void StartJob(string busy, Func<CancellationToken, Mp3FrameIndex> work, Action<Mp3FrameIndex> onDone)
     {
@@ -146,7 +247,7 @@ public sealed class EditorSession : IDisposable
         Busy = busy;
         Progress = 0;
 
-        var thread = new Thread(() =>
+        StartThread(busy == "opening" ? "Editor: obrir" : "Editor: desar", () =>
         {
             Mp3FrameIndex? result = null;
             string? error = null;
@@ -169,14 +270,61 @@ public sealed class EditorSession : IDisposable
                 }
             }
             RaiseChanged();
-        })
-        {
-            IsBackground = true,
-            Name = busy == "opening" ? "Editor: obrir" : "Editor: desar",
-            Priority = ThreadPriority.BelowNormal, // mai per davant de l'àudio ni dels enregistraments
-        };
-        thread.Start();
+        });
     }
+
+    /// <summary>Forma d'ona: de la memòria cau si hi és; si no, es calcula en segon pla (dins de _sync).</summary>
+    private void StartPeaks(Mp3FrameIndex index)
+    {
+        PeaksError = null;
+        if (PeakCacheFile.Read(index, _cacheFolder) is { } cached)
+        {
+            _peaks = cached;
+            Volatile.Write(ref _peaksDone, index.FrameCount);
+            return;
+        }
+
+        var peaks = new byte[index.FrameCount * WaveformPeaks.BytesPerFrame];
+        _peaks = peaks;
+        Volatile.Write(ref _peaksDone, 0);
+        var job = new CancellationTokenSource();
+        _peaksJob = job;
+
+        StartThread("Editor: forma d'ona", () =>
+        {
+            string? error = null;
+            try
+            {
+                WaveformPeaks.Compute(index.Path, index.SampleRate, index.SamplesPerFrame, index.FrameCount, peaks,
+                    done => ReportPeaks(job, done), job.Token);
+            }
+            catch (OperationCanceledException) { return; }
+            catch (Exception ex) { error = ex.Message; }
+
+            lock (_sync)
+            {
+                if (_peaksJob != job) return;
+                _peaksJob = null;
+                if (error is null)
+                {
+                    Volatile.Write(ref _peaksDone, index.FrameCount);
+                    PeakCacheFile.Write(index, peaks, _cacheFolder);
+                }
+                else
+                {
+                    PeaksError = $"No s'ha pogut fer la forma d'ona: {error}";
+                }
+            }
+            RaiseChanged();
+        });
+    }
+
+    private static void StartThread(string name, Action work) => new Thread(() => work())
+    {
+        IsBackground = true,
+        Name = name,
+        Priority = ThreadPriority.BelowNormal, // mai per davant de l'àudio ni dels enregistraments
+    }.Start();
 
     private void CancelJob()
     {
@@ -185,12 +333,34 @@ public sealed class EditorSession : IDisposable
         Busy = null;
     }
 
+    private void CancelPeaks()
+    {
+        _peaksJob?.Cancel();
+        _peaksJob = null;
+        _peaks = null;
+        Volatile.Write(ref _peaksDone, 0);
+        PeaksError = null;
+    }
+
     private void ReportProgress(double progress)
     {
         Progress = progress;
         var now = DateTime.UtcNow;
         if (now - _lastProgressEvent < TimeSpan.FromMilliseconds(250)) return;
         _lastProgressEvent = now;
+        RaiseChanged();
+    }
+
+    private void ReportPeaks(CancellationTokenSource job, int done)
+    {
+        lock (_sync)
+        {
+            if (_peaksJob != job) return; // és d'un fitxer que ja no és obert
+            Volatile.Write(ref _peaksDone, done);
+        }
+        var now = DateTime.UtcNow;
+        if (now - _lastPeaksEvent < TimeSpan.FromMilliseconds(250)) return;
+        _lastPeaksEvent = now;
         RaiseChanged();
     }
 

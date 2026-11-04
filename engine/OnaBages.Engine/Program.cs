@@ -58,6 +58,9 @@ TaskScheduler.UnobservedTaskException += (_, e) =>
     e.SetObserved();
 };
 
+// Formes d'ona de l'editor que fa temps que no es fan servir (memòria cau).
+PeakCacheFile.DeleteOld();
+
 // La carpeta de l'historial existeix des del principi (la interfície la pot obrir encara que estigui buida).
 try { Directory.CreateDirectory(PlayHistoryFile.DefaultFolder); }
 catch (Exception ex) { log.LogWarning("No s'ha pogut crear la carpeta de l'historial: {Message}", ex.Message); }
@@ -172,27 +175,6 @@ foreach (var recorder in state.Recorders)
     };
 }
 
-// Editor (fase 3): cada canvi va a la interfície; al registre, obrir, desar i els errors.
-{
-    string lastLogged = "";
-    state.Editor.Changed += () =>
-    {
-        var editor = state.Editor;
-        string summary = $"{editor.Path}|{editor.Busy}|{editor.Error}|{editor.SavedPath}";
-        if (summary != lastLogged)
-        {
-            lastLogged = summary;
-            if (editor.Error is not null)
-                log.LogWarning("Editor: {Error}", editor.Error);
-            else if (editor.Busy is not null)
-                log.LogInformation("Editor: {Busy} {Path}", editor.Busy == "opening" ? "obrint" : "desant", editor.Path);
-            else if (editor.SavedPath is not null)
-                log.LogInformation("Editor: desat {Path}", editor.SavedPath);
-        }
-        Broadcast(EditorJson.ChangedEvent(editor));
-    };
-}
-
 // Enregistraments acabats: el pendent de cada enregistrador i els recents (D-036).
 // La llista es desa (com a molt cada 2 s) i es recupera en arrencar.
 var recordings = new RecordingList(isPending: path => state.Recorders.Any(r =>
@@ -219,6 +201,32 @@ var config = new ConfigStore(new ConfigRepository());
 config.Warning += message => log.LogWarning("Configuració: {Message}", message);
 var hardware = new HardwareAssignments(state, config);
 hardware.Warning += message => log.LogWarning("Maquinari: {Message}", message);
+
+// Editor (fase 3): cada canvi va a la interfície; al registre, obrir, desar, reproduir i els errors.
+{
+    string lastLogged = "";
+    state.Editor.Changed += () =>
+    {
+        var editor = state.Editor;
+        var player = editor.Player;
+        string summary = $"{editor.Path}|{editor.Busy}|{editor.Error}|{editor.SavedPath}|{editor.PeaksError}|{player.State}|{player.ErrorMessage}";
+        if (summary != lastLogged)
+        {
+            lastLogged = summary;
+            if (editor.Error is not null)
+                log.LogWarning("Editor: {Error}", editor.Error);
+            else if (editor.PeaksError is not null)
+                log.LogWarning("Editor: {Error}", editor.PeaksError);
+            else if (player.State == EditorPlayState.Error)
+                log.LogWarning("Editor: error de reproducció — {Message} (detall: {Detail})", player.ErrorMessage, player.ErrorDetail ?? "cap");
+            else if (editor.Busy is not null)
+                log.LogInformation("Editor: {Busy} {Path}", editor.Busy == "opening" ? "obrint" : "desant", editor.Path);
+            else if (editor.SavedPath is not null)
+                log.LogInformation("Editor: desat {Path}", editor.SavedPath);
+        }
+        Broadcast(EditorJson.ChangedEvent(editor, config.Read(c => c.EditorDevice)));
+    };
+}
 
 // Historial de reproducció (especificació 6.6): què ha sonat per antena, en un CSV per dia.
 // Les pistes acabades es posen a la cua i s'escriuen cada 2 s (fora de la revisió de 100 ms).
@@ -542,6 +550,12 @@ _ = Task.Run(async () =>
             catch (Exception ex) { log.LogError("Preescolta: error en revisar-la: {Message}", ex.Message); }
             if (state.Cue.State == CueState.Playing)
                 await hub.BroadcastAsync(CueJson.PositionEvent(state.Cue), stopping);
+
+            // Reproducció de l'editor: final i errors; posició 10 per segon mentre sona.
+            try { state.Editor.Player.Tick(); }
+            catch (Exception ex) { log.LogError("Editor: error en revisar la reproducció: {Message}", ex.Message); }
+            if (state.Editor.Player.State == EditorPlayState.Playing)
+                await hub.BroadcastAsync(EditorJson.PositionEvent(state.Editor), stopping);
 
             foreach (var player in playlistsChanged.Keys)
             {

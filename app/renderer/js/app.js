@@ -35,6 +35,7 @@ const els = {
   recents: $('recents'),
   cue: $('cue'),
   settings: $('btn-settings'),
+  editor: $('btn-editor'),
   restartNotice: $('restart-notice'),
   programName: $('program-name'),
 };
@@ -67,6 +68,7 @@ setupZoom(saveZoom);
 setupPanels();
 els.restart.addEventListener('click', restartEngine);
 els.settings.addEventListener('click', openSettings);
+els.editor.addEventListener('click', () => bridge?.openEditor());
 setupShortcuts(store, request, (playerId, text) => playerPanels.get(playerId)?.showMessage(text));
 init();
 
@@ -325,6 +327,26 @@ async function onCloseRequested() {
   if (!client?.connected) {
     bridge.confirmClose();
     return;
+  }
+
+  // L'editor es tanca amb la finestra principal: si té canvis sense desar, primer es confirma.
+  try {
+    const { editor } = await client.request('editor.get', {}, 1500);
+    if (editor.modified) {
+      const name = editor.path.split(/[\\/]/).pop();
+      const choice = await choose({
+        title: 'Tancar Ona Bages Play',
+        icon: 'bi-exclamation-triangle-fill',
+        message: `L'editor té canvis sense desar a «${name}».\nSi tanques, es perdran (el fitxer original no es toca).`,
+        buttons: [
+          { label: 'Cancel·lar', value: 'cancel' },
+          { label: 'Tancar sense desar', value: 'close', style: 'danger' },
+        ],
+      });
+      if (choice !== 'close') return;
+    }
+  } catch {
+    // Sense resposta de l'editor: es continua com sempre.
   }
 
   const { playing, recording } = store.busy;

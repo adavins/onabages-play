@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="ca" data-bs-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src ws://127.0.0.1:*">
+  <title>Editor — Ona Bages Play</title>
+  <link rel="stylesheet" href="../node_modules/bootstrap/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="../node_modules/bootstrap-icons/font/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="css/app.css">
+  <link rel="stylesheet" href="css/editor.css">
+</head>
+<body class="editor-body">
+
+  <!-- Barra superior: fitxer i accions de fitxer -->
+  <header class="ed-topbar">
+    <div class="ed-title">
+      <i class="bi bi-scissors"></i>
+      <span id="ed-file" class="ed-file">Cap fitxer obert</span>
+      <span id="ed-modified" class="ed-modified d-none" title="Hi ha canvis sense desar"><i class="bi bi-pencil-fill"></i> Modificat</span>
+      <span id="ed-saved" class="ed-saved d-none"><i class="bi bi-check-circle-fill"></i> Desat</span>
+    </div>
+    <div class="ed-actions">
+      <button id="ed-open" class="btn btn-sm btn-outline-secondary" type="button" title="Obrir un MP3 (Ctrl+O)"><i class="bi bi-folder2-open"></i> Obrir…</button>
+      <button id="ed-save" class="btn btn-sm btn-outline-secondary" type="button" title="Desar a sobre de l'original (Ctrl+S)"><i class="bi bi-floppy"></i> Desar</button>
+      <button id="ed-save-as" class="btn btn-sm btn-primary" type="button" title="Desar com a fitxer nou (Ctrl+Maj+S)"><i class="bi bi-floppy2"></i> Desar com…</button>
+    </div>
+    <span id="ed-engine" class="status status-connecting" role="status"><i class="bi bi-hourglass-split"></i> <span class="label">Connectant…</span></span>
+  </header>
+
+  <!-- Forma d'ona -->
+  <main class="ed-main">
+    <div id="ed-wave-box" class="ed-wave-box">
+      <canvas id="ed-wave" class="ed-wave" aria-label="Forma d'ona"></canvas>
+      <div id="ed-empty" class="ed-empty">
+        <i class="bi bi-file-earmark-music"></i>
+        <div>Obre un MP3 amb <strong>Obrir…</strong>, arrossega'l aquí o prem <strong>Editar</strong> a «Recents».</div>
+      </div>
+      <div id="ed-busy" class="ed-busy d-none" role="status">
+        <div class="spinner-border spinner-border-sm"></div>
+        <span id="ed-busy-text">Obrint…</span>
+      </div>
+    </div>
+    <canvas id="ed-overview" class="ed-overview" aria-label="Vista de tot el fitxer"></canvas>
+  </main>
+
+  <!-- Controls -->
+  <footer class="ed-controls">
+    <div class="ed-group">
+      <button id="ed-home" class="btn btn-sm btn-outline-secondary" type="button" title="Cursor a l'inici (Inici)"><i class="bi bi-skip-start-fill"></i></button>
+      <button id="ed-play" class="btn btn-sm btn-success ed-play" type="button" title="Reproduir des del cursor / Aturar (Espai)"><i class="bi bi-play-fill js-play-icon"></i></button>
+      <button id="ed-play-sel" class="btn btn-sm btn-outline-success" type="button" title="Reproduir la selecció (Maj+Espai)"><i class="bi bi-play-circle"></i> Selecció</button>
+    </div>
+
+    <div class="ed-times">
+      <div class="ed-time"><span class="ed-time-label">Cursor</span><span id="ed-cursor" class="ed-time-value">0:00.00</span></div>
+      <div class="ed-time"><span class="ed-time-label">Selecció</span><span id="ed-selection" class="ed-time-value">—</span></div>
+      <div class="ed-time"><span class="ed-time-label">Durada</span><span id="ed-duration" class="ed-time-value">—</span></div>
+    </div>
+
+    <div class="ed-group">
+      <button id="ed-trim-start" class="btn btn-sm btn-outline-warning" type="button" title="Eliminar des de l'inici fins al cursor"><i class="bi bi-chevron-bar-left"></i> Retallar inici</button>
+      <button id="ed-trim-end" class="btn btn-sm btn-outline-warning" type="button" title="Eliminar des del cursor fins al final"><i class="bi bi-chevron-bar-right"></i> Retallar final</button>
+      <button id="ed-delete" class="btn btn-sm btn-outline-danger" type="button" title="Eliminar la selecció (Supr)"><i class="bi bi-scissors"></i> Eliminar</button>
+      <button id="ed-keep" class="btn btn-sm btn-outline-warning" type="button" title="Conservar només la selecció"><i class="bi bi-bounding-box"></i> Conservar</button>
+    </div>
+
+    <div class="ed-group">
+      <button id="ed-undo" class="btn btn-sm btn-outline-secondary" type="button" title="Desfer (Ctrl+Z)"><i class="bi bi-arrow-counterclockwise"></i></button>
+      <button id="ed-redo" class="btn btn-sm btn-outline-secondary" type="button" title="Refer (Ctrl+Y)"><i class="bi bi-arrow-clockwise"></i></button>
+    </div>
+
+    <div class="ed-group">
+      <button id="ed-zoom-out" class="btn btn-sm btn-outline-secondary" type="button" title="Allunyar (−)"><i class="bi bi-zoom-out"></i></button>
+      <button id="ed-zoom-in" class="btn btn-sm btn-outline-secondary" type="button" title="Apropar (+)"><i class="bi bi-zoom-in"></i></button>
+      <button id="ed-zoom-all" class="btn btn-sm btn-outline-secondary" type="button" title="Veure tot el fitxer (0)"><i class="bi bi-arrows-expand-vertical"></i> Tot</button>
+    </div>
+
+    <div class="ed-group ed-output">
+      <label for="ed-device" class="ed-output-label" title="Per on sona l'editor"><i class="bi bi-headphones"></i></label>
+      <select id="ed-device" class="form-select form-select-sm"></select>
+    </div>
+  </footer>
+
+  <div id="ed-message" class="ed-message" role="status"></div>
+
+  <script type="module" src="js/editor/editor-app.js"></script>
+</body>
+</html>

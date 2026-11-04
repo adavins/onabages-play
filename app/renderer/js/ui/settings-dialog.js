@@ -13,11 +13,12 @@ import { escapeHtml } from './format.js';
 const MAX_PLAYERS = 6;
 const MAX_RECORDERS = 4;
 const MAX_END_WARNING = 60;
+const MAX_PROGRAM_NAME = 60;
 
 /**
  * @param {any} settings  objecte settings del motor
  * @param {{ players: number, recorders: number }} running  quants n'hi ha ara al motor
- * @returns {Promise<{ ui: object, layout: object } | null>}
+ * @returns {Promise<{ ui: object, layout: object, program: object } | null>}
  */
 export function editSettings(settings, running) {
   const options = (/** @type {number} */ max, /** @type {number} */ selected) =>
@@ -32,6 +33,12 @@ export function editSettings(settings, running) {
   dialog.innerHTML = `
     <form method="dialog">
       <h2 class="obp-dialog-title"><i class="bi bi-gear"></i> Configuració</h2>
+
+      <h3 class="obp-settings-section">Programa</h3>
+      <label class="visually-hidden" for="st-program">Nom del programa</label>
+      <input id="st-program" class="form-control" type="text" maxlength="${MAX_PROGRAM_NAME}"
+             value="${escapeHtml(settings.program?.name ?? '')}" placeholder="Nom del programa (p. ex. Magazín dels dissabtes)">
+      <div class="form-text mb-3">Surt a la barra superior i a l'historial del que sona. Es pot deixar buit.</div>
 
       <h3 class="obp-settings-section">Distribució</h3>
       <div class="obp-settings-grid">
@@ -116,6 +123,7 @@ export function editSettings(settings, running) {
             endWarningSeconds: Number(warning.value),
           },
           layout: { players: Number(players.value), recorders: Number(recorders.value) },
+          program: { name: $('#st-program').value.trim() },
         }
         : null);
       dialog.remove();

@@ -112,6 +112,18 @@ body {
   letter-spacing: 0.04em;
 }
 
+/* Nom del programa (⚙ Configuració). Es retalla amb «…» si no hi cap. */
+.program-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--bs-emphasis-color);
+}
+
+.program-name.d-none { display: none; }
+
 .engine {
   margin-left: auto;
   display: flex;

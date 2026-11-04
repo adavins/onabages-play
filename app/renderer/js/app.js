@@ -36,6 +36,7 @@ const els = {
   cue: $('cue'),
   settings: $('btn-settings'),
   restartNotice: $('restart-notice'),
+  programName: $('program-name'),
 };
 
 const STATUS = {
@@ -261,13 +262,16 @@ async function saveZoom(zoom) {
 // ---------------------------------------------------------------------------
 
 /**
- * Aplica els ajustos del motor: escala, enregistradors per fila i avís de reiniciar.
+ * Aplica els ajustos del motor: escala, enregistradors per fila, nom del programa i avís de reiniciar.
  * (L'avís de final de pista el llegeix cada reproductor de store.settings.)
  * @param {any} settings
  */
 function applySettings(settings) {
   store.settings = settings;
   applyZoom(settings.ui.zoom);
+  const programName = settings.program?.name ?? '';
+  els.programName.textContent = programName;
+  els.programName.classList.toggle('d-none', !programName);
   document.documentElement.style.setProperty('--obp-recorders-per-row', String(settings.ui.recordersPerRow));
   els.restartNotice.classList.toggle('d-none', !settings.restartNeeded);
   els.restartNotice.title = settings.restartNeeded

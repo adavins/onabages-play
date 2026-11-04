@@ -18,6 +18,8 @@ export const SHORTCUTS_HELP = [
   ['A la llista: P', 'Preescoltar la pista seleccionada'],
   ['A la llista: C · D · B · A', 'Cue · Duplicar · Bucle · Avanç automàtic'],
   ['A la llista: Supr', 'Treure les pistes seleccionades'],
+  ['A la llista: S', 'Inserir una secció a sobre de la selecció'],
+  ['A la llista: ← / →', 'Plegar / desplegar la secció seleccionada'],
 ];
 
 /** Text per a l'ajuda dels botons Play i Stop d'un reproductor (p. ex. «F1»). */

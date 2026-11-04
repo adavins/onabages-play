@@ -81,6 +81,7 @@ public sealed class ConfigRepository
                 ["endWarningSeconds"] = config.EndWarningSeconds,
             },
             ["layout"] = new JsonObject { ["players"] = config.PlayerCount, ["recorders"] = config.RecorderCount },
+            ["program"] = new JsonObject { ["name"] = config.ProgramName },
             ["recorderSettings"] = new JsonArray(config.RecorderSettings
                 .OrderBy(s => s.Key, StringComparer.Ordinal)
                 .Select(s => (JsonNode)new JsonObject
@@ -140,6 +141,10 @@ public sealed class ConfigRepository
         if (Int(root["layout"]?["recorders"]) is { } recorders)
             config.RecorderCount = Math.Clamp(recorders, 1, EngineConfig.MaxRecorders);
 
+        // "program" és opcional (afegit al pas 10 de la fase 2). Un nom massa llarg es retalla.
+        if (Text(root["program"]?["name"]) is { } programName)
+            config.ProgramName = CleanProgramName(programName);
+
         // "recorderSettings" també és opcional (afegit a la fase 2).
         if (root["recorderSettings"] is JsonArray recorderSettings)
         {
@@ -197,6 +202,16 @@ public sealed class ConfigRepository
             format = new DeviceFormat(rate, bits, channels);
 
         return new AudioDevice(id, Text(d["name"]) ?? "", kind, status, format);
+    }
+
+    /// <summary>
+    /// Nom del programa net: sense espais repetits ni salts de línia. Amb <paramref name="cut"/>,
+    /// es retalla a <see cref="EngineConfig.MaxProgramName"/> caràcters.
+    /// </summary>
+    public static string CleanProgramName(string name, bool cut = true)
+    {
+        string clean = string.Join(' ', name.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+        return cut && clean.Length > EngineConfig.MaxProgramName ? clean[..EngineConfig.MaxProgramName].TrimEnd() : clean;
     }
 
     private static string? Text(JsonNode? node) =>

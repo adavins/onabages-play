@@ -73,8 +73,8 @@ Tots els missatges són objectes JSON amb el camp `"v": 1`.
 | `engine.shutdown` | `force` (opcional, `true`) | `{ stopping: true }` i el motor es tanca. Si hi ha enregistraments en curs, es rebutja amb `recording_active`, tret que s'enviï `force: true`: llavors es tanquen correctament (fitxers vàlids, sense marcador `.rec`) abans d'aturar-se | fase 0 (`force`: fase 1) |
 | `devices.list` | `kind`: `"output"`, `"input"` o `"all"` (per defecte); `includeInactive`: `true` per incloure també els desactivats i desconnectats (per defecte, `false`) | `{ devices: [ … ] }` (vegeu 4.1) | fase 1 |
 | `hardware.report` | — | `{ report: { … } }`: resum de l'arrencada (vegeu 4.4) | fase 1 |
-| `settings.get` | — | `{ settings: { ui: { zoom, recordersPerRow, endWarningSeconds }, layout: { players, recorders }, restartNeeded } }`: ajustos desats a `config.json` (vegeu 4.9) | fase 2 (`layout`, `recordersPerRow`, `endWarningSeconds`, `restartNeeded`: pas 9) |
-| `settings.set` | `ui` i/o `layout`: només els ajustos a canviar, p. ex. `{ "ui": { "zoom": 1.25 } }` (vegeu 4.9) | `{ settings }` amb tots els ajustos. Es desa de seguida. Si algun valor és fora de marge, `bad_params` i no es canvia res | fase 2 |
+| `settings.get` | — | `{ settings: { ui: { zoom, recordersPerRow, endWarningSeconds }, layout: { players, recorders }, program: { name }, restartNeeded } }`: ajustos desats a `config.json` (vegeu 4.9) | fase 2 (`layout`, `recordersPerRow`, `endWarningSeconds`, `restartNeeded`: pas 9; `program`: pas 10) |
+| `settings.set` | `ui`, `layout` i/o `program`: només els ajustos a canviar, p. ex. `{ "ui": { "zoom": 1.25 } }` (vegeu 4.9) | `{ settings }` amb tots els ajustos. Es desa de seguida. Si algun valor és fora de marge, `bad_params` i no es canvia res | fase 2 |
 
 ### 4.1. Dispositius
 
@@ -303,6 +303,7 @@ Objecte `settings` (resultat de `settings.get` i `settings.set`):
 ```json
 { "ui": { "zoom": 1.0, "recordersPerRow": 2, "endWarningSeconds": 10 },
   "layout": { "players": 2, "recorders": 4 },
+  "program": { "name": "Magazín dels dissabtes" },
   "restartNeeded": true }
 ```
 
@@ -313,6 +314,7 @@ Objecte `settings` (resultat de `settings.get` i `settings.set`):
 | `ui.endWarningSeconds` | enter de `0` a `60` (per defecte `10`; `0` = sense avís) | Segons abans del final en què el temps restant d'un reproductor canvia d'aspecte |
 | `layout.players` | enter de `1` a `6` (per defecte `2`) | Nombre de reproductors |
 | `layout.recorders` | enter de `1` a `4` (per defecte `2`) | Nombre d'enregistradors |
+| `program.name` | text de com a molt 60 caràcters (per defecte `""`; `""` el treu) | Nom del programa: surt a la barra superior i a l'historial de reproducció (D-043). Els espais repetits i els salts de línia es treuen |
 
 - `layout` **s'aplica en tornar a arrencar el motor** (mai amb el motor en marxa, perquè no s'aturi res que soni o enregistri). Mentrestant, `restartNeeded` és `true`: el nombre desat no és el que té el motor ara.
 - Si es treuen reproductors o enregistradors, **la seva configuració no s'esborra** (sortida o entrada, nom, carpeta, volum i última llista): si es tornen a posar, tornen tal com eren. En arrencar, també es busquen enregistraments interromputs a les carpetes dels que s'han tret.

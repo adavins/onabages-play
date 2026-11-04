@@ -51,6 +51,11 @@ public sealed class EngineConfig
     /// <summary>Segons abans del final en què el temps restant d'un reproductor canvia d'aspecte (0 = cap avís).</summary>
     public int EndWarningSeconds { get; set; } = 10;
 
+    /// <summary>Nom del programa que es fa (p. ex. «Magazín dels dissabtes»). Surt a la barra superior i a l'historial. Buit = cap.</summary>
+    public string ProgramName { get; set; } = "";
+
+    public const int MaxProgramName = 60;
+
     public const int MaxPlayers = 6;
     public const int MaxRecorders = 4;
     public const int MaxEndWarningSeconds = 60;

@@ -196,7 +196,7 @@ public sealed class CommandRouter
 
     /// <summary>
     /// Canvia només els ajustos que s'envien (docs/protocol.md, «settings.set»):
-    /// "ui": { zoom, recordersPerRow, endWarningSeconds } i "layout": { players, recorders }.
+    /// "ui": { zoom, recordersPerRow, endWarningSeconds }, "layout": { players, recorders } i "program": { name }.
     /// Primer es comprova tot; si algun valor és fora de marge, no es canvia res.
     /// </summary>
     private JsonObject SettingsSet(JsonObject msg)
@@ -204,14 +204,16 @@ public sealed class CommandRouter
         var config = RequireConfig();
         var ui = msg["ui"] as JsonObject;
         var layout = msg["layout"] as JsonObject;
-        if (ui is null && layout is null)
-            throw new BadParamsException("Falta el camp 'ui' o 'layout' amb els ajustos a canviar.");
+        var program = msg["program"] as JsonObject;
+        if (ui is null && layout is null && program is null)
+            throw new BadParamsException("Falta el camp 'ui', 'layout' o 'program' amb els ajustos a canviar.");
 
         double? zoom = OptionalNumber(ui?["zoom"], "ui.zoom", EngineConfig.MinZoom, EngineConfig.MaxZoom);
         int? perRow = OptionalInt(ui?["recordersPerRow"], "ui.recordersPerRow", 1, EngineConfig.MaxRecorders);
         int? warning = OptionalInt(ui?["endWarningSeconds"], "ui.endWarningSeconds", 0, EngineConfig.MaxEndWarningSeconds);
         int? players = OptionalInt(layout?["players"], "layout.players", 1, EngineConfig.MaxPlayers);
         int? recorders = OptionalInt(layout?["recorders"], "layout.recorders", 1, EngineConfig.MaxRecorders);
+        string? programName = OptionalProgramName(program?["name"]);
 
         config.Update(c =>
         {
@@ -222,6 +224,7 @@ public sealed class CommandRouter
             // dels que es treuen no s'esborren: si es tornen a posar, tornen tal com eren.
             if (players is { } p) c.PlayerCount = p;
             if (recorders is { } n) c.RecorderCount = n;
+            if (programName is not null) c.ProgramName = programName;
         });
 
         return new JsonObject { ["settings"] = SettingsJson(config) };
@@ -229,15 +232,28 @@ public sealed class CommandRouter
 
     private JsonObject SettingsJson(ConfigStore config)
     {
-        var (zoom, perRow, warning, players, recorders) =
-            config.Read(c => (c.UiZoom, c.RecordersPerRow, c.EndWarningSeconds, c.PlayerCount, c.RecorderCount));
+        var (zoom, perRow, warning, players, recorders, programName) =
+            config.Read(c => (c.UiZoom, c.RecordersPerRow, c.EndWarningSeconds, c.PlayerCount, c.RecorderCount, c.ProgramName));
         return new JsonObject
         {
             ["ui"] = new JsonObject { ["zoom"] = zoom, ["recordersPerRow"] = perRow, ["endWarningSeconds"] = warning },
             ["layout"] = new JsonObject { ["players"] = players, ["recorders"] = recorders },
+            ["program"] = new JsonObject { ["name"] = programName },
             // El nombre desat no és el que té ara el motor: s'aplicarà en tornar a obrir l'aplicació.
             ["restartNeeded"] = players != _state.Players.Count || recorders != _state.Recorders.Count,
         };
+    }
+
+    /// <summary>Nom del programa opcional (si no s'envia, null; "" el treu).</summary>
+    private static string? OptionalProgramName(JsonNode? node)
+    {
+        if (node is null) return null;
+        if (node is not JsonValue v || !v.TryGetValue(out string? name))
+            throw new BadParamsException("'program.name' ha de ser un text.");
+        string clean = ConfigRepository.CleanProgramName(name, cut: false);
+        if (clean.Length > EngineConfig.MaxProgramName)
+            throw new BadParamsException($"El nom del programa pot tenir com a molt {EngineConfig.MaxProgramName} caràcters.");
+        return clean;
     }
 
     /// <summary>Número opcional dins d'un marge (si no s'envia, null).</summary>

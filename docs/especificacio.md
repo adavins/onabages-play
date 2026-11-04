@@ -359,7 +359,11 @@ La màquina d'estats és al motor. La interfície només envia ordres i mostra l
 
 ## 6.6. Historial de reproducció
 
-Cada pista que sona s'afegeix a un fitxer CSV diari (hora, reproductor, fitxer, títol i artista si n'hi ha, durada reproduïda). És útil per declarar què s'ha emès i no necessita base de dades.
+Cada pista que sona s'afegeix a un fitxer CSV diari (hora, **programa**, reproductor, fitxer, títol i artista si n'hi ha, durada reproduïda). És útil per declarar què s'ha emès i no necessita base de dades.
+
+- El **programa** és el nom que es posa a ⚙ Configuració (p. ex. «Magazín dels dissabtes»); també surt a la barra superior. Permet filtrar què ha sonat a cada programa. Quan hi hagi perfils (fase 4), serà el nom del perfil o un camp del perfil.
+- Només compta el que surt per antena (reproductors, no la preescolta), i només les pistes que han sonat almenys 2 segons. La durada reproduïda no compta les pauses.
+- Format pensat per a l'Excel en català: separador «;», UTF-8 amb BOM, durades `hh:mm:ss`. Detalls a D-043.
 
 # 7. Preescolta
 
@@ -502,7 +506,8 @@ Els canvis de paràmetres s'han d'aplicar de manera progressiva (sense clics). E
   - dispositius i noms dels reproductors, la preescolta i els enregistradors;
   - carpetes de treball i de destinació;
   - dreceres de teclat;
-  - últimes llistes de cada reproductor (es recuperen en arrencar).
+  - últimes llistes de cada reproductor (es recuperen en arrencar);
+  - nom del programa (barra superior i historial, 6.6).
 - Escriptura segura: es desa en un fitxer temporal i després se substitueix l'original, perquè un tancament inesperat no deixi la configuració malmesa.
 
 ## 11.2. Perfils (fase 4)

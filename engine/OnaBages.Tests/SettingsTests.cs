@@ -167,4 +167,50 @@ public class SettingsTests : IDisposable
         Assert.Equal(1, config.RecorderCount);
         Assert.Equal(EngineConfig.MaxEndWarningSeconds, config.EndWarningSeconds);
     }
+
+    // --- Nom del programa (pas 10) ---
+
+    [Fact]
+    public void Per_defecte_no_hi_ha_nom_de_programa()
+    {
+        var settings = Settings("""{ "v": 1, "id": 1, "cmd": "settings.get" }""");
+
+        Assert.Equal("", settings["program"]!["name"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void El_nom_del_programa_es_desa_net()
+    {
+        var settings = Settings("""{ "v": 1, "id": 1, "cmd": "settings.set", "program": { "name": "  Magazín   dels\ndissabtes " } }""");
+
+        Assert.Equal("Magazín dels dissabtes", settings["program"]!["name"]!.GetValue<string>());
+        Assert.Equal("Magazín dels dissabtes", _repository.Load().Config.ProgramName);
+    }
+
+    [Fact]
+    public void Un_nom_buit_treu_el_programa()
+    {
+        Settings("""{ "v": 1, "id": 1, "cmd": "settings.set", "program": { "name": "Esports" } }""");
+        var settings = Settings("""{ "v": 1, "id": 2, "cmd": "settings.set", "program": { "name": "" } }""");
+
+        Assert.Equal("", settings["program"]!["name"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void Un_nom_massa_llarg_dona_bad_params()
+    {
+        string name = new('a', EngineConfig.MaxProgramName + 1);
+        var r = _router.Handle($$"""{ "v": 1, "id": 1, "cmd": "settings.set", "program": { "name": "{{name}}" } }""");
+
+        Assert.Equal("bad_params", ErrorCode(r));
+    }
+
+    [Fact]
+    public void Canviar_el_programa_no_toca_la_resta()
+    {
+        Settings("""{ "v": 1, "id": 1, "cmd": "settings.set", "ui": { "zoom": 1.25 } }""");
+        var settings = Settings("""{ "v": 1, "id": 2, "cmd": "settings.set", "program": { "name": "Esports" } }""");
+
+        Assert.Equal(1.25, settings["ui"]!["zoom"]!.GetValue<double>());
+    }
 }

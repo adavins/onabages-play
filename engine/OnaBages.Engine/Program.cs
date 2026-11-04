@@ -174,6 +174,44 @@ config.Warning += message => log.LogWarning("Configuració: {Message}", message)
 var hardware = new HardwareAssignments(state, config);
 hardware.Warning += message => log.LogWarning("Maquinari: {Message}", message);
 
+// Historial de reproducció (especificació 6.6): què ha sonat per antena, en un CSV per dia.
+// Les pistes acabades es posen a la cua i s'escriuen cada 2 s (fora de la revisió de 100 ms).
+// Si el fitxer no es pot escriure (p. ex. obert amb l'Excel), es queden a la cua i es torna a provar.
+var history = new PlayHistory();
+var historyQueue = new System.Collections.Concurrent.ConcurrentQueue<PlayedTrack>();
+history.Finished += track => historyQueue.Enqueue(track);
+bool historyFailing = false;
+
+void WriteHistory()
+{
+    // Un sol escriptor alhora (la revisió de 2 s i l'aturada del motor poden coincidir).
+    lock (historyQueue)
+        WriteHistoryLocked();
+}
+
+void WriteHistoryLocked()
+{
+    while (historyQueue.TryPeek(out var track))
+    {
+        var (title, artist) = TrackInfo.ReadTags(track.FilePath);
+        try
+        {
+            PlayHistoryFile.Append(track, title, artist);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            if (!historyFailing)
+                log.LogWarning("Historial: no s'ha pogut escriure ({Message}). Es tornarà a provar cada 2 s", ex.Message);
+            historyFailing = true;
+            return;
+        }
+        if (historyFailing)
+            log.LogInformation("Historial: ja es pot tornar a escriure");
+        historyFailing = false;
+        historyQueue.TryDequeue(out _);
+    }
+}
+
 var router = new CommandRouter(state, () => app.Lifetime.StopApplication(), hardware: hardware, config: config, recordings: recordings);
 
 // Vigilant de dispositius: avisa els clients quan es connecta o desconnecta alguna cosa.
@@ -287,6 +325,9 @@ app.Lifetime.ApplicationStopping.Register(() =>
         recorder.Dispose();
     }
     SaveRecordings(); // inclou els que s'acaben de tancar
+    lock (history)
+        history.FinishAll(DateTime.Now); // el que sonava també va a l'historial
+    WriteHistory();
     foreach (var player in state.Players)
         player.Dispose();
     state.Cue.Dispose();
@@ -312,6 +353,7 @@ _ = Task.Run(async () =>
             }
             if (Interlocked.Exchange(ref recordingsToSave, 0) == 1)
                 SaveRecordings();
+            WriteHistory();
         }
     }
     catch (OperationCanceledException)
@@ -435,6 +477,14 @@ _ = Task.Run(async () =>
                     log.LogWarning("Reproductor {Id}: tall, sense dades a temps (a {Position} de la pista; {Total} en total)",
                         player.Id, player.Position.ToString(@"hh\:mm\:ss\.f"), underruns);
                 lastUnderruns[player] = underruns;
+            }
+
+            // Historial: què sona ara a cada reproductor.
+            string programName = config.Read(c => c.ProgramName);
+            lock (history)
+            {
+                foreach (var player in state.Players)
+                    history.Observe(player.Id, player.State, player.CurrentItemId, player.FilePath, player.Duration, DateTime.Now, programName);
             }
 
             if (state.Players.Any(p => p.State == PlayerState.Playing))

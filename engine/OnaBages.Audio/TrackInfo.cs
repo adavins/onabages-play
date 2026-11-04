@@ -73,6 +73,23 @@ public static class TrackInfo
     }
 
     /// <summary>
+    /// Només el títol i l'artista (per a l'historial), sense descodificar l'àudio.
+    /// Mai no llança excepcions: si no es poden llegir, null.
+    /// </summary>
+    public static (string? Title, string? Artist) ReadTags(string path)
+    {
+        try
+        {
+            using var file = TagLib.File.Create(path);
+            return (Empty(file.Tag.Title), Empty(file.Tag.JoinedPerformers));
+        }
+        catch (Exception)
+        {
+            return (null, null);
+        }
+    }
+
+    /// <summary>
     /// Format abreujat. El tipus i els kbps els diu TagLib# (llegint la capçalera, sense descodificar);
     /// si no ho sap, es fa servir el que diu el descodificador.
     /// </summary>

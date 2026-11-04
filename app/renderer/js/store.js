@@ -29,6 +29,8 @@ export class Store extends EventTarget {
   cue = null;
   /** @type {any[]} */ devices = [];
   /** @type {any} */ hardware = null;
+  /** Ajustos (settings.get, docs/protocol.md 4.9). @type {any} */
+  settings = null;
   /** @type {any} */ engine = null;
   /** Últims nivells dels mesuradors (esdeveniment meters). @type {any} */
   meters = { players: {}, recorders: {} };

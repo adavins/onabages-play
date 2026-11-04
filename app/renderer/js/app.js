@@ -9,6 +9,8 @@ import { PlayerPanel } from './ui/player-panel.js';
 import { RecorderPanel } from './ui/recorder-panel.js';
 import { RecentsPanel } from './ui/recents-panel.js';
 import { CuePanel } from './ui/cue-panel.js';
+import { editSettings } from './ui/settings-dialog.js';
+import { setupShortcuts } from './ui/shortcuts.js';
 import { choose } from './ui/dialogs.js';
 import { setupZoom, applyZoom } from './ui/zoom.js';
 import { formatDuration } from './ui/format.js';
@@ -32,6 +34,8 @@ const els = {
   recorders: $('recorders'),
   recents: $('recents'),
   cue: $('cue'),
+  settings: $('btn-settings'),
+  restartNotice: $('restart-notice'),
 };
 
 const STATUS = {
@@ -61,6 +65,8 @@ setupClose();
 setupZoom(saveZoom);
 setupPanels();
 els.restart.addEventListener('click', restartEngine);
+els.settings.addEventListener('click', openSettings);
+setupShortcuts(store, request, (playerId, text) => playerPanels.get(playerId)?.showMessage(text));
 init();
 
 // ---------------------------------------------------------------------------
@@ -115,8 +121,8 @@ async function onConnectionStatus(e) {
       engineVersion = `${hello.version} · protocol ${hello.protocol}`;
       els.details.textContent = engineVersion;
 
-      const settings = await client.request('settings.get');
-      applyZoom(settings.settings.ui.zoom);
+      const { settings } = await client.request('settings.get');
+      applySettings(settings);
 
       await store.refresh();
     } catch (err) {
@@ -243,9 +249,49 @@ async function saveZoom(zoom) {
   zoomTimer = window.setTimeout(() => els.zoom.classList.remove('visible'), 1500);
 
   try {
-    await client?.request('settings.set', { ui: { zoom } });
+    const result = await client?.request('settings.set', { ui: { zoom } });
+    if (result) store.settings = result.settings;
   } catch (err) {
     console.warn('No s\'ha pogut desar el zoom', err);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Configuració (pas 9, D-041)
+// ---------------------------------------------------------------------------
+
+/**
+ * Aplica els ajustos del motor: escala, enregistradors per fila i avís de reiniciar.
+ * (L'avís de final de pista el llegeix cada reproductor de store.settings.)
+ * @param {any} settings
+ */
+function applySettings(settings) {
+  store.settings = settings;
+  applyZoom(settings.ui.zoom);
+  document.documentElement.style.setProperty('--obp-recorders-per-row', String(settings.ui.recordersPerRow));
+  els.restartNotice.classList.toggle('d-none', !settings.restartNeeded);
+  els.restartNotice.title = settings.restartNeeded
+    ? `Has canviat el nombre de reproductors o d'enregistradors (${settings.layout.players} i ${settings.layout.recorders}).\n` +
+      'S\'aplicarà quan tanquis l\'aplicació (amb el motor aturat) i la tornis a obrir.'
+    : '';
+  renderAll();
+}
+
+/** Botó ⚙: finestra de configuració. */
+async function openSettings() {
+  if (!client?.connected || !store.settings) return;
+  const changes = await editSettings(store.settings, { players: store.players.size, recorders: store.recorders.size });
+  if (!changes) return;
+  try {
+    const { settings } = await client.request('settings.set', changes);
+    applySettings(settings);
+  } catch (err) {
+    await choose({
+      title: 'Configuració',
+      icon: 'bi-exclamation-triangle-fill',
+      message: `No s'ha pogut desar la configuració:\n${/** @type {Error} */ (err).message}`,
+      buttons: [{ label: 'D\'acord', value: 'ok', style: 'primary' }],
+    });
   }
 }
 

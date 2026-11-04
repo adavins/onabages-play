@@ -9,12 +9,13 @@ import { LevelMeter } from './meter.js';
 import { VolumeFader } from './fader.js';
 import { PlaylistView } from './playlist-view.js';
 import { escapeHtml, formatDuration } from './format.js';
+import { playKey } from './shortcuts.js';
 
 /** @typedef {import('../store.js').Store} Store */
 /** @typedef {(cmd: string, params?: object) => Promise<any>} Request */
 
-/** Segons abans del final en què el temps restant canvia d'aspecte (especificació 6.2). Configurable més endavant. */
-const END_WARNING_SECONDS = 10;
+/** Segons abans del final en què el temps restant canvia d'aspecte, si encara no s'han llegit els ajustos (especificació 6.2). */
+const DEFAULT_END_WARNING_SECONDS = 10;
 
 /** Estats en què es pot saltar dins la pista (player.seek). */
 const CAN_SEEK = ['ready', 'playing', 'paused'];
@@ -121,6 +122,13 @@ export class PlayerPanel {
       this.#showElapsed = !this.#showElapsed;
       this.render();
     });
+    // Les dreceres de teclat, a l'ajuda dels botons.
+    const key = playKey(id);
+    if (key) {
+      this.#el.play.title = `Play (${key})`;
+      this.#el.pause.title = `Pausa (${key})`;
+      this.#el.stop.title = `Stop (Maj+${key})`;
+    }
     this.#el.restart.addEventListener('click', () => this.#send('player.seek', { position: 0 }));
     this.#el.play.addEventListener('click', () => this.#send('player.play'));
     this.#el.pause.addEventListener('click', () => this.#pauseOrResume());
@@ -165,7 +173,9 @@ export class PlayerPanel {
     // el petit de sota, l'altre.
     el.remaining.textContent = !hasTrack ? '--:--' : this.#showElapsed ? elapsedText : remainingText;
     el.remaining.title = this.#showElapsed ? 'Temps transcorregut (clica per veure el restant)' : 'Temps restant (clica per veure el transcorregut)';
-    el.remaining.classList.toggle('ending', playing && remaining <= END_WARNING_SECONDS);
+    // Avís de final (configurable; 0 = sense avís).
+    const warning = this.#store.settings?.ui.endWarningSeconds ?? DEFAULT_END_WARNING_SECONDS;
+    el.remaining.classList.toggle('ending', playing && warning > 0 && remaining <= warning);
     el.position.textContent = this.#showElapsed ? remainingText : elapsedText;
     el.duration.textContent = formatDuration(p.duration);
     el.progress.style.width = hasTrack ? `${Math.min(100, (position / p.duration) * 100)}%` : '0%';
@@ -190,6 +200,11 @@ export class PlayerPanel {
       this.#lastItemId = p.currentItemId;
       this.#meter.resetClip();
     }
+  }
+
+  /** Avís breu al panell (p. ex. una drecera de teclat que el motor ha rebutjat). */
+  showMessage(/** @type {string} */ text) {
+    this.#showMessage(text);
   }
 
   /** Ha canviat la llista (esdeveniment playlist.changed). */

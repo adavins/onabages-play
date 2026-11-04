@@ -9,7 +9,7 @@
 //   tot el que a css/app.css es multiplica per --obp-ui-scale.
 
 /** Passos de zoom disponibles (1 = 100 %). Han d'estar entre 0,5 i 1,5, com accepta el motor. */
-const STEPS = [0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.25, 1.5];
+export const ZOOM_STEPS = [0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.25, 1.5];
 
 /** Per sota d'aquí la lletra ja no es fa més petita. */
 const MIN_TEXT_ZOOM = 0.7;
@@ -37,8 +37,8 @@ export function setupZoom(onChange) {
 
   /** @param {number} direction */
   function step(direction) {
-    const index = STEPS.findIndex((s) => s >= current - 0.001);
-    const next = STEPS[Math.min(STEPS.length - 1, Math.max(0, (index < 0 ? STEPS.indexOf(1.0) : index) + direction))];
+    const index = ZOOM_STEPS.findIndex((s) => s >= current - 0.001);
+    const next = ZOOM_STEPS[Math.min(ZOOM_STEPS.length - 1, Math.max(0, (index < 0 ? ZOOM_STEPS.indexOf(1.0) : index) + direction))];
     change(next);
   }
 

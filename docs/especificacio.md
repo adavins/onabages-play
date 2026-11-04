@@ -309,7 +309,7 @@ Nombre de reproductors configurable (inicialment fins a 6).
 - Pista actual i última pista reproduïda, marcades a la llista.
 - Mesurador de nivell de sortida.
 - **Avís de final de pista:** el temps restant canvia d'aspecte els últims 10 segons (valor configurable).
-- **Dreceres de teclat** configurables (per exemple, una tecla per fer Play o Stop a cada reproductor).
+- **Dreceres de teclat**: a la fase 2, un mapa fix (F1, F2… Play/Pausa de cada reproductor; Maj+F1, Maj+F2… Stop; D-041). Poder-les canviar queda per a una fase posterior.
 
 ## 6.3. Llista de reproducció
 
@@ -711,7 +711,7 @@ Candidates: botonera de talls (cartwall), detector de silenci, punts cue d'inici
 
 - Freqüència de mostreig de treball (44,1 o 48 kHz), segons el que doni la sortida USB de la taula.
 - Nombre màxim de reproductors i enregistradors (proposta: 6 i 4).
-- Mapa de dreceres de teclat per defecte.
+- Editor de dreceres de teclat (a la fase 2 hi ha un mapa fix, D-041).
 - Dispositiu de preescolta de cada estudi.
 - Convenció de noms i carpetes de destinació dels enregistraments.
 - **Còpia automàtica en aturar** (petició del 4 de novembre de 2026; sense fase assignada): poder indicar, per a un enregistrament, una ruta i un nom de fitxer; en prémer Aturar, se'n desa una còpia allà. L'original es queda sempre a la carpeta de treball.

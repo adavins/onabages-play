@@ -228,5 +228,10 @@ public class RecoveryTests : IDisposable
         var folders = StartupRecovery.FoldersToScan([one, two], list);
 
         Assert.Equal([_folder, Recorder.DefaultFolder, other], folders);
+
+        // Les carpetes desades d'enregistradors que s'han tret (pas 9) també es revisen.
+        string removed = Path.Combine(Path.GetTempPath(), "OnaBagesTests", "tret");
+        folders = StartupRecovery.FoldersToScan([one, two], list, [removed, null, _folder]);
+        Assert.Equal([_folder, removed, Recorder.DefaultFolder, other], folders);
     }
 }

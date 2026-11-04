@@ -40,11 +40,16 @@ var log = app.Logger;
 // Comprova en segon pla les pistes que s'afegeixen a les llistes (una per a tot el motor).
 var analyzer = new TrackAnalyzer();
 
-// Fase 1: dos reproductors i dos enregistradors fixos. Més endavant, el nombre sortirà de la configuració.
+// Quants reproductors i enregistradors hi ha: ho diu la configuració (pas 9 de la fase 2; per defecte, 2 i 2).
+// Es llegeix només el nombre; la resta de la configuració la llegeix més avall el ConfigStore.
+var savedLayout = new ConfigRepository().Load().Config;
+int playerCount = savedLayout.PlayerCount;
+int recorderCount = savedLayout.RecorderCount;
 var state = new EngineState(
-    [new Player("1", analyzer: analyzer), new Player("2", analyzer: analyzer)],
-    [new Recorder("1"), new Recorder("2")],
+    Enumerable.Range(1, playerCount).Select(i => new Player(i.ToString(), analyzer: analyzer)),
+    Enumerable.Range(1, recorderCount).Select(i => new Recorder(i.ToString())),
     new CuePlayer(analyzer: analyzer));
+log.LogInformation("Distribució: {Players} reproductors i {Recorders} enregistradors", playerCount, recorderCount);
 var hub = new ClientHub(state, log);
 
 // Llistes que han canviat: s'envien agrupades a la revisió següent (com a molt 10 per segon),
@@ -227,7 +232,8 @@ state.Cue.SetVolume(config.Read(c => c.CueVolumeDb));
 
 // Enregistraments interromputs (el motor o l'ordinador van caure): es recuperen abans de res
 // i surten a «Recents» amb l'etiqueta «Recuperat» (especificació 8.5).
-foreach (var result in StartupRecovery.Run(StartupRecovery.FoldersToScan(state.Recorders, recordings), recordings))
+foreach (var result in StartupRecovery.Run(StartupRecovery.FoldersToScan(state.Recorders, recordings,
+    config.Read(c => c.RecorderSettings.Values.Select(s => s.Folder).ToList())), recordings))
 {
     if (result.Outcome == RecoveryOutcome.Recovered)
         log.LogWarning("Enregistrament interromput recuperat: {Path} ({Duration:hh\\:mm\\:ss}) — {Message}", result.Path, result.Duration, result.Message);

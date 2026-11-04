@@ -36,4 +36,22 @@ public sealed class EngineConfig
 
     public const double MinZoom = 0.5;
     public const double MaxZoom = 1.5;
+
+    // --- Distribució (pas 9 de la fase 2). El nombre d'elements s'aplica en arrencar el motor. ---
+
+    /// <summary>Quants reproductors hi ha (de 1 a <see cref="MaxPlayers"/>).</summary>
+    public int PlayerCount { get; set; } = 2;
+
+    /// <summary>Quants enregistradors hi ha (de 1 a <see cref="MaxRecorders"/>).</summary>
+    public int RecorderCount { get; set; } = 2;
+
+    /// <summary>Enregistradors per fila a la interfície (de 1 a <see cref="MaxRecorders"/>).</summary>
+    public int RecordersPerRow { get; set; } = 2;
+
+    /// <summary>Segons abans del final en què el temps restant d'un reproductor canvia d'aspecte (0 = cap avís).</summary>
+    public int EndWarningSeconds { get; set; } = 10;
+
+    public const int MaxPlayers = 6;
+    public const int MaxRecorders = 4;
+    public const int MaxEndWarningSeconds = 60;
 }

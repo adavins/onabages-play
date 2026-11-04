@@ -73,8 +73,8 @@ Tots els missatges són objectes JSON amb el camp `"v": 1`.
 | `engine.shutdown` | `force` (opcional, `true`) | `{ stopping: true }` i el motor es tanca. Si hi ha enregistraments en curs, es rebutja amb `recording_active`, tret que s'enviï `force: true`: llavors es tanquen correctament (fitxers vàlids, sense marcador `.rec`) abans d'aturar-se | fase 0 (`force`: fase 1) |
 | `devices.list` | `kind`: `"output"`, `"input"` o `"all"` (per defecte); `includeInactive`: `true` per incloure també els desactivats i desconnectats (per defecte, `false`) | `{ devices: [ … ] }` (vegeu 4.1) | fase 1 |
 | `hardware.report` | — | `{ report: { … } }`: resum de l'arrencada (vegeu 4.4) | fase 1 |
-| `settings.get` | — | `{ settings: { ui: { zoom } } }`: ajustos desats a `config.json` | fase 2 |
-| `settings.set` | `ui`: els ajustos a canviar, p. ex. `{ "zoom": 1.25 }` (escala de la interfície, de `0.5` a `1.5`; per sota de `0.7` la lletra no es fa més petita) | `{ settings }` amb tots els ajustos. Es desa de seguida. Un valor fora de marge dona `bad_params` | fase 2 |
+| `settings.get` | — | `{ settings: { ui: { zoom, recordersPerRow, endWarningSeconds }, layout: { players, recorders }, restartNeeded } }`: ajustos desats a `config.json` (vegeu 4.9) | fase 2 (`layout`, `recordersPerRow`, `endWarningSeconds`, `restartNeeded`: pas 9) |
+| `settings.set` | `ui` i/o `layout`: només els ajustos a canviar, p. ex. `{ "ui": { "zoom": 1.25 } }` (vegeu 4.9) | `{ settings }` amb tots els ajustos. Es desa de seguida. Si algun valor és fora de marge, `bad_params` i no es canvia res | fase 2 |
 
 ### 4.1. Dispositius
 
@@ -95,7 +95,7 @@ Tots els missatges són objectes JSON amb el camp `"v": 1`.
 
 ### 4.2. Reproductors
 
-Hi ha dos reproductors fixos, `"1"` i `"2"` (configurable al pas 9). Cada un té la seva llista (vegeu 4.5).
+Per defecte hi ha dos reproductors, `"1"` i `"2"`; se'n poden configurar fins a 6 (`settings.set`, `layout.players`; s'aplica en arrencar el motor, vegeu 4.9). Cada un té la seva llista (vegeu 4.5).
 
 | Ordre | Paràmetres | Estats en què es pot fer | Resultat |
 |---|---|---|---|
@@ -130,7 +130,7 @@ Objecte `player` (també a `state.get` i a l'esdeveniment `player.state`):
 
 ### 4.3. Enregistradors
 
-Hi ha dos enregistradors fixos, `"1"` i `"2"` (el nombre serà configurable al pas 9 de la fase 2). Desar i Descartar són a 4.6; Editar, a la fase 3.
+Per defecte hi ha dos enregistradors, `"1"` i `"2"`; se'n poden configurar fins a 4 (`layout.recorders`, en arrencar el motor, vegeu 4.9). Desar i Descartar són a 4.6; Editar, a la fase 3.
 
 | Ordre | Paràmetres | Estats en què es pot fer | Resultat |
 |---|---|---|---|
@@ -288,6 +288,27 @@ Objecte `cue` (a `state.get` i a l'esdeveniment `cue.state`):
 - `state`: `stopped`, `playing` o `error`. No hi ha pausa.
 - `file` i `duration`: la pista que sona o l'última que ha sonat (per tornar-hi i per als botons de salt). `position` és 0 si no sona.
 - `sharesPlayerOutput`: la preescolta té la mateixa sortida que algun reproductor: **el que s'hi escolti sortirà a antena** (D-015). La interfície ho ha de dir de manera permanent.
+
+### 4.9. Ajustos (D-041)
+
+Objecte `settings` (resultat de `settings.get` i `settings.set`):
+
+```json
+{ "ui": { "zoom": 1.0, "recordersPerRow": 2, "endWarningSeconds": 10 },
+  "layout": { "players": 2, "recorders": 4 },
+  "restartNeeded": true }
+```
+
+| Camp | Valors | Què fa |
+|---|---|---|
+| `ui.zoom` | de `0.5` a `1.5` (per defecte `1`) | Escala de la interfície. Per sota de `0.7` la lletra no es fa més petita |
+| `ui.recordersPerRow` | enter de `1` a `4` (per defecte `2`) | Enregistradors per fila a la interfície |
+| `ui.endWarningSeconds` | enter de `0` a `60` (per defecte `10`; `0` = sense avís) | Segons abans del final en què el temps restant d'un reproductor canvia d'aspecte |
+| `layout.players` | enter de `1` a `6` (per defecte `2`) | Nombre de reproductors |
+| `layout.recorders` | enter de `1` a `4` (per defecte `2`) | Nombre d'enregistradors |
+
+- `layout` **s'aplica en tornar a arrencar el motor** (mai amb el motor en marxa, perquè no s'aturi res que soni o enregistri). Mentrestant, `restartNeeded` és `true`: el nombre desat no és el que té el motor ara.
+- Si es treuen reproductors o enregistradors, **la seva configuració no s'esborra** (sortida o entrada, nom, carpeta, volum i última llista): si es tornen a posar, tornen tal com eren. En arrencar, també es busquen enregistraments interromputs a les carpetes dels que s'han tret.
 
 ## 5. Esdeveniments
 

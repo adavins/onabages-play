@@ -74,7 +74,13 @@ public sealed class ConfigRepository
             ["cue"] = WriteAssignments(config.Cue),
             ["cueSettings"] = new JsonObject { ["volumeDb"] = config.CueVolumeDb },
             ["knownDevices"] = new JsonArray(config.KnownDevices.Select(d => (JsonNode)WriteDevice(d)).ToArray()),
-            ["ui"] = new JsonObject { ["zoom"] = config.UiZoom },
+            ["ui"] = new JsonObject
+            {
+                ["zoom"] = config.UiZoom,
+                ["recordersPerRow"] = config.RecordersPerRow,
+                ["endWarningSeconds"] = config.EndWarningSeconds,
+            },
+            ["layout"] = new JsonObject { ["players"] = config.PlayerCount, ["recorders"] = config.RecorderCount },
             ["recorderSettings"] = new JsonArray(config.RecorderSettings
                 .OrderBy(s => s.Key, StringComparer.Ordinal)
                 .Select(s => (JsonNode)new JsonObject
@@ -123,6 +129,16 @@ public sealed class ConfigRepository
         // "ui" és opcional: els fitxers d'abans no el tenen i es fa servir el valor per defecte.
         if (root["ui"]?["zoom"] is JsonValue zoom && zoom.TryGetValue(out double z))
             config.UiZoom = Math.Clamp(z, EngineConfig.MinZoom, EngineConfig.MaxZoom);
+
+        // Afegits al pas 9 de la fase 2, també opcionals (sense canvi de versió). Fora de marge, el límit més proper.
+        if (Int(root["ui"]?["recordersPerRow"]) is { } perRow)
+            config.RecordersPerRow = Math.Clamp(perRow, 1, EngineConfig.MaxRecorders);
+        if (Int(root["ui"]?["endWarningSeconds"]) is { } warning)
+            config.EndWarningSeconds = Math.Clamp(warning, 0, EngineConfig.MaxEndWarningSeconds);
+        if (Int(root["layout"]?["players"]) is { } players)
+            config.PlayerCount = Math.Clamp(players, 1, EngineConfig.MaxPlayers);
+        if (Int(root["layout"]?["recorders"]) is { } recorders)
+            config.RecorderCount = Math.Clamp(recorders, 1, EngineConfig.MaxRecorders);
 
         // "recorderSettings" també és opcional (afegit a la fase 2).
         if (root["recorderSettings"] is JsonArray recorderSettings)

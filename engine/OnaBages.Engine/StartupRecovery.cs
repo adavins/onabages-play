@@ -11,10 +11,14 @@ public static class StartupRecovery
     /// <summary>
     /// Carpetes on es busca: la de treball de cada enregistrador, la de per defecte i les dels
     /// enregistraments que ja són a la llista (un fitxer tallat per disc ple, per exemple).
+    /// <paramref name="savedFolders"/>: les carpetes desades a la configuració, també les d'enregistradors
+    /// que s'han tret (pas 9): si se'n treu un, els seus enregistraments interromputs també es recuperen.
     /// </summary>
-    public static IReadOnlyList<string> FoldersToScan(IEnumerable<Recorder> recorders, RecordingList list)
+    public static IReadOnlyList<string> FoldersToScan(IEnumerable<Recorder> recorders, RecordingList list,
+        IEnumerable<string?>? savedFolders = null)
     {
         var folders = recorders.Select(r => r.Folder)
+            .Concat(savedFolders ?? [])
             .Append(Recorder.DefaultFolder)
             .Concat(list.Items.Select(i => Path.GetDirectoryName(i.Path)));
 

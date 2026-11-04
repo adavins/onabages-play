@@ -99,6 +99,8 @@ public sealed class CommandRouter
                 "playlist.setFlags" => PlaylistSetFlags(msg),
                 "playlist.duplicate" => PlaylistDuplicate(msg),
                 "playlist.transfer" => PlaylistTransfer(msg),
+                "playlist.addSection" => PlaylistAddSection(msg),
+                "playlist.updateSection" => PlaylistUpdateSection(msg),
                 "playlist.load" => PlaylistLoad(msg),
                 "playlist.save" => PlaylistSave(msg),
                 "track.info" => TrackInfoGet(msg),
@@ -368,7 +370,7 @@ public sealed class CommandRouter
         return new JsonObject
         {
             ["ids"] = new JsonArray(ids.Select(id => (JsonNode)id).ToArray()),
-            ["missing"] = entries.Count(e => !File.Exists(e.Path)),
+            ["missing"] = entries.Count(e => !e.IsSection && !File.Exists(e.Path)),
         };
     }
 
@@ -396,11 +398,58 @@ public sealed class CommandRouter
         foreach (string path in paths)
         {
             if (Directory.Exists(path))
-                entries.AddRange(PlaylistFiles.AudioFilesInFolder(path).Select(f => new PlaylistEntry(f)));
+                entries.AddRange(PlaylistFiles.AudioFilesInFolder(path).Select(f => PlaylistEntry.ForFile(f)));
             else if (PlaylistFiles.IsPlaylistFile(path)) entries.AddRange(PlaylistFiles.Read(path));
-            else entries.Add(new PlaylistEntry(path));
+            else entries.Add(PlaylistEntry.ForFile(path)); // «______.mp3»: separador de secció
         }
         return entries;
+    }
+
+    /// <summary>
+    /// Separador de secció (pas 9c): "title"; opcionals "color" (un de Playlist.SectionColors) i
+    /// "beforeId" (on s'insereix; per defecte, al final).
+    /// </summary>
+    private JsonObject PlaylistAddSection(JsonObject msg)
+    {
+        var player = GetPlayer(msg);
+        string title = RequireSectionTitle(msg);
+        string? color = ReadSectionColor(msg) is { Length: > 0 } c ? c : null;
+        string id = player.Playlist.AddSection(title, color, ExistingItem(player, ReadString(msg["beforeId"])));
+        return new JsonObject { ["id"] = id };
+    }
+
+    /// <summary>
+    /// Canvia un separador: "itemId" i, opcionals, "title", "color" (null o "" el treu) i "collapsed" (bool).
+    /// Els que no s'envien no canvien.
+    /// </summary>
+    private JsonObject PlaylistUpdateSection(JsonObject msg)
+    {
+        var player = GetPlayer(msg);
+        string id = ExistingItem(player, RequireString(msg, "itemId"))!;
+        string? title = msg.ContainsKey("title") ? RequireSectionTitle(msg) : null;
+        player.Playlist.UpdateSection(id, title, ReadSectionColor(msg), ReadBool(msg["collapsed"]));
+        return new JsonObject { ["playlist"] = PlaylistJson.Playlist(player) };
+    }
+
+    private static string RequireSectionTitle(JsonObject msg)
+    {
+        string? title = ReadString(msg["title"])?.Trim();
+        if (string.IsNullOrEmpty(title))
+            throw new BadParamsException("Falta el camp 'title' (el nom de la secció).");
+        if (title.Length > Playlist.MaxSectionTitle)
+            throw new BadParamsException($"El nom de la secció pot tenir com a molt {Playlist.MaxSectionTitle} caràcters.");
+        return title;
+    }
+
+    /// <summary>"color": null si no s'envia; "" si s'envia null o buit (treure'l); si no, un dels permesos.</summary>
+    private static string? ReadSectionColor(JsonObject msg)
+    {
+        if (!msg.ContainsKey("color")) return null;
+        string? color = ReadString(msg["color"]);
+        if (string.IsNullOrEmpty(color)) return "";
+        if (!Playlist.SectionColors.Contains(color))
+            throw new BadParamsException($"'color' ha de ser un d'aquests: {string.Join(", ", Playlist.SectionColors)} (o null).");
+        return color;
     }
 
     /// <summary>"ids": cada pista es duplica just a sota de l'original.</summary>

@@ -59,6 +59,15 @@ public static class PlaylistFiles
         var list = new JsonArray();
         foreach (var item in items)
         {
+            if (item.IsSection)
+            {
+                // Separador de secció (pas 9c): no té cap fitxer.
+                list.Add(new JsonObject
+                {
+                    ["section"] = new JsonObject { ["title"] = item.Name, ["color"] = item.Color, ["collapsed"] = item.Collapsed },
+                });
+                continue;
+            }
             list.Add(new JsonObject
             {
                 ["path"] = item.Path,
@@ -166,6 +175,14 @@ public static class PlaylistFiles
         var entries = new List<PlaylistEntry>();
         foreach (var node in root["items"] as JsonArray ?? [])
         {
+            // Separador de secció (pas 9c; camp opcional, sense canvi de versió).
+            if (node?["section"] is JsonObject section)
+            {
+                entries.Add(PlaylistEntry.Section(Text(section["title"]) ?? Playlist.DefaultSectionTitle,
+                    Text(section["color"]), Bool(section["collapsed"])));
+                continue;
+            }
+
             string? absolute = Text(node?["path"]);
             string? relative = Text(node?["relativePath"]);
             if (absolute is null && relative is null) continue;
@@ -178,7 +195,7 @@ public static class PlaylistFiles
                 if (File.Exists(fromList)) chosen = fromList;
             }
 
-            entries.Add(new PlaylistEntry(chosen, Bool(node?["loop"]), Bool(node?["autoNext"])));
+            entries.Add(PlaylistEntry.ForFile(chosen, Bool(node?["loop"]), Bool(node?["autoNext"])));
         }
         return entries;
     }
@@ -202,7 +219,7 @@ public static class PlaylistFiles
                 continue; // adreces d'internet: no són fitxers
 
             string full = Path.IsPathFullyQualified(line) ? line : Path.GetFullPath(Path.Combine(folder, line));
-            entries.Add(new PlaylistEntry(full));
+            entries.Add(PlaylistEntry.ForFile(full)); // «______.mp3» del Winamp: separador de secció
         }
         return entries;
     }

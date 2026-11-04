@@ -25,6 +25,8 @@ public static class PlaylistJson
     public static JsonObject Item(PlaylistItem item) => new()
     {
         ["id"] = item.Id,
+        // "section": separador de secció (pas 9c). "name" és el títol; "path" és buit.
+        ["type"] = item.IsSection ? "section" : "track",
         ["name"] = item.Name,
         ["path"] = item.Path,
         ["duration"] = item.Duration is { } d ? Math.Round(d.TotalSeconds, 3) : null,
@@ -39,6 +41,8 @@ public static class PlaylistJson
         ["problem"] = item.Problem,
         ["loop"] = item.Loop,
         ["autoNext"] = item.AutoNext,
+        ["color"] = item.Color,
+        ["collapsed"] = item.Collapsed,
     };
 
     public static JsonArray All(IEnumerable<Player> players) =>

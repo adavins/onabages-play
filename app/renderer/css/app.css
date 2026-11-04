@@ -59,6 +59,17 @@
   --obp-pl-selected-bg: #3a4048;    /* seleccionada (més clara) */
   --obp-pl-problem-bg: #5c2a17;     /* malmesa o desapareguda */
   --obp-pl-preview-bg: #6e3608;     /* la que sona a la preescolta (taronja) */
+
+  /* Colors dels separadors de secció (D-042) */
+  --obp-section-none: #8a939c;
+  --obp-section-red: #e5484d;
+  --obp-section-orange: #f08c3a;
+  --obp-section-yellow: #e0c326;
+  --obp-section-green: #2fb36b;
+  --obp-section-teal: #20b2aa;
+  --obp-section-blue: #3d8bfd;
+  --obp-section-purple: #a371f7;
+  --obp-section-pink: #e85aad;
   --obp-pl-loop-on: #3d8bfd;
   --obp-pl-cue-on: #e0a526;
   --obp-pl-auto-on: #2fb36b;
@@ -1149,3 +1160,99 @@ body.engine-offline .layout {
 .obp-shortcuts kbd {
   white-space: nowrap;
 }
+
+/* Separadors de secció (D-042) -------------------------------------------- */
+
+/* Cada color de secció defineix --section (el to); la resta de regles el fan servir. */
+.section-color-none   { --section: var(--obp-section-none); }
+.section-color-red    { --section: var(--obp-section-red); }
+.section-color-orange { --section: var(--obp-section-orange); }
+.section-color-yellow { --section: var(--obp-section-yellow); }
+.section-color-green  { --section: var(--obp-section-green); }
+.section-color-teal   { --section: var(--obp-section-teal); }
+.section-color-blue   { --section: var(--obp-section-blue); }
+.section-color-purple { --section: var(--obp-section-purple); }
+.section-color-pink   { --section: var(--obp-section-pink); }
+
+/* La fila del separador: franja gruixuda del color, fons tenyit i el nom en majúscules. */
+.pl-row.pl-section {
+  height: calc(var(--obp-pl-row-h) * 1.15);
+  margin-top: 2px;
+  background: color-mix(in srgb, var(--section) 28%, transparent);
+  box-shadow: inset 6px 0 0 var(--section);
+  border-bottom: 1px solid var(--section);
+  font-weight: 700;
+}
+
+.pl-row.pl-section:hover { background: color-mix(in srgb, var(--section) 38%, transparent); }
+.pl-row.pl-section.pl-selected {
+  background: color-mix(in srgb, var(--section) 45%, transparent);
+  box-shadow: inset 6px 0 0 var(--section), inset 0 0 0 2px rgb(255 255 255 / 0.35);
+}
+
+.pl-section-title {
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.pl-section-info {
+  font-weight: 400;
+  font-size: 0.8rem;
+  color: var(--bs-secondary-color);
+  font-variant-numeric: tabular-nums;
+  padding-right: 0.2rem;
+}
+
+.pl-section-now { color: var(--obp-ok); }
+
+.pl-flag-collapse {
+  color: var(--bs-body-color);
+  padding-left: 0.4rem;
+}
+
+/* Pistes d'una secció amb color: una franja fina del color a l'esquerra. */
+.pl-row.pl-in-section:not(.pl-previewing) { box-shadow: inset 3px 0 0 var(--section); }
+
+/* Al panell del reproductor: secció de la pista actual. */
+.track-section {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--section);
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: -0.3rem;
+}
+
+/* Diàleg de secció: mostres de color. */
+.section-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.section-swatch {
+  position: relative;
+  cursor: pointer;
+}
+
+.section-swatch input {
+  position: absolute;
+  opacity: 0;
+}
+
+.section-swatch span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.4rem;
+  background: var(--section);
+  border: 3px solid transparent;
+}
+
+.section-color-none.section-swatch span { background: transparent; border-color: var(--bs-border-color); }
+.section-swatch input:checked + span { border-color: #fff; box-shadow: 0 0 0 2px var(--section); }
+.section-swatch input:focus-visible + span { outline: 2px solid var(--obp-info); outline-offset: 2px; }

@@ -216,8 +216,10 @@ public sealed class Player : IDisposable
     {
         lock (_sync)
         {
-            if (Playlist.Find(itemId) is null)
-                throw new PlayerCommandException("Aquesta pista ja no és a la llista.");
+            var target = Playlist.Find(itemId)
+                ?? throw new PlayerCommandException("Aquesta pista ja no és a la llista.");
+            if (target.IsSection)
+                throw new PlayerCommandException("Això és un separador de secció: no sona.");
             if (DeviceId is null)
                 throw new PlayerCommandException("Cal triar abans una sortida per a aquest reproductor.");
 

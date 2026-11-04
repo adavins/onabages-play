@@ -12,11 +12,14 @@
 //   P preescoltar.
 // - Botó 🎧 de cada fila: preescoltar (la fila que sona a la preescolta es marca en taronja).
 // - Botó dret: preescoltar, informació, duplicar i «Mostrar a l'Explorador».
+// - Separadors de secció (D-042): botó «Secció» o tecla S; doble clic, nom i color; el botó ▾ (o ←/→)
+//   plega la secció; una secció plegada s'arrossega amb totes les seves pistes.
 
 import { escapeHtml, formatDuration } from './format.js';
 import { showContextMenu } from './context-menu.js';
 import { choose, showInfo } from './dialogs.js';
 import { togglePreview, previewButton } from './cue-actions.js';
+import { editSection } from './section-dialog.js';
 
 /** @typedef {import('../store.js').Store} Store */
 /** @typedef {(cmd: string, params?: object) => Promise<any>} Request */
@@ -70,6 +73,9 @@ export class PlaylistView {
         <button class="btn btn-sm btn-link pl-action js-save-list" type="button" title="Desar aquesta llista">
           <i class="bi bi-save"></i><span class="pl-action-label"> Desar llista</span>
         </button>
+        <button class="btn btn-sm btn-link pl-action js-add-section" type="button" title="Inserir un separador de secció (S): a sobre de la pista seleccionada o al final">
+          <i class="bi bi-bookmark-plus"></i><span class="pl-action-label"> Secció</span>
+        </button>
         <button class="btn btn-sm btn-link pl-action js-clear-list" type="button" title="Treure totes les pistes de la llista">
           <i class="bi bi-trash3"></i><span class="pl-action-label"> Netejar llista</span>
         </button>
@@ -80,6 +86,7 @@ export class PlaylistView {
     /** @type {HTMLElement} */ (this.element.querySelector('.js-open-list')).addEventListener('click', () => this.#openList());
     /** @type {HTMLElement} */ (this.element.querySelector('.js-save-list')).addEventListener('click', () => this.#saveList());
     /** @type {HTMLElement} */ (this.element.querySelector('.js-clear-list')).addEventListener('click', () => this.#clearList());
+    /** @type {HTMLElement} */ (this.element.querySelector('.js-add-section')).addEventListener('click', () => this.#addSection());
 
     this.#rows.addEventListener('click', (e) => this.#onClick(/** @type {MouseEvent} */ (e)));
     this.#rows.addEventListener('dblclick', (e) => this.#onDoubleClick(/** @type {MouseEvent} */ (e)));
@@ -127,49 +134,100 @@ export class PlaylistView {
     const current = this.#player.currentItemId;
     const last = this.#player.lastPlayedId;
 
+    // Separadors de secció (D-042): quantes pistes i quanta durada té cada secció, i si hi ha la que sona.
+    const stats = sectionStats(items, current);
+
+    /** @type {any} secció on som mentre es recorre la llista (per al color i per saber si està plegada) */
+    let section = null;
+    let number = 0;
+    const rows = [];
+    for (const item of items) {
+      if (isSection(item)) {
+        section = item;
+        rows.push(this.#sectionRow(item, stats.get(item.id), playing));
+        continue;
+      }
+      number++;
+      if (section?.collapsed) continue; // secció plegada: les seves pistes no es mostren
+      rows.push(this.#trackRow(item, number, section?.color, { playing, current, last, cueId }));
+    }
+
     this.#rows.innerHTML = items.length === 0
       ? '<div class="pl-empty"><i class="bi bi-box-arrow-in-down"></i> Arrossega fitxers aquí o prem «Afegir»</div>'
-      : items.map((/** @type {any} */ item, /** @type {number} */ index) => {
-        const classes = ['pl-row'];
-        if (item.id === current && playing) classes.push('pl-playing');
-        else if (item.id === current) classes.push('pl-current');
-        if (item.id === last && item.id !== current) classes.push('pl-last');
-        if (item.status === 'error' || item.status === 'missing') classes.push('pl-problem');
-        if (item.status === 'analyzing') classes.push('pl-analyzing');
-        const previewing = this.#store.isPreviewing(item.path);
-        if (previewing) classes.push('pl-previewing');
+      : rows.join('');
 
-        const status = item.status === 'error' || item.status === 'missing'
-          ? `<span class="pl-warn" title="${escapeHtml(item.problem ?? 'Problema amb el fitxer')}"><i class="bi bi-exclamation-triangle-fill"></i></span>`
-          : item.status === 'analyzing'
-            ? '<span class="pl-wait" title="Comprovant el fitxer…"><i class="bi bi-hourglass-split"></i></span>'
-            : '';
-
-        return `
-          <div class="${classes.join(' ')}" data-id="${escapeHtml(item.id)}" draggable="true" title="${escapeHtml(item.path)}">
-            ${flag('loop', item.loop, 'bi-repeat', 'Bucle: la pista es repeteix fins a Stop')}
-            <span class="pl-num">${index + 1}</span>
-            <span class="pl-name">${escapeHtml(item.name)}</span>
-            ${status}
-            ${previewButton(previewing, 'data-flag="preview"', 'pl-flag pl-flag-preview')}
-            ${flag('cue', item.id === cueId, 'bi-flag-fill', 'Cue: serà la següent a sonar')}
-            ${flag('auto', item.autoNext, 'bi-skip-forward-fill', 'Avanç automàtic: en acabar, sona la següent (o la del cue)',
-              item.loop ? 'Avanç automàtic: no disponible amb el bucle activat' : null)}
-            <span class="pl-dur">${item.duration != null ? formatDuration(item.duration) : ''}</span>
-          </div>`;
-      }).join('');
-
-    const count = items.length;
-    const unknown = items.filter((/** @type {any} */ i) => i.status === 'analyzing').length;
-    const problems = items.filter((/** @type {any} */ i) => i.status === 'error' || i.status === 'missing').length;
+    const tracks = items.filter((/** @type {any} */ i) => !isSection(i));
+    const count = tracks.length;
+    const unknown = tracks.filter((/** @type {any} */ i) => i.status === 'analyzing').length;
+    const problems = tracks.filter((/** @type {any} */ i) => i.status === 'error' || i.status === 'missing').length;
     this.#footer.textContent = count === 0 ? '' :
       `${count} ${count === 1 ? 'pista' : 'pistes'} · ${formatDuration(totalDuration)}` +
       (unknown > 0 ? ' · comprovant…' : '') +
       (problems > 0 ? ` · ⚠ ${problems} amb problemes` : '');
   }
 
+  /** Fila d'un separador de secció: botó per plegar, nom, i quantes pistes i quanta durada té. */
+  #sectionRow(/** @type {any} */ item, /** @type {any} */ stat, /** @type {boolean} */ playing) {
+    const classes = ['pl-row', 'pl-section', `section-color-${item.color ?? 'none'}`];
+    if (item.collapsed) classes.push('pl-section-collapsed');
+    const nowPlaying = stat.hasCurrent && playing;
+    const info = `${stat.count} ${stat.count === 1 ? 'pista' : 'pistes'} · ${formatDuration(stat.duration)}`;
+    return `
+      <div class="${classes.join(' ')}" data-id="${escapeHtml(item.id)}" draggable="true"
+           title="Secció «${escapeHtml(item.name)}» (doble clic per canviar el nom o el color)">
+        <button class="pl-flag pl-flag-collapse" type="button" data-flag="collapse" draggable="false"
+                title="${item.collapsed ? 'Desplegar: mostrar les pistes' : 'Plegar: amagar les pistes'}" aria-expanded="${!item.collapsed}">
+          <i class="bi ${item.collapsed ? 'bi-chevron-right' : 'bi-chevron-down'}"></i></button>
+        <span class="pl-name pl-section-title">${escapeHtml(item.name)}</span>
+        ${nowPlaying ? '<span class="pl-section-now" title="Hi ha la pista que sona"><i class="bi bi-volume-up-fill"></i></span>' : ''}
+        <span class="pl-section-info">${info}</span>
+      </div>`;
+  }
+
+  /**
+   * Fila d'una pista.
+   * @param {any} item
+   * @param {number} number  número de la pista (sense comptar els separadors)
+   * @param {string | null | undefined} sectionColor  color de la secció on és (franja a l'esquerra)
+   * @param {{ playing: boolean, current: string, last: string, cueId: string }} now
+   */
+  #trackRow(item, number, sectionColor, { playing, current, last, cueId }) {
+    const classes = ['pl-row'];
+    if (sectionColor) classes.push(`pl-in-section`, `section-color-${sectionColor}`);
+    if (item.id === current && playing) classes.push('pl-playing');
+    else if (item.id === current) classes.push('pl-current');
+    if (item.id === last && item.id !== current) classes.push('pl-last');
+    if (item.status === 'error' || item.status === 'missing') classes.push('pl-problem');
+    if (item.status === 'analyzing') classes.push('pl-analyzing');
+    const previewing = this.#store.isPreviewing(item.path);
+    if (previewing) classes.push('pl-previewing');
+
+    const status = item.status === 'error' || item.status === 'missing'
+      ? `<span class="pl-warn" title="${escapeHtml(item.problem ?? 'Problema amb el fitxer')}"><i class="bi bi-exclamation-triangle-fill"></i></span>`
+      : item.status === 'analyzing'
+        ? '<span class="pl-wait" title="Comprovant el fitxer…"><i class="bi bi-hourglass-split"></i></span>'
+        : '';
+
+    return `
+      <div class="${classes.join(' ')}" data-id="${escapeHtml(item.id)}" draggable="true" title="${escapeHtml(item.path)}">
+        ${flag('loop', item.loop, 'bi-repeat', 'Bucle: la pista es repeteix fins a Stop')}
+        <span class="pl-num">${number}</span>
+        <span class="pl-name">${escapeHtml(item.name)}</span>
+        ${status}
+        ${previewButton(previewing, 'data-flag="preview"', 'pl-flag pl-flag-preview')}
+        ${flag('cue', item.id === cueId, 'bi-flag-fill', 'Cue: serà la següent a sonar')}
+        ${flag('auto', item.autoNext, 'bi-skip-forward-fill', 'Avanç automàtic: en acabar, sona la següent (o la del cue)',
+          item.loop ? 'Avanç automàtic: no disponible amb el bucle activat' : null)}
+        <span class="pl-dur">${item.duration != null ? formatDuration(item.duration) : ''}</span>
+      </div>`;
+  }
+
   /** Marca les files seleccionades (només canvia classes: no redibuixa la llista). */
   #applySelection() {
+    // Les pistes amagades (secció plegada) deixen d'estar seleccionades: Supr no les ha d'esborrar sense veure-les.
+    const visible = new Set(this.#ids());
+    for (const id of this.#selected) if (!visible.has(id)) this.#selected.delete(id);
+
     for (const row of /** @type {NodeListOf<HTMLElement>} */ (this.#rows.querySelectorAll('.pl-row')))
       row.classList.toggle('pl-selected', this.#selected.has(/** @type {string} */ (row.dataset.id)));
   }
@@ -244,14 +302,19 @@ export class PlaylistView {
     this.#rows.querySelector(`[data-id="${CSS.escape(this.#lead)}"]`)?.scrollIntoView({ block: 'nearest' });
   }
 
-  /** Identificadors de la llista, en ordre. */
+  /** Identificadors de les files que es veuen (les d'una secció plegada no), en ordre. */
   #ids() {
-    return this.#playlist.items.map((/** @type {any} */ i) => i.id);
+    return [...this.#rows.querySelectorAll('.pl-row')].map((row) => /** @type {string} */ (/** @type {HTMLElement} */ (row).dataset.id));
   }
 
-  /** Pistes seleccionades, en l'ordre de la llista. */
+  /** Pistes (i separadors) seleccionats, en l'ordre de la llista. */
   #selectedItems() {
     return this.#playlist.items.filter((/** @type {any} */ i) => this.#selected.has(i.id));
+  }
+
+  /** Només les pistes seleccionades (sense els separadors): per a cue, bucle, avanç i preescolta. */
+  #selectedTracks() {
+    return this.#selectedItems().filter((/** @type {any} */ i) => !isSection(i));
   }
 
   /** @param {MouseEvent} e */
@@ -259,12 +322,17 @@ export class PlaylistView {
     const target = /** @type {HTMLElement} */ (e.target);
     if (target.closest('.pl-flag')) return;
     const row = /** @type {HTMLElement | null} */ (target.closest('.pl-row'));
-    if (row) this.#send('player.playItem', { player: this.#playerId, itemId: row.dataset.id });
+    if (!row) return;
+    const item = this.#playlist.items.find((/** @type {any} */ i) => i.id === row.dataset.id);
+    // Doble clic en un separador: canviar-ne el nom o el color. En una pista: fer-la sonar.
+    if (isSection(item)) this.#editSection(item);
+    else this.#send('player.playItem', { player: this.#playerId, itemId: row.dataset.id });
   }
 
   /**
    * Teclat (amb la llista activa): Supr, Esc, Ctrl+A, ↑/↓ (Maj: ampliar la selecció)
-   * i les dreceres C (cue), D (duplicar), B (bucle), A (avanç automàtic). D-033.
+   * i les dreceres C (cue), D (duplicar), B (bucle), A (avanç automàtic), P (preescoltar), D-033,
+   * S (inserir una secció) i ←/→ (plegar o desplegar la secció seleccionada), D-042.
    * @param {KeyboardEvent} e
    */
   #onKey(e) {
@@ -292,6 +360,12 @@ export class PlaylistView {
       this.#toggleSelected('autoNext');
     } else if (plain && key === 'p') {
       this.#previewSelected();
+    } else if (plain && key === 's') {
+      this.#addSection(this.#selectedItems()[0]?.id ?? null);
+    } else if (plain && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+      const section = this.#selectedItems().find(isSection);
+      if (!section) return;
+      this.#setCollapsed(section, e.key === 'ArrowLeft');
     } else {
       return;
     }
@@ -300,14 +374,52 @@ export class PlaylistView {
 
   /** C: la (primera) pista seleccionada passa a ser la del cue; si ja ho era, es treu. */
   #cueSelected() {
-    const item = this.#selectedItems()[0];
+    const item = this.#selectedTracks()[0];
     if (item) this.#toggleFlag(item.id, 'cue');
   }
 
   /** P: preescolta la (primera) pista seleccionada; si ja hi sona, l'atura. */
   #previewSelected() {
-    const item = this.#selectedItems()[0];
+    const item = this.#selectedTracks()[0];
     if (item) this.#preview(item.path);
+  }
+
+  // -------------------------------------------------------------------------
+  // Separadors de secció (D-042)
+  // -------------------------------------------------------------------------
+
+  /** Botó «Secció» o tecla S: demana el nom i el color i l'insereix davant de <beforeId> (o al final). */
+  async #addSection(/** @type {string | null} */ beforeId = this.#selectedItems()[0]?.id ?? null) {
+    const result = await editSection();
+    if (!result) return;
+    this.#send('playlist.addSection', { player: this.#playerId, title: result.title, color: result.color, beforeId });
+    this.#rows.focus();
+  }
+
+  async #editSection(/** @type {any} */ section) {
+    const result = await editSection({ title: section.name, color: section.color });
+    if (!result) return;
+    this.#send('playlist.updateSection', { player: this.#playerId, itemId: section.id, title: result.title, color: result.color });
+    this.#rows.focus();
+  }
+
+  #setCollapsed(/** @type {any} */ section, /** @type {boolean} */ collapsed) {
+    if (section.collapsed === collapsed) return;
+    this.#send('playlist.updateSection', { player: this.#playerId, itemId: section.id, collapsed });
+  }
+
+  /**
+   * Afegeix, a cada separador plegat, les pistes que té amagades (fins al separador següent):
+   * en arrossegar una secció plegada, es mou (o es copia) amb totes les seves pistes.
+   */
+  #withHiddenTracks(/** @type {any[]} */ items) {
+    const ids = new Set(items.map((i) => i.id));
+    let inCollapsed = false;
+    for (const item of this.#playlist.items) {
+      if (isSection(item)) inCollapsed = ids.has(item.id) && item.collapsed;
+      else if (inCollapsed) ids.add(item.id);
+    }
+    return this.#playlist.items.filter((/** @type {any} */ i) => ids.has(i.id));
   }
 
   async #preview(/** @type {string} */ path) {
@@ -326,7 +438,8 @@ export class PlaylistView {
    * L'avanç automàtic no s'aplica a les pistes amb bucle (D-034).
    */
   async #toggleSelected(/** @type {'loop' | 'autoNext'} */ flag) {
-    let items = this.#selectedItems();
+    let items = this.#selectedTracks();
+    if (items.length === 0) return;
     if (flag === 'autoNext') items = items.filter((/** @type {any} */ i) => !i.loop);
     if (items.length === 0) {
       if (flag === 'autoNext') this.#onMessage('Amb el bucle activat no es pot activar l\'avanç automàtic.');
@@ -350,8 +463,23 @@ export class PlaylistView {
       this.#lead = item.id;
       this.update(null, null);
     }
-    const selected = this.#selectedItems();
+    if (isSection(item)) {
+      showContextMenu(e, [
+        { label: 'Canviar el nom o el color…', icon: 'bi-pencil', action: () => this.#editSection(item) },
+        item.collapsed
+          ? { label: 'Desplegar (→)', icon: 'bi-chevron-down', action: () => this.#setCollapsed(item, false) }
+          : { label: 'Plegar (←)', icon: 'bi-chevron-right', action: () => this.#setCollapsed(item, true) },
+        { label: 'Inserir una secció a sobre… (S)', icon: 'bi-bookmark-plus', action: () => this.#addSection(item.id) },
+        {
+          label: 'Treure el separador (les pistes es queden)',
+          icon: 'bi-x-lg',
+          action: () => this.#send('playlist.remove', { player: this.#playerId, ids: [item.id] }),
+        },
+      ]);
+      return;
+    }
 
+    const tracks = this.#selectedTracks(); // la informació no compta els separadors
     showContextMenu(e, [
       {
         label: this.#store.isPreviewing(item.path) ? 'Aturar la preescolta (P)' : 'Preescoltar (P)',
@@ -359,11 +487,12 @@ export class PlaylistView {
         action: () => this.#preview(item.path),
       },
       {
-        label: selected.length > 1 ? `Informació (${selected.length} pistes)` : 'Informació',
+        label: tracks.length > 1 ? `Informació (${tracks.length} pistes)` : 'Informació',
         icon: 'bi-info-circle',
-        action: () => (selected.length > 1 ? this.#showSelectionInfo(selected) : this.#showInfo(item)),
+        action: () => (tracks.length > 1 ? this.#showSelectionInfo(tracks) : this.#showInfo(item)),
       },
       { label: 'Duplicar (D)', icon: 'bi-copy', action: () => this.#duplicateSelected() },
+      { label: 'Inserir una secció a sobre… (S)', icon: 'bi-bookmark-plus', action: () => this.#addSection(item.id) },
       { label: 'Mostrar a l\'Explorador', icon: 'bi-folder2-open', action: () => bridge?.showInFolder(item.path) },
     ]);
   }
@@ -412,6 +541,10 @@ export class PlaylistView {
       this.#preview(item.path);
       return;
     }
+    if (flag === 'collapse') {
+      this.#setCollapsed(item, !item.collapsed);
+      return;
+    }
     const params = { player: this.#playerId, itemId: id };
     if (flag === 'loop') Object.assign(params, { loop: !item.loop });
     else if (flag === 'auto') Object.assign(params, { autoNext: !item.autoNext });
@@ -435,7 +568,8 @@ export class PlaylistView {
         this.#anchor = id;
       }
       // En l'ordre de la llista; les rutes, per si es deixen anar en una altra llista.
-      const items = this.#playlist.items.filter((/** @type {any} */ i) => this.#selected.has(i.id));
+      // Una secció plegada s'arrossega amb totes les seves pistes.
+      const items = this.#withHiddenTracks(this.#selectedItems());
       e.dataTransfer.setData(DRAG_TYPE, JSON.stringify({
         player: this.#playerId,
         ids: items.map((/** @type {any} */ i) => i.id),
@@ -602,4 +736,47 @@ function flag(name, on, icon, title, disabledReason = null) {
   return `<button class="pl-flag pl-flag-${name}${on ? ' on' : ''}" type="button" data-flag="${name}"
     title="${disabledReason ?? title}" aria-pressed="${on}" draggable="false"${disabledReason ? ' disabled' : ''}>
     <i class="bi ${icon}"></i></button>`;
+}
+
+/** És un separador de secció (D-042)? Els motors d'abans no envien «type»: llavors és una pista. */
+export function isSection(/** @type {any} */ item) {
+  return item?.type === 'section';
+}
+
+/**
+ * Per a cada separador: quantes pistes té (fins al separador següent), quanta durada en total
+ * i si hi ha la pista actual del reproductor.
+ * @param {any[]} items
+ * @param {string | null} currentId
+ * @returns {Map<string, { count: number, duration: number, hasCurrent: boolean }>}
+ */
+function sectionStats(items, currentId) {
+  const stats = new Map();
+  /** @type {{ count: number, duration: number, hasCurrent: boolean } | null} */
+  let stat = null;
+  for (const item of items) {
+    if (isSection(item)) {
+      stat = { count: 0, duration: 0, hasCurrent: false };
+      stats.set(item.id, stat);
+    } else if (stat) {
+      stat.count++;
+      stat.duration += item.duration ?? 0;
+      if (item.id === currentId) stat.hasCurrent = true;
+    }
+  }
+  return stats;
+}
+
+/**
+ * La secció on és una pista (el separador més proper de sobre), o null.
+ * @param {any[]} items
+ * @param {string | null} itemId
+ */
+export function sectionOf(items, itemId) {
+  let section = null;
+  for (const item of items) {
+    if (isSection(item)) section = item;
+    else if (item.id === itemId) return section;
+  }
+  return null;
 }

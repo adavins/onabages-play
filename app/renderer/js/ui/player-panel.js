@@ -7,7 +7,7 @@ import { deviceWarning } from './device-line.js';
 import { DeviceSelect } from './device-select.js';
 import { LevelMeter } from './meter.js';
 import { VolumeFader } from './fader.js';
-import { PlaylistView } from './playlist-view.js';
+import { PlaylistView, sectionOf } from './playlist-view.js';
 import { escapeHtml, formatDuration } from './format.js';
 import { playKey } from './shortcuts.js';
 
@@ -71,6 +71,7 @@ export class PlayerPanel {
             <i class="bi bi-plus-lg"></i> Afegir
           </button>
         </div>
+        <div class="track-section js-section"></div>
 
         <div class="remaining js-remaining" role="button" title="Temps restant">--:--</div>
         <div class="seek-area js-seek" title="Clica o arrossega per saltar">
@@ -158,6 +159,12 @@ export class PlayerPanel {
     const name = current?.name ?? (p.file ? p.file.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, '') : null);
     el.track.textContent = name ?? (p.state === 'ended' ? 'Aturat' : 'Cap pista');
     el.track.title = p.file ?? '';
+
+    // Secció de la llista on és la pista actual (D-042).
+    const section = p.currentItemId ? sectionOf(list?.items ?? [], p.currentItemId) : null;
+    el.section.className = `track-section js-section section-color-${section?.color ?? 'none'}${section ? '' : ' d-none'}`;
+    el.section.innerHTML = section ? `<i class="bi bi-bookmark-fill"></i> ${escapeHtml(section.name)}` : '';
+    el.section.title = section ? `Secció: ${section.name}` : '';
     el.format.textContent = p.format ?? '';
     el.format.title = p.format ?? '';
 

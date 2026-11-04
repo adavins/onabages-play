@@ -20,6 +20,9 @@ public enum TrackStatus
 /// <param name="Format">Format abreujat («MP3 192 kbps estèreo 44,1 kHz»), quan ja s'ha comprovat.</param>
 /// <param name="Loop">Es repeteix fins que s'atura.</param>
 /// <param name="AutoNext">Quan s'acaba, sona la pista amb cue o la següent (un sol pas).</param>
+/// <param name="IsSection">És un separador de secció (pas 9c): no és cap fitxer i no sona mai. <c>Name</c> és el títol.</param>
+/// <param name="Color">Color del separador (un de <see cref="Playlist.SectionColors"/>), o null.</param>
+/// <param name="Collapsed">Separador plegat: la interfície n'amaga les pistes fins al separador següent.</param>
 public sealed record PlaylistItem(
     string Id,
     string Path,
@@ -29,10 +32,31 @@ public sealed record PlaylistItem(
     TrackStatus Status,
     string? Problem,
     bool Loop,
-    bool AutoNext);
+    bool AutoNext,
+    bool IsSection = false,
+    string? Color = null,
+    bool Collapsed = false);
 
-/// <summary>Una pista per afegir a una llista: el fitxer i les seves marques (p. ex. llegida d'una llista desada).</summary>
-public sealed record PlaylistEntry(string Path, bool Loop = false, bool AutoNext = false);
+/// <summary>
+/// Un element per afegir a una llista (p. ex. llegit d'una llista desada): un fitxer amb les seves marques
+/// o, si <paramref name="SectionTitle"/> no és null, un separador de secció.
+/// </summary>
+public sealed record PlaylistEntry(string Path, bool Loop = false, bool AutoNext = false,
+    string? SectionTitle = null, string? Color = null, bool Collapsed = false)
+{
+    public bool IsSection => SectionTitle is not null;
+
+    /// <summary>Un separador de secció.</summary>
+    public static PlaylistEntry Section(string title, string? color = null, bool collapsed = false) =>
+        new("", SectionTitle: title, Color: color, Collapsed: collapsed);
+
+    /// <summary>
+    /// Un fitxer. Si el nom és només guions baixos o guions (com «______.mp3», el separador que es feia
+    /// servir al Winamp), es converteix en un separador de secció.
+    /// </summary>
+    public static PlaylistEntry ForFile(string path, bool loop = false, bool autoNext = false) =>
+        Playlist.IsSeparatorFileName(path) ? Section(Playlist.DefaultSectionTitle) : new(path, loop, autoNext);
+}
 
 /// <summary>
 /// Llista de reproducció d'un reproductor (especificació 6.3 i 6.4, D-031). Només dades i regles: no fa so.
@@ -53,6 +77,25 @@ public sealed class Playlist
     public Playlist(TrackAnalyzer? analyzer = null)
     {
         _analyzer = analyzer;
+    }
+
+    /// <summary>Colors possibles d'un separador de secció (la interfície decideix com es veuen).</summary>
+    public static readonly string[] SectionColors = ["red", "orange", "yellow", "green", "teal", "blue", "purple", "pink"];
+
+    /// <summary>Títol dels separadors que vénen d'un fitxer «______.mp3».</summary>
+    public const string DefaultSectionTitle = "Secció";
+
+    /// <summary>Llargada màxima del títol d'una secció.</summary>
+    public const int MaxSectionTitle = 80;
+
+    /// <summary>
+    /// El nom del fitxer (sense extensió) és només guions baixos, guions, iguals o punts, com
+    /// «______.mp3»: el truc del Winamp per separar seccions amb un fitxer de 0 segons.
+    /// </summary>
+    public static bool IsSeparatorFileName(string path)
+    {
+        string name = System.IO.Path.GetFileNameWithoutExtension(path).Trim();
+        return name.Length >= 3 && name.All(c => c is '_' or '-' or '=' or '.' or ' ');
     }
 
     /// <summary>Ha canviat alguna cosa (pistes, ordre, marques, resultat d'una comprovació).</summary>
@@ -84,7 +127,33 @@ public sealed class Playlist
     /// Cada pista es comprova en segon pla. Retorna els identificadors nous, en ordre.
     /// </summary>
     public IReadOnlyList<string> Add(IEnumerable<string> paths, string? beforeId = null) =>
-        AddEntries(paths.Select(p => new PlaylistEntry(p)), beforeId);
+        AddEntries(paths.Select(p => PlaylistEntry.ForFile(p)), beforeId);
+
+    /// <summary>Afegeix un separador de secció davant de <paramref name="beforeId"/> (o al final). Retorna el seu identificador.</summary>
+    public string AddSection(string title, string? color = null, string? beforeId = null) =>
+        AddEntries([PlaylistEntry.Section(title, color)], beforeId)[0];
+
+    /// <summary>Canvia el títol, el color o si està plegat d'un separador. Els paràmetres null no es toquen.</summary>
+    /// <param name="color">Un de <see cref="SectionColors"/>, o "" per treure'l.</param>
+    /// <exception cref="KeyNotFoundException">Si no és a la llista.</exception>
+    /// <exception cref="PlayerCommandException">Si no és un separador.</exception>
+    public void UpdateSection(string id, string? title = null, string? color = null, bool? collapsed = null)
+    {
+        lock (_sync)
+        {
+            int index = _items.FindIndex(i => i.Id == id);
+            if (index < 0) throw new KeyNotFoundException(id);
+            var item = _items[index];
+            if (!item.IsSection) throw new PlayerCommandException("Aquest element no és un separador de secció.");
+            _items[index] = item with
+            {
+                Name = title is null ? item.Name : CleanTitle(title),
+                Color = color is null ? item.Color : ValidColor(color),
+                Collapsed = collapsed ?? item.Collapsed,
+            };
+        }
+        RaiseChanged();
+    }
 
     /// <summary>
     /// Com <see cref="Add"/>, però amb les marques de cada pista (p. ex. d'una llista desada).
@@ -97,19 +166,25 @@ public sealed class Playlist
             int index = IndexOrEnd(beforeId);
             foreach (var entry in entries)
             {
-                var item = new PlaylistItem(
-                    Id: $"t{++_nextId}",
-                    Path: entry.Path,
-                    Name: System.IO.Path.GetFileNameWithoutExtension(entry.Path),
-                    Duration: null, Format: null,
-                    Status: TrackStatus.Analyzing, Problem: null,
-                    Loop: entry.Loop, AutoNext: entry.AutoNext && !entry.Loop);
+                var item = entry.IsSection
+                    ? new PlaylistItem(
+                        Id: $"t{++_nextId}", Path: "", Name: CleanTitle(entry.SectionTitle!),
+                        Duration: null, Format: null, Status: TrackStatus.Ok, Problem: null,
+                        Loop: false, AutoNext: false,
+                        IsSection: true, Color: ValidColor(entry.Color), Collapsed: entry.Collapsed)
+                    : new PlaylistItem(
+                        Id: $"t{++_nextId}",
+                        Path: entry.Path,
+                        Name: System.IO.Path.GetFileNameWithoutExtension(entry.Path),
+                        Duration: null, Format: null,
+                        Status: TrackStatus.Analyzing, Problem: null,
+                        Loop: entry.Loop, AutoNext: entry.AutoNext && !entry.Loop);
                 _items.Insert(index++, item);
                 added.Add(item);
             }
         }
 
-        foreach (var item in added)
+        foreach (var item in added.Where(i => !i.IsSection))
             _analyzer?.Enqueue(this, item.Id, item.Path);
         RaiseChanged();
         return added.Select(i => i.Id).ToList();
@@ -207,6 +282,8 @@ public sealed class Playlist
             if (index < 0) throw new KeyNotFoundException(id);
 
             var item = _items[index];
+            if (item.IsSection && (loop == true || autoNext == true || cue == true))
+                throw new PlayerCommandException("Un separador de secció no sona: no pot tenir cue, bucle ni avanç automàtic.");
             bool newLoop = loop ?? item.Loop;
             // Bucle i avanç automàtic no poden anar junts (D-034): amb el bucle no es pot activar
             // l'avanç; i activar el bucle apaga l'avanç que hi hagués.
@@ -247,6 +324,8 @@ public sealed class Playlist
                 int at = _items.FindIndex(i => i.Id == id);
                 index = at >= 0 ? at + 1 : _removedAt.GetValueOrDefault(id, _items.Count);
             }
+            // Els separadors de secció se salten: «la següent» és la primera pista de després.
+            while (index < _items.Count && _items[index].IsSection) index++;
             return index < _items.Count ? _items[index].Id : null;
         }
     }
@@ -270,7 +349,7 @@ public sealed class Playlist
     public void CheckFiles()
     {
         // Es copia la llista i es comprova fora del bloqueig: una unitat de xarxa lenta no ha d'aturar res.
-        var snapshot = Items;
+        var snapshot = Items.Where(i => !i.IsSection).ToList(); // els separadors no són fitxers
         var exists = snapshot.ToDictionary(i => i.Id, i => SafeExists(i.Path));
 
         var reprobe = new List<PlaylistItem>();
@@ -313,6 +392,18 @@ public sealed class Playlist
         }
         RaiseChanged();
     }
+
+    /// <summary>Títol d'una secció: sense espais als extrems, com a molt <see cref="MaxSectionTitle"/> caràcters; buit, «Secció».</summary>
+    private static string CleanTitle(string title)
+    {
+        string clean = title.Trim();
+        if (clean.Length == 0) return DefaultSectionTitle;
+        return clean.Length > MaxSectionTitle ? clean[..MaxSectionTitle] : clean;
+    }
+
+    /// <summary>El color, si és un dels permesos; si no (o és buit), cap.</summary>
+    private static string? ValidColor(string? color) =>
+        color is not null && SectionColors.Contains(color) ? color : null;
 
     private int IndexOrEnd(string? id)
     {

@@ -326,6 +326,8 @@ Definida pel desenvolupador en provar la fase 2 (D-031): es conserva el que func
 - **Seguretat:** en afegir una pista, el motor la comprova (l'obre i en llegeix el principi). Si és malmesa o el format no és compatible, es mostra igualment però amb un fons diferent i una icona ⚠ que diu el motiu. **Si una pista no té cap avís, sonarà.** Cada 30 s es comprova en segon pla que els fitxers encara existeixen.
 - **Desar i obrir llistes** en format propi `.obpl` (JSON, amb la ruta completa i la relativa de cada pista, i les marques de bucle i avanç automàtic) i **importar M3U/M3U8**. Una llista arrossegada a sobre de la llista hi insereix les seves pistes. Una **carpeta** arrossegada hi insereix tots els seus fitxers d'àudio, també els de les subcarpetes, en l'ordre de l'Explorador. L'última llista de cada reproductor es desa sola i es recupera en arrencar (D-035).
 
+- **Separadors de secció** (D-042): files amb el nom d'una secció del programa (p. ex. «ESPORTS», «CINEMA») i un color opcional, per veure quines pistes corresponen a cada secció. No sonen mai (Play, el cue i l'avanç automàtic se'ls salten), mostren quantes pistes i quanta durada té la secció, i es poden plegar per escurçar la llista. El reproductor mostra la secció de la pista que sona. Els fitxers «______.mp3» de les llistes del Winamp es converteixen sols en separadors.
+
 Formats: MP3, WAV, AAC/M4A, FLAC, WMA (via Media Foundation) i OGG (via complement).
 
 El reproductor mostra el format de la pista que sona, abreujat (p. ex. «MP3 192 kbps estèreo 44,1 kHz»).

@@ -209,6 +209,8 @@ Cada reproductor té una llista. Viu al motor: la interfície la mostra i hi env
 | `playlist.transfer` | `player` (origen), `ids`, `toPlayer` (destí; pot ser el mateix); opcionals `beforeId` (de la llista de destí; per defecte, al final) i `copy` (`true`: copia; per defecte es **mou**). Conserva bucle, avanç automàtic i el resultat de la comprovació. És el que fa arrossegar pistes d'una llista a una altra (amb Ctrl, copiar) | `{ ids }`: les pistes a la llista de destí |
 | `playlist.load` | `player`, `path` (ruta completa d'un `.obpl`, `.m3u` o `.m3u8`); opcional `replace` (per defecte `true`: substitueix la llista; `false`: afegeix al final). La pista que sona continua sonant | `{ ids, missing }`: les pistes noves i quantes no existeixen |
 | `playlist.save` | `player`, `path` (ruta completa; si no acaba en `.obpl`, s'hi afegeix) | `{ path, count }` |
+| `playlist.addSection` | `player`, `title` (nom de la secció, com a molt 80 caràcters); opcionals `color` (`red`, `orange`, `yellow`, `green`, `teal`, `blue`, `purple` o `pink`) i `beforeId` (per defecte, al final). Separador de secció (D-042) | `{ id }` |
+| `playlist.updateSection` | `player`, `itemId` (un separador); opcionals `title`, `color` (`null` el treu) i `collapsed` (`true`/`false`: la interfície n'amaga les pistes fins al separador següent). Els que no s'envien no canvien. Amb una pista, `bad_state` | `{ playlist }` |
 | `track.info` | `path` | `{ info: { path, fileSize, duration, format, title, artist, album, year, genre, comment } }` (metadades amb TagLib#; els camps que no hi són, `null`) |
 
 Objecte `playlist` (també a `state.get` → `playlists` i a l'esdeveniment `playlist.changed`):
@@ -218,11 +220,16 @@ Objecte `playlist` (també a `state.get` → `playlists` i a l'esdeveniment `pla
   "items": [
     { "id": "t3", "name": "Sintonia", "path": "D:\\Musica\\Sintonia.mp3",
       "duration": 32.5, "format": "MP3 320 kbps estèreo 44,1 kHz",
-      "status": "ok", "problem": null, "loop": false, "autoNext": true }
+      "status": "ok", "problem": null, "loop": false, "autoNext": true,
+      "type": "track", "color": null, "collapsed": false },
+    { "id": "t5", "type": "section", "name": "ESPORTS", "path": "", "duration": null,
+      "format": null, "status": "ok", "problem": null, "loop": false, "autoNext": false,
+      "color": "blue", "collapsed": false }
   ] }
 ```
 
 - `name`: nom del fitxer sense extensió (no es fan servir les metadades).
+- `type`: `track` (una pista) o `section` (**separador de secció**, D-042). Un separador no és cap fitxer (`path` buit) i **no sona mai**: `name` és el títol, `color` el seu color (o `null`) i `collapsed` si la interfície n'ha d'amagar les pistes. Play, el cue i l'avanç automàtic se'l salten (l'avanç continua amb la primera pista de després); no pot tenir cue, bucle ni avanç (`bad_state`); `player.playItem` amb un separador dona `bad_state`. Es desa a les llistes `.obpl` i es mou, s'esborra, es duplica i es copia com una pista. Un fitxer el nom del qual és només guions baixos o guions (p. ex. `______.mp3`, el separador del Winamp) s'afegeix com a separador amb el títol «Secció», també des d'un M3U.
 - `status`: `analyzing` (s'està comprovant), `ok` (sonarà), `error` (malmès o format no compatible) o `missing` (el fitxer ja no hi és). `problem`: el motiu, en català.
 - **Comprovació:** en afegir una pista, el motor l'obre amb el mateix descodificador que el reproductor i en llegeix el principi. **Si una pista és `ok`, sonarà.** Cada 30 s es comprova que els fitxers encara existeixen (sense obrir-los); si un que faltava torna, es torna a comprovar.
 - `totalDuration`: suma de les durades conegudes.

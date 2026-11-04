@@ -234,6 +234,20 @@ ipcMain.handle('shell:show-in-folder', (_event, filePath) => {
   if (typeof filePath === 'string' && path.isAbsolute(filePath)) shell.showItemInFolder(filePath);
 });
 
+/**
+ * Obre una carpeta a l'Explorador (botons de ⚙ Configuració). Només carpetes que existeixen:
+ * mai s'obre un fitxer (podria ser un programa). Retorna un missatge d'error, o '' si s'ha obert.
+ */
+ipcMain.handle('shell:open-folder', async (_event, folderPath) => {
+  if (typeof folderPath !== 'string' || !path.isAbsolute(folderPath)) return 'Ruta no vàlida.';
+  try {
+    if (!fs.statSync(folderPath).isDirectory()) return 'No és una carpeta.';
+  } catch {
+    return 'La carpeta encara no existeix.';
+  }
+  return shell.openPath(folderPath);
+});
+
 /** Carpeta per defecte de les llistes: Documents\Ona Bages Play\Llistes (es crea si no hi és). */
 function playlistsFolder() {
   const folder = path.join(app.getPath('documents'), 'Ona Bages Play', 'Llistes');

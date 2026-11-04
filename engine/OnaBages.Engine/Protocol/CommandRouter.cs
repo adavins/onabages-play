@@ -239,6 +239,8 @@ public sealed class CommandRouter
             ["ui"] = new JsonObject { ["zoom"] = zoom, ["recordersPerRow"] = perRow, ["endWarningSeconds"] = warning },
             ["layout"] = new JsonObject { ["players"] = players, ["recorders"] = recorders },
             ["program"] = new JsonObject { ["name"] = programName },
+            // Carpetes que la interfície pot obrir (botons de ⚙ Configuració).
+            ["folders"] = new JsonObject { ["history"] = PlayHistoryFile.DefaultFolder, ["logs"] = EngineLogFile.DefaultFolder },
             // El nombre desat no és el que té ara el motor: s'aplicarà en tornar a obrir l'aplicació.
             ["restartNeeded"] = players != _state.Players.Count || recorders != _state.Recorders.Count,
         };

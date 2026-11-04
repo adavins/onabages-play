@@ -35,6 +35,9 @@ contextBridge.exposeInMainWorld('onabages', {
   /** Obre l'Explorador amb aquest fitxer seleccionat. */
   showInFolder: (filePath) => ipcRenderer.invoke('shell:show-in-folder', filePath),
 
+  /** Obre una carpeta a l'Explorador (p. ex. la de l'historial o la dels registres). */
+  openFolder: (folderPath) => ipcRenderer.invoke('shell:open-folder', folderPath),
+
   /** Ruta completa d'un fitxer arrossegat des de l'Explorador (la pàgina no la pot saber sola). */
   pathForFile: (file) => webUtils.getPathForFile(file),
 

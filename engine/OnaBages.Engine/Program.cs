@@ -34,8 +34,29 @@ builder.Logging.AddSimpleConsole(o =>
 });
 builder.Logging.AddFilter("Microsoft", LogLevel.Warning);
 
+// Registre tècnic també en fitxer (un per dia a %APPDATA%\OnaBages\logs\, es guarden 30 dies).
+using var logFile = new EngineLogFile();
+builder.Logging.AddProvider(new EngineLogFileProvider(logFile));
+
 var app = builder.Build();
 var log = app.Logger;
+log.LogInformation("{Name} {Version} arrencant (port {Port}, PID {Pid})", EngineInfo.Name, EngineInfo.Version, options.Port, Environment.ProcessId);
+
+// Un error no previst que fes caure el motor: com a mínim, que quedi al registre.
+AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+{
+    log.LogCritical("Error no previst: el motor es tanca. {Error}", e.ExceptionObject);
+    logFile.Flush(TimeSpan.FromSeconds(2));
+};
+TaskScheduler.UnobservedTaskException += (_, e) =>
+{
+    log.LogError("Error no previst en una tasca de fons (el motor continua): {Error}", e.Exception);
+    e.SetObserved();
+};
+
+// La carpeta de l'historial existeix des del principi (la interfície la pot obrir encara que estigui buida).
+try { Directory.CreateDirectory(PlayHistoryFile.DefaultFolder); }
+catch (Exception ex) { log.LogWarning("No s'ha pogut crear la carpeta de l'historial: {Message}", ex.Message); }
 
 // Comprova en segon pla les pistes que s'afegeixen a les llistes (una per a tot el motor).
 var analyzer = new TrackAnalyzer();
@@ -335,6 +356,7 @@ app.Lifetime.ApplicationStopping.Register(() =>
         SaveLastList(player); // l'última versió de cada llista, per recuperar-la en tornar a arrencar
     analyzer.Dispose();
     RuntimeFile.DeleteIfOwned();
+    log.LogInformation("Motor aturat");
 });
 
 // Cada 2 s, desa les llistes que han canviat (per recuperar-les si el motor es tanca o cau).

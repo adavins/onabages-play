@@ -70,6 +70,17 @@ export function editSettings(settings, running) {
       </div>
       <div class="form-text mb-3">El temps restant es posa vermell i parpelleja. 0 = sense avís.</div>
 
+      <h3 class="obp-settings-section">Fitxers</h3>
+      <div class="d-flex flex-wrap gap-2 mb-1">
+        <button class="btn btn-sm btn-outline-secondary js-open-history" type="button">
+          <i class="bi bi-folder2-open"></i> Historial del que ha sonat
+        </button>
+        <button class="btn btn-sm btn-outline-secondary js-open-logs" type="button">
+          <i class="bi bi-folder2-open"></i> Registres del motor
+        </button>
+      </div>
+      <div class="form-text mb-3">L'historial és un fitxer CSV per dia (s'obre amb l'Excel). Els registres serveixen per saber què ha passat si hi ha un problema.</div>
+
       <h3 class="obp-settings-section">Dreceres de teclat</h3>
       <dl class="obp-info-list obp-shortcuts">
         ${SHORTCUTS_HELP.map(([keys, action]) => `<dt><kbd>${escapeHtml(keys)}</kbd></dt><dd>${escapeHtml(action)}</dd>`).join('')}
@@ -99,6 +110,15 @@ export function editSettings(settings, running) {
   showRestart();
 
   $('.js-cancel').addEventListener('click', () => dialog.close('cancel'));
+
+  // Obrir les carpetes de l'historial i dels registres (les diu el motor).
+  const openFolder = async (/** @type {string | undefined} */ folder) => {
+    const bridge = /** @type {any} */ (window).onabages;
+    const problem = folder ? await bridge.openFolder(folder) : 'El motor no ha dit on és la carpeta.';
+    error.textContent = problem ? `No s'ha pogut obrir la carpeta: ${problem}` : '';
+  };
+  $('.js-open-history').addEventListener('click', () => openFolder(settings.folders?.history));
+  $('.js-open-logs').addEventListener('click', () => openFolder(settings.folders?.logs));
 
   // Abans de tancar amb «Desar», es comprova l'avís de final (és l'únic camp que s'escriu a mà).
   $('.js-save').addEventListener('click', (e) => {

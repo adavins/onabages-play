@@ -575,7 +575,9 @@ Les dues opcions poden conviure: configuració i perfils en JSON (fàcils de cop
 | Marcadors de recuperació | `.rec` (JSON) | Al costat de l'enregistrament |
 | Formes d'ona | Fitxer de pics | Al costat de l'MP3 o a la memòria cau |
 | Anàlisi de sonoritat | JSON (memòria cau) | `%APPDATA%\OnaBages\cache\` |
-| Registre tècnic del motor | Text, rotatiu | `%APPDATA%\OnaBages\logs\` |
+| Registre tècnic del motor | Text, un fitxer per dia (`motor-AAAA-MM-DD.log`), es guarden 30 dies (D-045) | `%APPDATA%\OnaBages\logs\` |
+
+**Mode portable (D-044):** si al costat de l'executable hi ha una carpeta `dades\`, tot el que aquí diu `%APPDATA%\OnaBages\` es desa en aquesta carpeta (també la memòria cau d'Electron). Així l'aplicació es pot copiar a un altre ordinador o sobreviure a una reinstal·lació de Windows amb tota la seva configuració. Els dispositius es tornen a buscar pel nom (5.6) i els fitxers d'àudio, per la ruta relativa de les llistes `.obpl` quan la completa no hi és.
 
 # 14. Pla de desenvolupament
 
@@ -628,7 +630,7 @@ No calen Visual Studio Build Tools, MSVC ni CMake.
 - Enregistradors amb el flux Enregistrar → Aturar → Pendent → Desar/Descartar, i llista de recents.
 - Recuperació automàtica en arrencar i utilitat de recuperació independent.
 - Configuració desada en JSON. Historial CSV.
-- Instal·lador.
+- Instal·lador i versió portable (`.zip` amb la carpeta `dades\` i el .NET inclòs; D-044).
 - Pendent de la fase 1 (D-026): prova de 3 hores amb `OnaBages.ToneCheck` i desconnexió d'un dispositiu USB real.
 
 **Criteri:** fer un programa real complet amb Ona Bages Play, primer en paral·lel amb Winamp i després substituint-lo.
@@ -643,6 +645,8 @@ No calen Visual Studio Build Tools, MSVC ni CMake.
 - Perfils amb exportació i importació.
 - Panells configurables.
 - Fosos a l'editor.
+- **Explorador d'àudios:** panell lateral, minimitzat per defecte, amb diverses carpetes per perfil (p. ex. «Sintonies», «Talls», «Entrevistes»); les pistes s'arrosseguen als reproductors. El contingut de les carpetes el llegeix el motor.
+- **Panell de llistes desades:** les llistes `.obpl` d'un programa (p. ex. les seccions de cada dia de «La Central») a punt per arrossegar-les senceres a un reproductor. Si es troba a faltar abans, es pot avançar com a millora de final de la fase 2.
 
 ### Fase 5 — Ampliacions segons l'ús real
 Candidates: botonera de talls (cartwall), detector de silenci, punts cue d'inici i final, encadenament amb fos entre pistes, retall automàtic de silencis inicials i finals, biblioteca musical amb cerca, inicis programats, control MIDI o per *fader start*, usuaris.

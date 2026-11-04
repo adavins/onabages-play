@@ -75,7 +75,7 @@ export class CuePanel {
         <div class="controls cue-controls">
           <button class="btn btn-outline-light btn-control cue-small js-start" type="button" title="Tornar a començar"><i class="bi bi-skip-start-fill"></i></button>
           <button class="btn btn-outline-light btn-control cue-small js-back" type="button" title="Enrere 10 s">−10</button>
-          <button class="btn btn-control cue-toggle js-toggle" type="button" title="Preescoltar"><i class="bi bi-play-fill"></i></button>
+          <button class="btn btn-control cue-toggle js-toggle" type="button" title="Preescoltar"><i class="bi bi-play-fill js-toggle-icon"></i></button>
           <button class="btn btn-outline-light btn-control cue-small js-forward" type="button" title="Endavant 10 s">+10</button>
           <button class="btn btn-outline-light btn-control cue-small js-end" type="button" title="Escoltar els últims ${LAST_SECONDS} s"><i class="bi bi-skip-end-fill"></i></button>
         </div>
@@ -160,7 +160,9 @@ export class CuePanel {
 
     // Botons. ▶ torna a fer sonar l'última pista des del principi; ⏹ l'atura.
     for (const name of ['start', 'back', 'forward', 'end', 'toggle']) setEnabled(el[name], canUse);
-    el.toggle.innerHTML = playing ? '<i class="bi bi-stop-fill"></i>' : '<i class="bi bi-play-fill"></i>';
+    // Només es canvia la classe de la icona: si es substituís l'element (10 vegades per segon mentre sona),
+    // el clic es perdria quan canvia entre prémer i deixar anar el botó del ratolí.
+    el['toggle-icon'].className = `bi ${playing ? 'bi-stop-fill' : 'bi-play-fill'}`;
     el.toggle.title = playing ? 'Aturar la preescolta' : 'Preescoltar des del principi';
     el.toggle.classList.toggle('btn-danger', playing);
     el.toggle.classList.toggle('btn-cue', !playing);

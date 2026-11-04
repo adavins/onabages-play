@@ -69,7 +69,7 @@ Tots els missatges són objectes JSON amb el camp `"v": 1`.
 |---|---|---|---|
 | `engine.hello` | — | `{ name, version, protocol }` | fase 0 |
 | `engine.ping` | — | `{ pong: true, time }` | fase 0 |
-| `state.get` | — | `{ engine: { version, uptime, clients }, players: [ … ], recorders: [ … ], recordings: [ … ], playlists: [ … ], hardware: { … } }` (vegeu 4.2 a 4.6) | fase 0 (`players`, `recorders`, `hardware`: fase 1; `playlists`, `recordings`: fase 2) |
+| `state.get` | — | `{ engine: { version, uptime, clients }, players: [ … ], recorders: [ … ], recordings: [ … ], playlists: [ … ], cue: { … }, hardware: { … } }` (vegeu 4.2 a 4.8) | fase 0 (`players`, `recorders`, `hardware`: fase 1; `playlists`, `recordings`, `cue`: fase 2) |
 | `engine.shutdown` | `force` (opcional, `true`) | `{ stopping: true }` i el motor es tanca. Si hi ha enregistraments en curs, es rebutja amb `recording_active`, tret que s'enviï `force: true`: llavors es tanquen correctament (fitxers vàlids, sense marcador `.rec`) abans d'aturar-se | fase 0 (`force`: fase 1) |
 | `devices.list` | `kind`: `"output"`, `"input"` o `"all"` (per defecte); `includeInactive`: `true` per incloure també els desactivats i desconnectats (per defecte, `false`) | `{ devices: [ … ] }` (vegeu 4.1) | fase 1 |
 | `hardware.report` | — | `{ report: { … } }`: resum de l'arrencada (vegeu 4.4) | fase 1 |
@@ -190,7 +190,7 @@ El motor desa el dispositiu de cada reproductor i enregistrador a `%APPDATA%\Ona
 - `hasChanges`: `false` si no hi ha res a explicar (la interfície no mostra la finestra «Canvis en el maquinari»).
 - `firstRun`: no hi ha cap dispositiu desat (primera arrencada o configuració perduda). La interfície proposarà una assignació (fase 2).
 - `configProblem`: si `config.json` no s'ha pogut llegir, el motiu. El motor arrenca sense assignacions i en desa una còpia a `config.json.malmes`.
-- `elements`: només els elements que tenien un dispositiu desat. `device` és el dispositiu trobat ara (format de 4.1) o `null`.
+- `elements`: només els elements que tenien un dispositiu desat. `element` és `player`, `recorder` o `cue` (la preescolta, sempre amb `id: "1"`). `device` és el dispositiu trobat ara (format de 4.1) o `null`.
 - `newDevices`: dispositius actius que no hi eren l'última vegada i no són de cap element. `formatChanges`: dispositius amb el format canviat a Windows.
 - El motor **mai no assigna un dispositiu diferent** del que s'havia triat (D-016). El resum és el de l'arrencada: no canvia fins que el motor es reinicia.
 
@@ -262,6 +262,33 @@ No hi ha cap ordre: el motor ho fa sol **en arrencar**, abans d'acceptar connexi
 
 La utilitat `OnaBages.Recovery.exe` fa el mateix sense el motor: `OnaBages.Recovery [carpeta | fitxer.mp3 | fitxer.mp3.rec]` (sense res, la carpeta per defecte). No toca la llista de recents.
 
+### 4.8. Preescolta (D-039)
+
+Escoltar una pista per una sortida pròpia (auriculars) sense que surti a antena (especificació 7). N'hi ha una. **No toca cap reproductor ni cap llista.** Quan la pista s'acaba, s'atura.
+
+| Ordre | Paràmetres | Resultat |
+|---|---|---|
+| `cue.play` | Opcionals: `path` (ruta completa; sense, torna a fer sonar l'última) i `position` (segons on comença; per defecte 0). Si ja en sonava una altra, la substitueix | `{ cue }` |
+| `cue.stop` | — (si no sona, no fa res). La pista es recorda: `cue.play` sense `path` hi torna | `{ cue }` |
+| `cue.seek` | `position` (segons). Si no sona, la fa sonar des d'allà (botons de salt amb la preescolta aturada) | `{ cue }` |
+| `cue.setVolume` | `db`: de `-60` (silenci) a `0`. Es desa a `config.json` | `{ cue }` |
+| `cue.setDevice` | `deviceId` (una **sortida**). Si sonava, s'atura. Es desa a `config.json` i es revisa en arrencar (4.4) | `{ cue }` |
+
+Sense sortida, `cue.play` dona `bad_state`. Si el fitxer no es pot llegir o la sortida falla, `player_error` amb el motiu (i `state: "error"`).
+
+Objecte `cue` (a `state.get` i a l'esdeveniment `cue.state`):
+
+```json
+{ "state": "playing", "deviceId": "{0.0.0.00000000}.{ef4a…}",
+  "file": "D:\\Musica\\Pista.mp3", "duration": 213.7, "position": 12.4,
+  "volumeDb": -6, "format": "MP3 320 kbps estèreo 44,1 kHz", "error": null,
+  "sharesPlayerOutput": false }
+```
+
+- `state`: `stopped`, `playing` o `error`. No hi ha pausa.
+- `file` i `duration`: la pista que sona o l'última que ha sonat (per tornar-hi i per als botons de salt). `position` és 0 si no sona.
+- `sharesPlayerOutput`: la preescolta té la mateixa sortida que algun reproductor: **el que s'hi escolti sortirà a antena** (D-015). La interfície ho ha de dir de manera permanent.
+
 ## 5. Esdeveniments
 
 | Esdeveniment | Camps | Freqüència | Des de |
@@ -273,9 +300,11 @@ La utilitat `OnaBages.Recovery.exe` fa el mateix sense el motor: `OnaBages.Recov
 | `recorder.state` | `recorder`: objecte complet (vegeu 4.3) | quan canvia l'estat, el fitxer, l'entrada o l'error d'un enregistrador | fase 1 |
 | `recorder.progress` | `recorders`: `[ { id, elapsed, fileSize, freeDiskBytes, lowDiskSpace, samplesLost, captureGlitches } ]` dels que enregistren | cada segon, només mentre algun enregistra | fase 1 |
 | `hardware.reassigned` | `element`: una línia com les de `elements` de 4.4, amb el dispositiu ja assignat | quan torna el dispositiu d'un element que en arrencar era `missing`. El reproductor **no es posa a sonar**; després arriba també el seu `player.state` o `recorder.state` | fase 1 |
-| `meters` | `players`, `recorders`: nivells de pic de cada element (vegeu 5.2) | 25 per segon, si hi ha alguna interfície connectada | fase 2 |
+| `meters` | `players`, `recorders`, `cue`: nivells de pic de cada element (vegeu 5.2) | 25 per segon, si hi ha alguna interfície connectada | fase 2 |
 | `playlist.changed` | `playlist`: la llista sencera (vegeu 4.5) | quan canvia alguna cosa (pistes, ordre, marques, resultat d'una comprovació). Agrupat: com a molt 10 per segon per reproductor | fase 2 |
 | `recordings.changed` | `recordings`: la llista sencera d'enregistraments acabats (vegeu 4.6) | quan s'hi afegeix, es desa, es descarta o se'n treu algun. Agrupat: com a molt 10 per segon | fase 2 |
+| `cue.state` | `cue`: objecte complet (vegeu 4.8) | quan canvia l'estat, la pista, la sortida, el volum o l'error de la preescolta | fase 2 |
+| `cue.position` | `position`, `duration` (segons) | 10 per segon, només mentre la preescolta sona | fase 2 |
 
 ### 5.1. Canvis de dispositius
 
@@ -305,15 +334,15 @@ La utilitat `OnaBages.Recovery.exe` fa el mateix sense el motor: `OnaBages.Recov
 ```json
 { "v": 1, "ev": "meters",
   "players":   { "1": [-12.3, -11.8], "2": [-90, -90] },
-  "recorders": { "1": [-18.0, -17.5], "2": [-90, -90] } }
+  "recorders": { "1": [-18.0, -17.5], "2": [-90, -90] },
+  "cue": [-24.1, -23.9] }
 ```
 
 - Per a cada element, `[esquerre, dret]` en **dBFS**: el pic més alt des de l'esdeveniment anterior (uns 40 ms). `-90` vol dir silenci.
-- Reproductors: el que surt, **després del volum**. Enregistradors: el que entra, **amb el volum d'enregistrament aplicat**, també quan no s'enregistra (si `inputActive`).
+- Reproductors: el que surt, **després del volum**. Preescolta: igual, el que surt pels auriculars. Enregistradors: el que entra, **amb el volum d'enregistrament aplicat**, també quan no s'enregistra (si `inputActive`).
 - Una entrada mono dona el mateix valor als dos canals.
 - La interfície fa la caiguda suau, la retenció del pic i l'indicador de saturació.
 
 ## 6. Previst (no implementat)
 
-- Enregistradors: editar (fase 3), recuperació (fase 2, pas 7)
-- `cue.*` (preescolta, fase 2)
+- Enregistradors: editar (fase 3)

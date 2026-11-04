@@ -110,6 +110,11 @@ public sealed class CommandRouter
                 "recording.save" => RecordingSave(msg),
                 "recording.discard" => RecordingDiscard(msg),
                 "recording.remove" => RecordingRemove(msg),
+                "cue.play" => CuePlay(msg),
+                "cue.stop" => CueCommand(c => c.Stop()),
+                "cue.seek" => CueCommand(c => c.Seek(TimeSpan.FromSeconds(RequireNumber(msg, "position", "la posició en segons")))),
+                "cue.setVolume" => CueSetVolume(msg),
+                "cue.setDevice" => CueSetDevice(msg),
                 _ => null,
             };
 
@@ -167,6 +172,7 @@ public sealed class CommandRouter
         ["players"] = PlayerJson.All(_state.Players),
         ["recorders"] = RecorderJson.All(_state.Recorders),
         ["recordings"] = RecordingJson.All(_recordings),
+        ["cue"] = CueJson.Cue(_state),
         ["playlists"] = PlaylistJson.All(_state.Players),
         ["hardware"] = HardwareJson.Report(_hardware?.Report ?? HardwareReport.Empty),
     };
@@ -536,6 +542,64 @@ public sealed class CommandRouter
             recorder.Name == recorder.DefaultName ? null : recorder.Name,
             recorder.Folder == Recorder.DefaultFolder ? null : recorder.Folder,
             recorder.GainDb));
+
+    // -----------------------------------------------------------------------
+    // Preescolta (especificació 7)
+    // -----------------------------------------------------------------------
+
+    /// <summary>
+    /// Opcionals "path" (ruta completa; sense, torna a fer sonar l'última) i "position" (segons on comença).
+    /// Si ja sonava una altra pista, la substitueix.
+    /// </summary>
+    private JsonObject CuePlay(JsonObject msg)
+    {
+        string? path = ReadString(msg["path"]);
+        if (path is not null && !Path.IsPathFullyQualified(path))
+            throw new BadParamsException("'path' ha de ser una ruta completa.");
+        double position = msg["position"] is null ? 0 : RequireNumber(msg, "position", "la posició en segons");
+
+        _state.Cue.Play(string.IsNullOrWhiteSpace(path) ? null : path, TimeSpan.FromSeconds(Math.Max(0, position)));
+        return CueResult();
+    }
+
+    /// <summary>"db": volum de la preescolta, de −60 (silenci) a 0. Es desa a config.json.</summary>
+    private JsonObject CueSetVolume(JsonObject msg)
+    {
+        _state.Cue.SetVolume(RequireNumber(msg, "db", "un nombre (de −60 a 0)"));
+        _config?.Update(c => c.CueVolumeDb = _state.Cue.VolumeDb);
+        return new JsonObject { ["cue"] = CueJson.Cue(_state) };
+    }
+
+    /// <summary>"deviceId": sortida de la preescolta. Si sonava, s'atura. Es desa a config.json.</summary>
+    private JsonObject CueSetDevice(JsonObject msg)
+    {
+        string deviceId = RequireString(msg, "deviceId");
+        _state.Cue.SetDevice(deviceId);
+        _hardware?.Remember(ElementKind.Cue, EngineState.CueId, deviceId, _listDevices());
+        return new JsonObject { ["cue"] = CueJson.Cue(_state) };
+    }
+
+    private JsonObject CueCommand(Action<CuePlayer> action)
+    {
+        action(_state.Cue);
+        return CueResult();
+    }
+
+    /// <summary>Si l'ordre ha deixat la preescolta en Error, la resposta és un error amb el motiu ("player_error").</summary>
+    private JsonObject CueResult()
+    {
+        if (_state.Cue.State == CueState.Error)
+            throw new PlayerFailedException(_state.Cue.ErrorMessage ?? "Error de la preescolta.");
+        return new JsonObject { ["cue"] = CueJson.Cue(_state) };
+    }
+
+    /// <summary>Un camp numèric obligatori.</summary>
+    private static double RequireNumber(JsonObject msg, string field, string description)
+    {
+        if (msg[field] is not JsonValue v || !v.TryGetValue(out double value) || double.IsNaN(value) || double.IsInfinity(value))
+            throw new BadParamsException($"'{field}' ha de ser {description}.");
+        return value;
+    }
 
     // -----------------------------------------------------------------------
     // Enregistraments acabats: pendents i recents (D-036)

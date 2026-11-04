@@ -4,7 +4,7 @@ using OnaBages.Engine.Data;
 namespace OnaBages.Engine;
 
 /// <summary>
-/// Recorda quin dispositiu té cada reproductor i enregistrador (especificació 5.6):
+/// Recorda quin dispositiu té cada reproductor, enregistrador i la preescolta (especificació 5.6):
 /// <list type="bullet">
 /// <item>en arrencar, compara la configuració desada amb el maquinari i assigna el que es pot;</item>
 /// <item>quan l'operador tria un dispositiu, el desa;</item>
@@ -137,7 +137,8 @@ public sealed class HardwareAssignments
 
     private IEnumerable<(ElementKind, string)> Elements() =>
         _state.Players.Select(p => (ElementKind.Player, p.Id))
-            .Concat(_state.Recorders.Select(r => (ElementKind.Recorder, r.Id)));
+            .Concat(_state.Recorders.Select(r => (ElementKind.Recorder, r.Id)))
+            .Append((ElementKind.Cue, EngineState.CueId));
 
     /// <summary>Assigna el dispositiu trobat a l'element. Retorna false si l'element no l'accepta.</summary>
     private bool Assign(ElementCheck check)
@@ -145,10 +146,12 @@ public sealed class HardwareAssignments
         var device = check.Device!;
         try
         {
-            if (check.Kind == ElementKind.Player)
-                _state.FindPlayer(check.ElementId)?.SetDevice(device.Id);
-            else
-                _state.FindRecorder(check.ElementId)?.SetDevice(device.Id);
+            switch (check.Kind)
+            {
+                case ElementKind.Player: _state.FindPlayer(check.ElementId)?.SetDevice(device.Id); break;
+                case ElementKind.Recorder: _state.FindRecorder(check.ElementId)?.SetDevice(device.Id); break;
+                case ElementKind.Cue: _state.Cue.SetDevice(device.Id); break;
+            }
             return true;
         }
         catch (Exception ex)
@@ -163,6 +166,10 @@ public sealed class HardwareAssignments
     private static void Remember(EngineConfig config, ElementCheck check) =>
         HardwareCheck.Assignments(config, check.Kind)[check.ElementId] = new DeviceRef(check.Device!.Id, check.Device.Name);
 
-    public static string ElementName(ElementKind kind, string id) =>
-        kind == ElementKind.Player ? $"Reproductor {id}" : $"Enregistrador {id}";
+    public static string ElementName(ElementKind kind, string id) => kind switch
+    {
+        ElementKind.Player => $"Reproductor {id}",
+        ElementKind.Recorder => $"Enregistrador {id}",
+        _ => "Preescolta",
+    };
 }

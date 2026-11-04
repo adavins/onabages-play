@@ -123,6 +123,24 @@ foreach (var recorder in state.Recorders)
     };
 }
 
+// Preescolta: cada canvi va a la interfície; al registre, només el canvi d'estat, de pista o d'error.
+{
+    string lastLogged = "";
+    state.Cue.StateChanged += cue =>
+    {
+        string summary = $"{cue.State}|{cue.FilePath}|{cue.ErrorMessage}";
+        if (summary != lastLogged)
+        {
+            lastLogged = summary;
+            if (cue.State == CueState.Error)
+                log.LogWarning("Preescolta: error — {Message} (detall: {Detail})", cue.ErrorMessage, cue.ErrorDetail ?? "cap");
+            else
+                log.LogInformation("Preescolta: {State} {File}", CueJson.State(cue.State), Path.GetFileName(cue.FilePath) ?? "");
+        }
+        Broadcast(CueJson.StateEvent(state));
+    };
+}
+
 // Enregistraments acabats: el pendent de cada enregistrador i els recents (D-036).
 // La llista es desa (com a molt cada 2 s) i es recupera en arrencar.
 var recordings = new RecordingList(isPending: path => state.Recorders.Any(r =>
@@ -203,6 +221,9 @@ foreach (var recorder in state.Recorders)
     }
 }
 
+// Volum de la preescolta (config.json; depèn dels auriculars, per això es recorda).
+state.Cue.SetVolume(config.Read(c => c.CueVolumeDb));
+
 // Enregistraments interromputs (el motor o l'ordinador van caure): es recuperen abans de res
 // i surten a «Recents» amb l'etiqueta «Recuperat» (especificació 8.5).
 foreach (var result in StartupRecovery.Run(StartupRecovery.FoldersToScan(state.Recorders, recordings), recordings))
@@ -261,6 +282,7 @@ app.Lifetime.ApplicationStopping.Register(() =>
     SaveRecordings(); // inclou els que s'acaben de tancar
     foreach (var player in state.Players)
         player.Dispose();
+    state.Cue.Dispose();
     foreach (var player in state.Players)
         SaveLastList(player); // l'última versió de cada llista, per recuperar-la en tornar a arrencar
     analyzer.Dispose();
@@ -324,7 +346,7 @@ _ = Task.Run(async () =>
         while (await timer.WaitForNextTickAsync(stopping))
         {
             if (state.Clients == 0) continue;
-            await hub.BroadcastAsync(MetersJson.Event(state.Players, state.Recorders), stopping);
+            await hub.BroadcastAsync(MetersJson.Event(state.Players, state.Recorders, state.Cue), stopping);
         }
     }
     catch (OperationCanceledException)
@@ -410,6 +432,11 @@ _ = Task.Run(async () =>
 
             if (state.Players.Any(p => p.State == PlayerState.Playing))
                 await hub.BroadcastAsync(PlayerJson.PositionEvent(state.Players), stopping);
+
+            try { state.Cue.Tick(); }
+            catch (Exception ex) { log.LogError("Preescolta: error en revisar-la: {Message}", ex.Message); }
+            if (state.Cue.State == CueState.Playing)
+                await hub.BroadcastAsync(CueJson.PositionEvent(state.Cue), stopping);
 
             foreach (var player in playlistsChanged.Keys)
             {

@@ -4,7 +4,7 @@ using OnaBages.Engine.Data;
 namespace OnaBages.Engine;
 
 /// <summary>Tipus d'element que té un dispositiu assignat.</summary>
-public enum ElementKind { Player, Recorder }
+public enum ElementKind { Player, Recorder, Cue }
 
 /// <summary>Què ha passat amb el dispositiu desat d'un element (especificació 5.6).</summary>
 public enum CheckResult
@@ -120,9 +120,14 @@ public static class HardwareCheck
         return new HardwareReport(firstRun, configProblem, checks, newDevices, formatChanges);
     }
 
-    public static Dictionary<string, DeviceRef> Assignments(EngineConfig config, ElementKind kind) =>
-        kind == ElementKind.Player ? config.Players : config.Recorders;
+    public static Dictionary<string, DeviceRef> Assignments(EngineConfig config, ElementKind kind) => kind switch
+    {
+        ElementKind.Player => config.Players,
+        ElementKind.Recorder => config.Recorders,
+        _ => config.Cue,
+    };
 
+    /// <summary>Els reproductors i la preescolta fan servir sortides; els enregistradors, entrades.</summary>
     public static DeviceKind DeviceKindOf(ElementKind kind) =>
-        kind == ElementKind.Player ? DeviceKind.Output : DeviceKind.Input;
+        kind == ElementKind.Recorder ? DeviceKind.Input : DeviceKind.Output;
 }

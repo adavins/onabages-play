@@ -19,6 +19,12 @@ public sealed class EngineConfig
     /// <summary>Entrada que vol cada enregistrador (clau: identificador de l'enregistrador).</summary>
     public Dictionary<string, DeviceRef> Recorders { get; } = [];
 
+    /// <summary>Sortida de la preescolta (clau: <c>EngineState.CueId</c>; només n'hi ha una).</summary>
+    public Dictionary<string, DeviceRef> Cue { get; } = [];
+
+    /// <summary>Volum de la preescolta, en dB (de −60 a 0). Es recorda perquè depèn dels auriculars.</summary>
+    public double CueVolumeDb { get; set; }
+
     /// <summary>Nom, carpeta de treball i volum de cada enregistrador (clau: identificador).</summary>
     public Dictionary<string, RecorderSettings> RecorderSettings { get; } = [];
 

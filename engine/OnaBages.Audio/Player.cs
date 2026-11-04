@@ -208,8 +208,11 @@ public sealed class Player : IDisposable
         RaiseStateChanged();
     }
 
-    /// <summary>Doble clic: atura el que sona (si n'hi ha) i fa sonar aquesta pista des de l'inici.</summary>
-    public void PlayItem(string itemId)
+    /// <summary>
+    /// Doble clic: atura el que sona (si n'hi ha) i fa sonar aquesta pista des de l'inici
+    /// (o des de <paramref name="startAt"/>: la preescolta, per als botons de salt).
+    /// </summary>
+    public void PlayItem(string itemId, TimeSpan startAt = default)
     {
         lock (_sync)
         {
@@ -220,7 +223,7 @@ public sealed class Player : IDisposable
 
             if (CurrentItemId is not null && State is PlayerState.Playing or PlayerState.Paused)
                 LastPlayedId = CurrentItemId;
-            StartItem(itemId);
+            StartItem(itemId, startAt);
         }
         RaiseStateChanged();
     }
@@ -402,10 +405,10 @@ public sealed class Player : IDisposable
         return position > Duration ? Duration : position;
     }
 
-    /// <summary>Prepara una pista des de l'inici i la fa sonar. Si tenia el cue, s'apaga.</summary>
-    private void StartItem(string itemId)
+    /// <summary>Prepara una pista (des de l'inici, si no es diu res) i la fa sonar. Si tenia el cue, s'apaga.</summary>
+    private void StartItem(string itemId, TimeSpan startAt = default)
     {
-        PrepareItem(itemId, TimeSpan.Zero);
+        PrepareItem(itemId, startAt < TimeSpan.Zero ? TimeSpan.Zero : startAt);
         if (State != PlayerState.Ready) return; // error en obrir-la: ja ho diu l'estat
         Playlist.ClearCueIf(itemId);
         StartOutput();

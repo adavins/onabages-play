@@ -101,6 +101,24 @@
       </div>
       <div id="recorders-status">(sense dades)</div>
 
+      <strong>Preescolta</strong>
+      <div class="row">
+        <select id="cue-device" title="Sortida de la preescolta"><option value="">(connecta't per veure les sortides)</option></select>
+        <button id="cue-setdevice">Assignar</button>
+      </div>
+      <div class="row">
+        <input id="cue-path" placeholder="Ruta del fitxer per preescoltar">
+        <button id="cue-play">🎧 Preescoltar</button>
+      </div>
+      <div class="quick">
+        <button id="cue-replay">▶ Tornar-hi</button>
+        <button id="cue-stop">⏹ Stop</button>
+        <button id="cue-back">−10 s</button>
+        <button id="cue-fwd">+10 s</button>
+        <button id="cue-volume" title="Volum de la preescolta">Volum −12 dB</button>
+      </div>
+      <div id="cue-status">(sense dades)</div>
+
       <strong>Missatge lliure (JSON)</strong>
       <textarea id="custom">{ "v": 1, "id": 100, "cmd": "engine.hello" }</textarea>
       <button id="send">Enviar</button>
@@ -108,6 +126,7 @@
       <label><input type="checkbox" id="hide-status" checked> Amagar els esdeveniments engine.status</label>
       <label><input type="checkbox" id="hide-position" checked> Amagar els esdeveniments player.position</label>
       <label><input type="checkbox" id="hide-progress" checked> Amagar els esdeveniments recorder.progress</label>
+      <label><input type="checkbox" id="hide-cue-position" checked> Amagar els esdeveniments cue.position</label>
       <label><input type="checkbox" id="hide-meters" checked> Amagar els esdeveniments meters</label>
       <button id="clear">Netejar el registre</button>
     </div>
@@ -154,12 +173,14 @@
         try { msg = JSON.parse(e.data); } catch { log(`← ${e.data}`, 'err'); return; }
         updatePlayers(msg);
         updateRecorders(msg);
+        updateCue(msg);
         if (msg.result?.devices) fillDevices(msg.result.devices);
         if (msg.ev === 'devices.changed') sendCmd('devices.list'); // torna a omplir les llistes
         if (msg.ev === 'engine.status' && $('hide-status').checked) return;
         if (msg.ev === 'player.position' && $('hide-position').checked) return;
         if (msg.ev === 'recorder.progress' && $('hide-progress').checked) return;
         if (msg.ev === 'meters' && $('hide-meters').checked) return;
+        if (msg.ev === 'cue.position' && $('hide-cue-position').checked) return;
         log(`← ${JSON.stringify(msg)}`, msg.ev ? 'ev' : (msg.ok ? 'in' : 'err'));
       };
     };
@@ -193,6 +214,7 @@
 
     function fillDevices(devices) {
       fillSelect($('pl-device'), devices.filter((d) => d.kind === 'output'));
+      fillSelect($('cue-device'), devices.filter((d) => d.kind === 'output'));
       fillSelect($('rec-device'), devices.filter((d) => d.kind === 'input'));
     }
 
@@ -240,6 +262,31 @@
     document.querySelectorAll('[data-player-cmd]').forEach((btn) => {
       btn.onclick = () => sendCmd(btn.dataset.playerCmd, { player: playerId() });
     });
+
+    // --- Preescolta ---
+
+    let cue = {};
+
+    function updateCue(msg) {
+      const c = msg.ev === 'cue.state' ? msg.cue
+        : msg.ev === 'cue.position' ? { position: msg.position, duration: msg.duration }
+        : msg.result?.cue;
+      if (!c) return;
+      cue = { ...cue, ...c };
+      const file = cue.file ? cue.file.split('\\').pop() : '—';
+      let line = `${cue.state ?? '?'}  ${time(cue.position)} / ${time(cue.duration)}  ${cue.volumeDb ?? 0} dB  ${file}`;
+      if (cue.sharesPlayerOutput) line += '\n   ⚠ La preescolta surt per antena (comparteix sortida amb un reproductor)';
+      if (cue.state === 'error') line += `\n   ⚠ ${cue.error}`;
+      $('cue-status').textContent = line;
+    }
+
+    $('cue-setdevice').onclick = () => sendCmd('cue.setDevice', { deviceId: $('cue-device').value });
+    $('cue-play').onclick = () => sendCmd('cue.play', { path: $('cue-path').value.trim().replace(/^"|"$/g, '') });
+    $('cue-replay').onclick = () => sendCmd('cue.play');
+    $('cue-stop').onclick = () => sendCmd('cue.stop');
+    $('cue-back').onclick = () => sendCmd('cue.seek', { position: Math.max(0, (cue.position ?? 0) - 10) });
+    $('cue-fwd').onclick = () => sendCmd('cue.seek', { position: (cue.position ?? 0) + 10 });
+    $('cue-volume').onclick = () => sendCmd('cue.setVolume', { db: -12 });
 
     // --- Enregistradors ---
 

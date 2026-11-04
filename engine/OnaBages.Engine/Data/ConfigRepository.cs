@@ -71,6 +71,8 @@ public sealed class ConfigRepository
             ["schemaVersion"] = SchemaVersion,
             ["players"] = WriteAssignments(config.Players),
             ["recorders"] = WriteAssignments(config.Recorders),
+            ["cue"] = WriteAssignments(config.Cue),
+            ["cueSettings"] = new JsonObject { ["volumeDb"] = config.CueVolumeDb },
             ["knownDevices"] = new JsonArray(config.KnownDevices.Select(d => (JsonNode)WriteDevice(d)).ToArray()),
             ["ui"] = new JsonObject { ["zoom"] = config.UiZoom },
             ["recorderSettings"] = new JsonArray(config.RecorderSettings
@@ -113,6 +115,10 @@ public sealed class ConfigRepository
         var config = new EngineConfig();
         ReadAssignments(root["players"], config.Players);
         ReadAssignments(root["recorders"], config.Recorders);
+        // "cue" i "cueSettings" són opcionals (afegits al pas 8 de la fase 2): sense canvi de versió.
+        ReadAssignments(root["cue"], config.Cue);
+        if (root["cueSettings"]?["volumeDb"] is JsonValue cueVolume && cueVolume.TryGetValue(out double cueDb))
+            config.CueVolumeDb = Math.Clamp(cueDb, -60, 0);
 
         // "ui" és opcional: els fitxers d'abans no el tenen i es fa servir el valor per defecte.
         if (root["ui"]?["zoom"] is JsonValue zoom && zoom.TryGetValue(out double z))

@@ -16,11 +16,26 @@ public sealed class EngineState
 
     /// <param name="players">Reproductors del motor. Les proves en poden passar de falsos, o cap.</param>
     /// <param name="recorders">Enregistradors del motor. Igual.</param>
-    public EngineState(IEnumerable<Player>? players = null, IEnumerable<Recorder>? recorders = null)
+    /// <param name="cue">Preescolta. Les proves en poden passar una amb una sortida falsa.</param>
+    public EngineState(IEnumerable<Player>? players = null, IEnumerable<Recorder>? recorders = null, CuePlayer? cue = null)
     {
         Players = (players ?? []).ToList();
         Recorders = (recorders ?? []).ToList();
+        Cue = cue ?? new CuePlayer();
     }
+
+    /// <summary>Identificador de la preescolta a config.json i als avisos de maquinari (només n'hi ha una).</summary>
+    public const string CueId = "1";
+
+    /// <summary>Preescolta (especificació 7): una sola, amb sortida pròpia.</summary>
+    public CuePlayer Cue { get; }
+
+    /// <summary>
+    /// La preescolta surt per la mateixa sortida que algun reproductor (D-015): el que s'hi escolti
+    /// sortirà a antena. Es permet, però la interfície ho ha de dir clarament.
+    /// </summary>
+    public bool CueSharesPlayerOutput =>
+        Cue.DeviceId is { } id && Players.Any(p => p.DeviceId == id);
 
     /// <summary>Enregistradors, en ordre ("1", "2"...).</summary>
     public IReadOnlyList<Recorder> Recorders { get; }

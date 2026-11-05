@@ -61,23 +61,56 @@
     </button>
   </div>
 
-  <main class="layout">
-    <div id="players" class="players" aria-label="Reproductors"></div>
+  <div class="workspace">
+    <main class="layout">
+      <div id="players" class="players" aria-label="Reproductors"></div>
+      <div id="recorders" class="recorders" aria-label="Enregistradors"></div>
+    </main>
 
-    <!-- Preescolta: la crea js/ui/cue-panel.js en connectar-se amb el motor. -->
-    <section id="cue" class="card panel cue" aria-label="Preescolta">
-      <div class="card-header panel-header"><span class="panel-title"><i class="bi bi-headphones"></i> Preescolta</span></div>
-      <div class="card-body placeholder-text">Connectant…</div>
-    </section>
+    <!-- Panell lateral (fase 4, pas 2b; D-062): plegat per defecte. Quan s'obre, la finestra es fa més ampla
+         (els reproductors no canvien de mida). La gestiona js/ui/side-panel.js. -->
+    <aside id="side" class="side" aria-label="Panell lateral">
+      <div class="side-content">
+        <div class="side-tab" data-tab="audios">
+          <section class="card panel side-placeholder">
+            <div class="card-header panel-header"><span class="panel-title"><i class="bi bi-folder2-open"></i> Àudios</span></div>
+            <div class="card-body placeholder-text">Les carpetes d'àudios arribaran al pas 2c.</div>
+          </section>
+        </div>
+        <div class="side-tab" data-tab="lists">
+          <section class="card panel side-placeholder">
+            <div class="card-header panel-header"><span class="panel-title"><i class="bi bi-collection-play"></i> Llistes</span></div>
+            <div class="card-body placeholder-text">Les llistes desades arribaran al pas 2d.</div>
+          </section>
+        </div>
+        <div class="side-tab" data-tab="recents">
+          <!-- Enregistraments recents: el crea js/ui/recents-panel.js en connectar-se amb el motor. -->
+          <section id="recents" class="card panel recents" aria-label="Enregistraments recents">
+            <div class="card-header panel-header"><span class="panel-title"><i class="bi bi-clock-history"></i> Recents</span></div>
+            <div class="card-body placeholder-text">Connectant…</div>
+          </section>
+        </div>
 
-    <div id="recorders" class="recorders" aria-label="Enregistradors"></div>
+        <!-- Preescolta: sempre a baix del panell obert. La crea js/ui/cue-panel.js en connectar-se amb el motor. -->
+        <section id="cue" class="card panel cue" aria-label="Preescolta">
+          <div class="card-header panel-header"><span class="panel-title"><i class="bi bi-headphones"></i> Preescolta</span></div>
+          <div class="card-body placeholder-text">Connectant…</div>
+        </section>
+      </div>
 
-    <!-- Enregistraments recents: el crea js/ui/recents-panel.js en connectar-se amb el motor. -->
-    <section id="recents" class="card panel recents" aria-label="Enregistraments recents">
-      <div class="card-header panel-header"><span class="panel-title"><i class="bi bi-clock-history"></i> Recents</span></div>
-      <div class="card-body placeholder-text">Connectant…</div>
-    </section>
-  </main>
+      <!-- Franja d'icones (sempre visible). -->
+      <nav class="side-strip" aria-label="Panells">
+        <button type="button" class="side-btn" data-tab="audios" title="Àudios"><i class="bi bi-folder2-open"></i></button>
+        <button type="button" class="side-btn" data-tab="lists" title="Llistes desades"><i class="bi bi-collection-play"></i></button>
+        <button type="button" class="side-btn" data-tab="recents" title="Enregistraments recents"><i class="bi bi-clock-history"></i></button>
+        <button type="button" class="side-btn side-btn-cue" data-tab="cue" title="Preescolta"><i class="bi bi-headphones"></i></button>
+        <button type="button" class="side-btn side-btn-toggle" title="Obrir el panell"><i class="bi bi-chevron-double-left"></i></button>
+      </nav>
+
+      <!-- Per saber l'amplada del panell obert abans d'obrir-lo (no es veu). -->
+      <div class="side-measure" aria-hidden="true"></div>
+    </aside>
+  </div>
 
   <script type="module" src="js/app.js"></script>
 </body>

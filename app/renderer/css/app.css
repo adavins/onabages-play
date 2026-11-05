@@ -27,7 +27,8 @@
 
   /* Mides de la distribució */
   --obp-topbar-h: calc(4rem * var(--obp-ui-scale));
-  --obp-side-w: calc(19rem * var(--obp-ui-scale));          /* columna dreta: preescolta i recents */
+  --obp-panel-w: calc(21rem * var(--obp-ui-scale));         /* panell lateral obert (sense la franja) */
+  --obp-strip-w: calc(2.6rem * var(--obp-ui-scale));        /* franja d'icones del panell lateral */
   --obp-player-min-w: calc(16rem * var(--obp-ui-scale));    /* més estret, els reproductors passen a una altra fila */
   --obp-recorder-min-w: calc(15rem * var(--obp-ui-scale));
   --obp-recorders-per-row: 2;   /* p. ex. 4 enregistradors = 2 files de 2 (configurable al pas 9) */
@@ -244,25 +245,34 @@ body {
 }
 
 /* Sense motor, l'estat que es veu és antic: els panells es mostren apagats. */
-body.engine-offline .layout {
+body.engine-offline .layout,
+body.engine-offline .side-content {
   opacity: 0.35;
   pointer-events: none;
 }
 
 /* Distribució -------------------------------------------------------- */
 
-/* Reproductors a dalt, enregistradors a sota; preescolta i recents a la dreta. */
-.layout {
+/* A sota de la capçalera: la distribució i, a la dreta, el panell lateral. */
+.workspace {
   height: calc(100% - var(--obp-topbar-h));
+  display: flex;
+  position: relative;
+}
+
+/* Reproductors a dalt, enregistradors a sota. */
+.layout {
+  flex: 1;
+  min-width: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) var(--obp-side-w);
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr) auto;
   gap: var(--obp-gap);
   padding: var(--obp-gap);
 }
 
 /* Si hi ha l'avís del motor, la distribució es fa més petita perquè hi càpiga. */
-.engine-down:not(.d-none) + .layout {
+.engine-down:not(.d-none) + .workspace {
   height: calc(100% - var(--obp-topbar-h) - 4.5rem);
 }
 
@@ -283,8 +293,103 @@ body.engine-offline .layout {
   gap: var(--obp-gap);
 }
 
-/* Finestra estreta (p. ex. mitja pantalla en vertical): una sola columna,
-   la preescolta i els recents a sota, i es pot desplaçar amunt i avall. */
+/* Panell lateral (js/ui/side-panel.js; D-062) -------------------------------
+   Franja d'icones sempre visible a la dreta; el contingut (pestanya + preescolta) només quan és obert.
+   Obert, normalment ocupa el seu espai (la finestra s'ha fet més ampla); si la finestra no podia
+   créixer (maximitzada, sense lloc a la pantalla), surt per sobre dels reproductors (.side-overlay). */
+.side {
+  flex: none;
+  display: flex;
+  min-height: 0;
+}
+
+.side-strip {
+  width: var(--obp-strip-w);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  padding: var(--obp-gap) 0;
+  border-left: 1px solid var(--bs-border-color);
+  background: var(--bs-tertiary-bg);
+}
+
+.side-btn {
+  width: calc(var(--obp-strip-w) - 0.5rem);
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 0.4rem;
+  background: none;
+  color: var(--bs-secondary-color);
+  font-size: calc(1.2rem * var(--obp-ui-scale));
+}
+
+.side-btn:hover { color: var(--bs-emphasis-color); background: var(--bs-secondary-bg); }
+
+/* La pestanya que es veu (amb el panell obert). */
+.side.open .side-btn.active {
+  color: var(--bs-emphasis-color);
+  border-color: var(--bs-border-color);
+  background: var(--bs-body-bg);
+}
+
+/* Preescolta sonant: la icona es posa del color de la preescolta i parpelleja (també amb el panell plegat). */
+.side-btn-cue.cue-on {
+  color: #000;
+  background: var(--obp-cue);
+  animation: obp-blink 1s steps(2, start) infinite;
+}
+
+.side-btn-toggle { margin-top: auto; }
+
+.side-content {
+  display: none;
+  width: var(--obp-panel-w);
+  flex-direction: column;
+  gap: var(--obp-gap);
+  padding: var(--obp-gap) var(--obp-gap) var(--obp-gap) 0;
+  min-height: 0;
+}
+
+.side.open .side-content { display: flex; }
+
+/* Sense lloc per créixer: el panell surt per sobre dels reproductors, a la dreta. */
+.side.open.side-overlay .side-content {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: var(--obp-strip-w);
+  z-index: 20;
+  padding-left: var(--obp-gap);
+  background: var(--bs-body-bg);
+  box-shadow: -0.5rem 0 1.5rem rgb(0 0 0 / 0.5);
+}
+
+.side-tab {
+  display: none;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.side-tab.active { display: flex; }
+
+.side-placeholder { flex: 1; }
+
+.side .cue { flex: none; }
+
+.side-measure {
+  position: absolute;
+  visibility: hidden;
+  pointer-events: none;
+  width: var(--obp-panel-w);
+  height: 0;
+}
+
+/* Finestra estreta (p. ex. mitja pantalla en vertical): es pot desplaçar amunt i avall. */
 @media (max-width: 48rem) {
   .layout {
     grid-template-columns: minmax(0, 1fr);
@@ -295,11 +400,6 @@ body.engine-offline .layout {
   .players {
     min-height: calc(26rem * var(--obp-ui-scale));
     grid-auto-rows: minmax(calc(26rem * var(--obp-ui-scale)), 1fr);
-  }
-
-  .cue,
-  .recents {
-    min-height: calc(8rem * var(--obp-ui-scale));
   }
 }
 
@@ -992,16 +1092,12 @@ body.engine-offline .layout {
 
 /* Enregistraments recents (js/ui/recents-panel.js) ----------------------- */
 
-/* La seva alçada la marquen els enregistradors del costat: si la llista és llarga, es desplaça
-   (sense «contain», la llista faria créixer la fila i encongiria els reproductors). */
+/* Ocupa l'alçada de la pestanya del panell lateral: si la llista és llarga, es desplaça. */
 .recents {
-  contain: size;
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-}
-
-@media (max-width: 48rem) {
-  .recents { min-height: calc(14rem * var(--obp-ui-scale)); }
 }
 
 .rc-body {

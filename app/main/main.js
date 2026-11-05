@@ -316,6 +316,75 @@ ipcMain.handle('ui:set-zoom', (_event, factor) => {
 });
 
 // ---------------------------------------------------------------------------
+// Panell lateral (D-062): en obrir-lo, la finestra es fa més ampla
+// ---------------------------------------------------------------------------
+
+/**
+ * Quant ha crescut la finestra per obrir el panell lateral (píxels de pantalla) i quant s'ha
+ * desplaçat cap a l'esquerra (si a la dreta no hi cabia). null = no ha crescut.
+ * @type {{ extra: number, movedLeft: number } | null}
+ */
+let sidePanelGrowth = null;
+
+/**
+ * La interfície obre o tanca el panell lateral. En obrir-lo, la finestra creix l'amplada del panell
+ * (cap a la dreta o, si no hi cap, cap a l'esquerra), perquè els reproductors no canviïn de mida.
+ * Retorna 'grow' si ha crescut, o 'overlay' si no podia (maximitzada o sense lloc a la pantalla):
+ * llavors el panell surt per sobre dels reproductors.
+ */
+ipcMain.handle('ui:side-panel', (_event, open, cssWidth) => {
+  if (!mainWindow || mainWindow.isDestroyed()) return 'overlay';
+
+  if (!open) {
+    shrinkFromSidePanel();
+    return 'closed';
+  }
+
+  if (sidePanelGrowth) return 'grow'; // ja havia crescut
+  if (typeof cssWidth !== 'number' || !(cssWidth > 0 && cssWidth < 2000)) return 'overlay';
+  if (mainWindow.isMaximized() || mainWindow.isFullScreen()) return 'overlay';
+
+  const extra = Math.round(cssWidth * mainWindow.webContents.getZoomFactor());
+  const bounds = mainWindow.getBounds();
+  const area = screen.getDisplayMatching(bounds).workArea;
+  const width = bounds.width + extra;
+  if (width > area.width) return 'overlay';
+
+  // Cap a la dreta; si no hi cap, la finestra es desplaça a l'esquerra el que calgui.
+  const x = Math.min(bounds.x, area.x + area.width - width);
+  mainWindow.setBounds({ x, y: bounds.y, width, height: bounds.height });
+  sidePanelGrowth = { extra, movedLeft: bounds.x - x };
+  return 'grow';
+});
+
+/** Torna la finestra a la mida (i el lloc) d'abans d'obrir el panell. */
+function shrinkFromSidePanel() {
+  const growth = sidePanelGrowth;
+  sidePanelGrowth = null;
+  if (!growth || !mainWindow || mainWindow.isDestroyed()) return;
+  // Si mentrestant s'ha maximitzat, ja no es toca (en restaurar-la, Windows li tornarà la mida que tenia).
+  if (mainWindow.isMaximized() || mainWindow.isFullScreen()) return;
+  const bounds = mainWindow.getBounds();
+  mainWindow.setBounds({
+    x: bounds.x + growth.movedLeft,
+    y: bounds.y,
+    width: Math.max(512, bounds.width - growth.extra),
+    height: bounds.height,
+  });
+}
+
+/** On és la finestra principal sense el panell lateral (el que es desa en tancar). */
+function mainBoundsWithoutSidePanel() {
+  const bounds = mainWindow.getNormalBounds();
+  if (!sidePanelGrowth || mainWindow.isMaximized()) return bounds;
+  return {
+    ...bounds,
+    x: bounds.x + sidePanelGrowth.movedLeft,
+    width: Math.max(512, bounds.width - sidePanelGrowth.extra),
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Capçalera com a barra de títol (D-060)
 // ---------------------------------------------------------------------------
 
@@ -404,7 +473,9 @@ function isOnSomeDisplay(/** @type {{ x: number, y: number, width: number }} */ 
 function saveWindowState(/** @type {string} */ name, /** @type {BrowserWindow} */ win) {
   try {
     const windows = readWindowStates();
-    windows[name] = { ...win.getNormalBounds(), maximized: win.isMaximized() };
+    // La principal, sense l'amplada que ha guanyat per al panell lateral (en tornar a obrir-la, és plegat).
+    const bounds = win === mainWindow ? mainBoundsWithoutSidePanel() : win.getNormalBounds();
+    windows[name] = { ...bounds, maximized: win.isMaximized() };
     // Escriptura atòmica: fitxer temporal i substitució.
     const file = windowStatesFile();
     const temp = `${file}.tmp`;

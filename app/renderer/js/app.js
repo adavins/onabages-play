@@ -13,6 +13,7 @@ import { editSettings } from './ui/settings-dialog.js';
 import { setupShortcuts } from './ui/shortcuts.js';
 import { choose } from './ui/dialogs.js';
 import { setupProfileMenu } from './ui/profile-menu.js';
+import { setupSidePanel } from './ui/side-panel.js';
 import { setupZoom, applyZoom } from './ui/zoom.js';
 import { formatDuration } from './ui/format.js';
 
@@ -68,6 +69,9 @@ startClock();
 setupWindowControls();
 setupClose();
 setupZoom(saveZoom);
+const sidePanel = setupSidePanel(store);
+/** Últim zoom aplicat: si canvia amb el panell lateral obert, la finestra s'ha d'ajustar. */
+let appliedZoom = 1;
 setupPanels();
 els.restart.addEventListener('click', restartEngine);
 els.settings.addEventListener('click', openSettings);
@@ -297,6 +301,7 @@ let zoomTimer;
 
 /** @param {number} zoom */
 async function saveZoom(zoom) {
+  zoomChanged(zoom);
   els.zoom.textContent = `Zoom ${Math.round(zoom * 100)} %`;
   els.zoom.classList.add('visible');
   clearTimeout(zoomTimer);
@@ -308,6 +313,13 @@ async function saveZoom(zoom) {
   } catch (err) {
     console.warn('No s\'ha pogut desar el zoom', err);
   }
+}
+
+/** Amb el panell lateral obert, un altre zoom vol dir una altra amplada en píxels de pantalla. @param {number} zoom */
+function zoomChanged(zoom) {
+  if (zoom === appliedZoom) return;
+  appliedZoom = zoom;
+  sidePanel.refreshSize();
 }
 
 // ---------------------------------------------------------------------------
@@ -322,6 +334,7 @@ async function saveZoom(zoom) {
 function applySettings(settings) {
   store.settings = settings;
   applyZoom(settings.ui.zoom);
+  zoomChanged(settings.ui.zoom);
   // Perfil actiu (fase 4). El programa només es mostra a part si es diu diferent que el perfil.
   const profileName = settings.profile?.name ?? '';
   /** @type {HTMLElement} */ (els.profile.querySelector('.profile-label')).textContent = profileName || 'Perfil';

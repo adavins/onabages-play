@@ -53,6 +53,12 @@ contextBridge.exposeInMainWorld('onabages', {
   /** Escala de la interfície (1 = 100 %, de 0,7 a 1,5). */
   setZoom: (factor) => ipcRenderer.invoke('ui:set-zoom', factor),
 
+  /**
+   * Panell lateral obert o tancat (D-062). En obrir-lo, la finestra creix `cssWidth` píxels CSS.
+   * Retorna 'grow' (ha crescut), 'overlay' (no podia: el panell va per sobre) o 'closed'.
+   */
+  setSidePanel: (open, cssWidth) => ipcRenderer.invoke('ui:side-panel', open, cssWidth),
+
   /** Alçada de la capçalera (píxels CSS), perquè els botons de la finestra hi encaixin (D-060). */
   setTopbarHeight: (cssHeight) => ipcRenderer.send('ui:topbar-height', cssHeight),
 

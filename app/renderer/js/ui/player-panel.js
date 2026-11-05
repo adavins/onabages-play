@@ -322,6 +322,12 @@ export class PlayerPanel {
    */
   #setupDrop() {
     const panel = this.element;
+    // Abans que ningú (fase de captura) es treu l'avís; el gestor de sota el torna a posar si el
+    // fitxer és fora de la llista. A sobre de la llista, la llista atura l'esdeveniment (mostra la
+    // seva pròpia marca i rep el fitxer): sense això, l'avís es quedava posat després de deixar-lo anar.
+    const hideHint = () => panel.classList.remove('drop-target');
+    panel.addEventListener('dragover', hideHint, true);
+    panel.addEventListener('drop', hideHint, true);
     panel.addEventListener('dragover', (e) => {
       if (!e.dataTransfer?.types.includes('Files')) return;
       e.preventDefault();

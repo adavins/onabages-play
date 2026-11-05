@@ -189,6 +189,10 @@ function setupPanels() {
   // Un fitxer deixat anar fora d'un panell no ha de fer res (Electron l'obriria com una pàgina).
   window.addEventListener('dragover', (e) => e.preventDefault());
   window.addEventListener('drop', (e) => e.preventDefault());
+  // Per si de cas: en deixar anar a qualsevol lloc, cap panell no es queda amb l'avís d'arrossegar.
+  window.addEventListener('drop', () => {
+    document.querySelectorAll('.drop-target').forEach((el) => el.classList.remove('drop-target'));
+  }, true);
 
   store.addEventListener('reset', buildPanels);
   store.addEventListener('player', (e) => {

@@ -5,7 +5,7 @@
 // i passar-ne la informació de connexió (port i testimoni) a la interfície.
 // Aquí NO hi ha àudio: tot l'àudio és al motor .NET.
 
-const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, screen, shell } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const crypto = require('node:crypto');
@@ -47,11 +47,11 @@ if (!app.requestSingleInstanceLock()) {
 app.on('window-all-closed', () => app.quit());
 
 function createWindow() {
+  // On era la finestra l'última vegada (o la mida per defecte).
+  const { bounds, maximized } = windowBounds('main', { width: 1600, height: 900, minWidth: 512, minHeight: 340 });
   mainWindow = new BrowserWindow({
-    width: 1600,
-    height: 900,
-    minWidth: 512,
-    minHeight: 340,
+    ...bounds,
+    show: false,
     title: 'Ona Bages Play',
     backgroundColor: '#121417',
     autoHideMenuBar: true,
@@ -63,6 +63,8 @@ function createWindow() {
     },
   });
 
+  if (maximized) mainWindow.maximize();
+  mainWindow.show();
   mainWindow.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
 
   // Sense el menú per defecte d'Electron: les seves dreceres (zoom, recàrrega...) passarien
@@ -80,7 +82,10 @@ function createWindow() {
   // En tancar, primer avisem la interfície: si hi ha so o enregistraments, demana què cal fer.
   // No hi ha cap temporitzador: la interfície pot estar esperant la resposta de l'operador.
   mainWindow.on('close', (event) => {
-    if (closeConfirmed) return;
+    if (closeConfirmed) {
+      if (mainWindow) saveWindowState('main', mainWindow);
+      return;
+    }
     event.preventDefault();
     mainWindow?.webContents.send('app:close-requested');
   });
@@ -94,6 +99,7 @@ function createWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null;
     // L'editor no té sentit sense la finestra principal (la principal ja ha avisat dels canvis sense desar).
+    if (editorWindow) saveWindowState('editor', editorWindow);
     editorWindow?.destroy();
   });
 
@@ -288,6 +294,72 @@ ipcMain.on('app:close-confirmed', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Posició i mida de les finestres (D-055)
+// ---------------------------------------------------------------------------
+// Es desen a "finestres.json", a la carpeta d'Electron (dades\electron en la versió portable).
+// No és configuració de l'aplicació (que és al motor): és només on era cada finestra.
+// Si el fitxer es perd o està malmès, les finestres surten a la mida per defecte.
+
+function windowStatesFile() {
+  return path.join(app.getPath('userData'), 'finestres.json');
+}
+
+/** @returns {Record<string, { x: number, y: number, width: number, height: number, maximized: boolean }>} */
+function readWindowStates() {
+  try {
+    const data = JSON.parse(fs.readFileSync(windowStatesFile(), 'utf8'));
+    if (data && data.schemaVersion === 1 && data.windows && typeof data.windows === 'object') return data.windows;
+  } catch { /* encara no n'hi ha, o està malmès */ }
+  return {};
+}
+
+/**
+ * Opcions de mida i posició per crear una finestra: les desades si encara caben en alguna
+ * pantalla (potser s'ha desconnectat un monitor), o les per defecte.
+ * @param {string} name  'main' o 'editor'
+ * @param {{ width: number, height: number, minWidth: number, minHeight: number }} defaults
+ */
+function windowBounds(name, defaults) {
+  const saved = readWindowStates()[name];
+  const valid = saved && ['x', 'y', 'width', 'height'].every((k) => Number.isFinite(saved[k]));
+  if (!valid || !isOnSomeDisplay(saved)) return { bounds: { ...defaults }, maximized: false };
+  return {
+    bounds: {
+      ...defaults,
+      x: Math.round(saved.x),
+      y: Math.round(saved.y),
+      width: Math.max(Math.round(saved.width), defaults.minWidth),
+      height: Math.max(Math.round(saved.height), defaults.minHeight),
+    },
+    maximized: saved.maximized === true,
+  };
+}
+
+/** La barra de títol (almenys 100 × 30 píxels) es veu en alguna pantalla: així sempre es pot moure. */
+function isOnSomeDisplay(/** @type {{ x: number, y: number, width: number }} */ b) {
+  return screen.getAllDisplays().some(({ workArea: a }) => {
+    const width = Math.min(b.x + b.width, a.x + a.width) - Math.max(b.x, a.x);
+    const height = Math.min(b.y + 30, a.y + a.height) - Math.max(b.y, a.y);
+    return width >= 100 && height >= 30;
+  });
+}
+
+/** Desa on és la finestra (si està maximitzada, la mida que tenia abans, i que ho estava). */
+function saveWindowState(/** @type {string} */ name, /** @type {BrowserWindow} */ win) {
+  try {
+    const windows = readWindowStates();
+    windows[name] = { ...win.getNormalBounds(), maximized: win.isMaximized() };
+    // Escriptura atòmica: fitxer temporal i substitució.
+    const file = windowStatesFile();
+    const temp = `${file}.tmp`;
+    fs.writeFileSync(temp, JSON.stringify({ schemaVersion: 1, windows }, null, 2), 'utf8');
+    fs.renameSync(temp, file);
+  } catch (err) {
+    console.warn('No s\'ha pogut desar la posició de la finestra', err);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Editor (fase 3): una finestra pròpia, que es pot portar a un altre monitor
 // ---------------------------------------------------------------------------
 
@@ -308,11 +380,10 @@ function openEditorWindow(filePath) {
 
   editorCloseConfirmed = false;
   editorPendingFile = filePath ?? null;
+  const { bounds, maximized } = windowBounds('editor', { width: 1400, height: 640, minWidth: 700, minHeight: 360 });
   editorWindow = new BrowserWindow({
-    width: 1400,
-    height: 640,
-    minWidth: 700,
-    minHeight: 360,
+    ...bounds,
+    show: false,
     title: 'Editor — Ona Bages Play',
     backgroundColor: '#121417',
     autoHideMenuBar: true,
@@ -324,6 +395,8 @@ function openEditorWindow(filePath) {
     },
   });
   editorWindow.removeMenu();
+  if (maximized) editorWindow.maximize();
+  editorWindow.show();
   editorWindow.loadFile(path.join(__dirname, '..', 'renderer', 'editor.html'));
 
   editorWindow.webContents.on('before-input-event', (event, input) => {
@@ -340,7 +413,10 @@ function openEditorWindow(filePath) {
 
   // Com la principal: primer pregunta a la interfície (si hi ha canvis sense desar, ho confirma).
   editorWindow.on('close', (event) => {
-    if (editorCloseConfirmed) return;
+    if (editorCloseConfirmed) {
+      if (editorWindow) saveWindowState('editor', editorWindow);
+      return;
+    }
     event.preventDefault();
     editorWindow?.webContents.send('editor:close-requested');
   });

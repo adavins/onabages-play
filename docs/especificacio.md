@@ -468,7 +468,7 @@ Editar ràpidament un enregistrament acabat, com amb mp3DirectCut: retallar, tre
 
 - Un MP3 està format per fotogrames d'1.152 mostres: uns 26 ms a 44,1 kHz i uns 24 ms a 48 kHz. Els punts de tall s'ajusten al fotograma més proper. És la mateixa precisió que mp3DirectCut, i és suficient per a l'edició de programes.
 - Retallar i eliminar = copiar fotogrames sencers a un fitxer nou. És instantani i no hi ha pèrdua de qualitat. NAudio permet llegir els fotogrames MP3 individualment.
-- Els fosos requereixen descodificar i tornar a codificar només els fotogrames afectats. Es deixen per a la segona versió perquè cal provar els efectes a les vores (bit reservoir del MP3).
+- Els fosos (i, més endavant, la normalització del volum del fitxer) es fan **sense tornar a codificar** (D-073), com el mp3DirectCut: es canvia el volum global (*global_gain*) de cada grànul de 576 mostres (uns 12 ms), en passos de 1,5 dB. No es perd qualitat, no hi ha clics a les vores (no hi intervé el *bit reservoir*), la mida del fitxer no canvia i desar continua sent immediat.
 - La forma d'ona es calcula descodificant el fitxer un sol cop i es desa en un fitxer de pics a la memòria cau (`cache\formes-ona\` de la carpeta de dades; no al costat de l'MP3, per no omplir les carpetes d'enregistraments), perquè les obertures següents siguin immediates (D-050).
 
 ## 9.4. Convivència amb els enregistraments
@@ -491,7 +491,7 @@ El **LUFS** és una unitat que mesura el **volum que percep l'oïda**, no només
 |---|---|---|
 | Volum per reproductor | MVP | Imprescindible |
 | Normalització de sonoritat per pista (opcional per reproductor) | 4 | Anàlisi en segon pla en afegir la pista; el valor es desa a la memòria cau. Fet al motor (D-070, D-071): objectiu −12 LUFS, com a molt +10 dB, a partir de la pista següent; desactivada per defecte; botó NORM a cada reproductor i objectiu a ⚙ (D-072) |
-| Equalitzador per reproductor (paramètric, 3–5 bandes) | 4 | Filtres de NAudio |
+| Equalitzador per reproductor (paramètric, 3–5 bandes) | 4 → futur | **Ajornat** (D-073): no cal de moment. Quan es faci, abans del compressor (cadena de 10.2) |
 | Limitador per reproductor (sostre configurable) | 4 | Protecció contra pics |
 | Compressor per reproductor | 4 | Threshold, ratio, attack, release, makeup; indicador de reducció. **Es fa primer** (D-066): com el plugin SqrSoft del Winamp que es fa servir ara, amb el preset «SqrSoft La Central». Fet (D-066–D-068): botó DSP a cada reproductor, finestra d'ajustos i indicador de reducció; el limitador (sostre) va inclòs |
 | Presets de processament | 4 | Desats al perfil |
@@ -649,7 +649,7 @@ No calen Visual Studio Build Tools, MSVC ni CMake.
 - Fet amb la prova automàtica (D-053). Pendent (D-056): la mateixa prova amb el maquinari real i a l'ordinador modest, i comparar un tall amb el mp3DirectCut.
 
 ### Fase 4 — Processament, perfils i distribució flexible
-- Normalització de sonoritat, EQ, limitador, compressor i presets.
+- Normalització de sonoritat, limitador, compressor i presets. (L'EQ queda ajornat: D-073.)
 - Perfils amb exportació i importació.
 - Panells configurables: **ajornat** (D-069; els elements de la pantalla ja s'ajusten prou bé).
 - Fosos a l'editor.
@@ -657,7 +657,7 @@ No calen Visual Studio Build Tools, MSVC ni CMake.
 - **Panell de llistes desades:** les llistes `.obpl` d'un programa (p. ex. les seccions de cada dia de «La Central») a punt per arrossegar-les senceres a un reproductor. Fet (pas 2d, D-065): pestanya Llistes del panell lateral (arrossegar, veure el contingut, afegir o substituir la llista d'un reproductor).
 
 ### Fase 5 — Ampliacions segons l'ús real
-Candidates: botonera de talls (cartwall), detector de silenci, punts cue d'inici i final, encadenament amb fos entre pistes, retall automàtic de silencis inicials i finals, biblioteca musical amb cerca, inicis programats, control MIDI o per *fader start*, usuaris.
+Candidates: equalitzador per reproductor (ajornat de la fase 4, D-073), botonera de talls (cartwall), detector de silenci, punts cue d'inici i final, encadenament amb fos entre pistes, retall automàtic de silencis inicials i finals, biblioteca musical amb cerca, inicis programats, control MIDI o per *fader start*, usuaris.
 
 # 15. Proves i criteris de qualitat
 

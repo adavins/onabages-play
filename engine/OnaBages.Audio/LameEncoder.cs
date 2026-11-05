@@ -23,8 +23,10 @@ public sealed class LameEncoder : IDisposable
 
     /// <param name="sampleRate">Freqüència de les mostres d'entrada (i del MP3: no es remostreja).</param>
     /// <param name="bitrateKbps">Bitrate constant. Per defecte, 320.</param>
+    /// <param name="mono">MP3 mono (l'entrada continua sent estèreo; LAME la barreja). Per a les proves.</param>
+    /// <param name="crc">Amb codi de comprovació (CRC) a cada fotograma. Per a les proves.</param>
     /// <exception cref="AudioFileException">Si LAME no es pot carregar o no accepta la configuració.</exception>
-    public LameEncoder(int sampleRate, int bitrateKbps = 320)
+    public LameEncoder(int sampleRate, int bitrateKbps = 320, bool mono = false, bool crc = false)
     {
         SampleRate = sampleRate;
         BitrateKbps = bitrateKbps;
@@ -43,7 +45,8 @@ public sealed class LameEncoder : IDisposable
         lame_set_in_samplerate(_lame, sampleRate);
         lame_set_out_samplerate(_lame, sampleRate);
         lame_set_num_channels(_lame, 2);
-        lame_set_mode(_lame, JointStereo);
+        lame_set_mode(_lame, mono ? Mono : JointStereo);
+        if (crc) lame_set_error_protection(_lame, 1);
         lame_set_VBR(_lame, VbrOff);
         lame_set_brate(_lame, bitrateKbps);
         lame_set_quality(_lame, 2);              // alta qualitat (com «-q 2»); prou ràpid per a diversos enregistradors
@@ -108,6 +111,7 @@ public sealed class LameEncoder : IDisposable
     // -----------------------------------------------------------------------
 
     private const int JointStereo = 1; // MPEG_mode.JOINT_STEREO
+    private const int Mono = 3;        // MPEG_mode.MONO
     private const int VbrOff = 0;      // vbr_mode.vbr_off (CBR)
 
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] private static extern nint lame_init();
@@ -117,6 +121,7 @@ public sealed class LameEncoder : IDisposable
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] private static extern int lame_set_out_samplerate(nint gfp, int value);
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] private static extern int lame_set_num_channels(nint gfp, int value);
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] private static extern int lame_set_mode(nint gfp, int value);
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] private static extern int lame_set_error_protection(nint gfp, int value);
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] private static extern int lame_set_VBR(nint gfp, int value);
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] private static extern int lame_set_brate(nint gfp, int value);
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] private static extern int lame_set_quality(nint gfp, int value);

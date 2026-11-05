@@ -156,6 +156,36 @@ public sealed class ConfigStore
         }
     }
 
+    /// <summary>Desa un perfil en un .zip per passar-lo a un altre ordinador.</summary>
+    public ProfileInfo ExportProfile(string id, string zipPath)
+    {
+        lock (_sync)
+        {
+            EnsureActiveSaved();
+            string realId = RequireProfile(id);
+            _repository.ExportProfile(realId, zipPath);
+            return _repository.ListProfiles().First(p => p.Id == realId);
+        }
+    }
+
+    /// <summary>
+    /// Importa un perfil d'un .zip com a perfil nou (no canvia l'actiu). Sense <paramref name="name"/>,
+    /// el del perfil del .zip; si ja n'hi ha un que es diu així, error <c>profile_exists</c> (la interfície
+    /// pot demanar-ne un altre i tornar-ho a provar).
+    /// </summary>
+    public ProfileInfo ImportProfile(string zipPath, string? name)
+    {
+        lock (_sync)
+        {
+            EnsureActiveSaved();
+            if (!File.Exists(zipPath))
+                throw new ProfileException("file_error", $"No es troba el fitxer {zipPath}.");
+            string wanted = name ?? _repository.ReadImportName(zipPath);
+            string clean = CheckName(wanted, exceptId: null, repeatedCode: "profile_exists");
+            return _repository.ImportProfile(zipPath, clean);
+        }
+    }
+
     private bool IsActive(string id) => string.Equals(id, _config.ProfileId, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
@@ -182,7 +212,7 @@ public sealed class ConfigStore
     }
 
     /// <summary>Nom net; no pot ser buit, massa llarg ni igual que el d'un altre perfil.</summary>
-    private string CheckName(string name, string? exceptId)
+    private string CheckName(string name, string? exceptId, string repeatedCode = "bad_params")
     {
         string clean = ConfigRepository.CleanProgramName(name, cut: false);
         if (clean.Length == 0)
@@ -193,7 +223,7 @@ public sealed class ConfigStore
             !string.Equals(p.Id, exceptId, StringComparison.OrdinalIgnoreCase)
             && string.Equals(p.Name, clean, StringComparison.CurrentCultureIgnoreCase));
         if (repeated)
-            throw new ProfileException("bad_params", $"Ja hi ha un perfil que es diu «{clean}».");
+            throw new ProfileException(repeatedCode, $"Ja hi ha un perfil que es diu «{clean}».");
         return clean;
     }
 }

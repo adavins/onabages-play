@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
@@ -196,6 +197,7 @@ public sealed class ConfigRepository
         id.Length is > 0 and <= MaxProfileIdLength
         && id.IndexOfAny(Path.GetInvalidFileNameChars()) < 0
         && id.Trim().TrimEnd('.') == id
+        && !id.StartsWith('.') // les carpetes temporals (p. ex. d'una importació) comencen per «.»
         && !ReservedNames.Contains(id);
 
     /// <summary>Noms que Windows no deixa fer servir per a una carpeta.</summary>
@@ -215,7 +217,7 @@ public sealed class ConfigRepository
     {
         var invalid = Path.GetInvalidFileNameChars();
         string clean = new(name.Select(c => invalid.Contains(c) ? '-' : c).ToArray());
-        clean = Regex.Replace(clean, @"\s+", " ").Trim().TrimEnd('.').Trim();
+        clean = Regex.Replace(clean, @"\s+", " ").Trim().Trim('.').Trim();
         if (clean.Length > MaxProfileIdLength - 5) // lloc per a « (99)»
             clean = clean[..(MaxProfileIdLength - 5)].TrimEnd().TrimEnd('.').TrimEnd();
         if (clean.Length == 0)
@@ -350,6 +352,157 @@ public sealed class ConfigRepository
         string text = ToText(machine);
         lock (_sync)
             AtomicFile.WriteAllText(FilePath, text);
+    }
+
+    // -----------------------------------------------------------------------
+    // Exportar i importar (pas 1c): un .zip amb perfil.json i llistes\*.obpl
+    // -----------------------------------------------------------------------
+
+    /// <summary>Límits d'un .zip importat (un perfil real ocupa uns pocs kB).</summary>
+    public const int MaxImportEntries = 200;
+    public const long MaxImportEntryBytes = 10 * 1024 * 1024;
+    public const long MaxImportTotalBytes = 50 * 1024 * 1024;
+
+    /// <summary>Desa el perfil <paramref name="id"/> en un .zip (substitueix el fitxer si ja hi és).</summary>
+    public void ExportProfile(string id, string zipPath)
+    {
+        lock (_sync)
+        {
+            string temp = zipPath + ".tmp";
+            try
+            {
+                if (File.Exists(temp)) File.Delete(temp);
+                using (var zip = ZipFile.Open(temp, ZipArchiveMode.Create))
+                {
+                    zip.CreateEntryFromFile(ProfileFilePath(id), ProfileFileName);
+                    string lists = LastListsFolder(id);
+                    if (Directory.Exists(lists))
+                    {
+                        foreach (string file in Directory.EnumerateFiles(lists, "*" + PlaylistFiles.Extension))
+                            zip.CreateEntryFromFile(file, "llistes/" + Path.GetFileName(file));
+                    }
+                }
+                File.Move(temp, zipPath, overwrite: true);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
+            {
+                try { File.Delete(temp); } catch (Exception) { /* només queda un temporal */ }
+                throw new ProfileException("file_error", $"No s'ha pogut exportar el perfil: {ex.Message}");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Llegeix el nom del perfil que hi ha dins d'un .zip, i comprova que el .zip és un perfil vàlid.
+    /// </summary>
+    /// <exception cref="ProfileException">file_error si no es pot llegir o no és un perfil.</exception>
+    public string ReadImportName(string zipPath)
+    {
+        try
+        {
+            using var zip = ZipFile.OpenRead(zipPath);
+            var root = ReadImportedProfile(zip);
+            return Text(root["name"]) is { } name && CleanProgramName(name) is { Length: > 0 } clean
+                ? clean
+                : Path.GetFileNameWithoutExtension(zipPath);
+        }
+        catch (ProfileException) { throw; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or NotSupportedException)
+        {
+            throw new ProfileException("file_error", $"No s'ha pogut llegir {Path.GetFileName(zipPath)}: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Importa un perfil d'un .zip com a perfil nou, amb el nom <paramref name="name"/> (ja comprovat).
+    /// Del .zip només s'agafen <c>perfil.json</c> i <c>llistes\*.obpl</c>; la resta s'ignora.
+    /// </summary>
+    public ProfileInfo ImportProfile(string zipPath, string name)
+    {
+        lock (_sync)
+        {
+            string id = NewProfileId(name);
+            // Primer en una carpeta temporal (no es llista: comença per «.»); quan tot hi és, es reanomena.
+            string temp = Path.Combine(ProfilesFolder, ".importacio-" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                using (var zip = ZipFile.OpenRead(zipPath))
+                {
+                    var root = ReadImportedProfile(zip);
+                    root["name"] = name;
+                    Directory.CreateDirectory(Path.Combine(temp, "llistes"));
+                    AtomicFile.WriteAllText(Path.Combine(temp, ProfileFileName), ToText(root));
+
+                    foreach (var entry in zip.Entries)
+                    {
+                        if (ImportedListName(entry.FullName) is not { } listName)
+                            continue;
+                        entry.ExtractToFile(Path.Combine(temp, "llistes", listName), overwrite: true);
+                    }
+                }
+                Directory.Move(temp, ProfileFolder(id));
+                return new ProfileInfo(id, name);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or NotSupportedException or ProfileException)
+            {
+                try { if (Directory.Exists(temp)) Directory.Delete(temp, recursive: true); }
+                catch (Exception) { /* només queda una carpeta temporal, que no es llista */ }
+                if (ex is ProfileException) throw;
+                throw new ProfileException("file_error", $"No s'ha pogut importar el perfil: {ex.Message}");
+            }
+        }
+    }
+
+    /// <summary>Comprova els límits del .zip i en retorna perfil.json (ha de ser un perfil d'aquesta versió).</summary>
+    private static JsonObject ReadImportedProfile(ZipArchive zip)
+    {
+        const string notProfile = "Aquest fitxer no és un perfil d'Ona Bages Play.";
+        if (zip.Entries.Count > MaxImportEntries)
+            throw new ProfileException("file_error", notProfile);
+        long total = 0;
+        ZipArchiveEntry? profile = null;
+        foreach (var entry in zip.Entries)
+        {
+            if (entry.Length > MaxImportEntryBytes)
+                throw new ProfileException("file_error", $"{notProfile} (conté un fitxer massa gran: {entry.FullName})");
+            total += entry.Length;
+            if (string.Equals(entry.FullName, ProfileFileName, StringComparison.OrdinalIgnoreCase))
+                profile = entry;
+        }
+        if (total > MaxImportTotalBytes || profile is null)
+            throw new ProfileException("file_error", notProfile);
+
+        JsonObject root;
+        try
+        {
+            using var reader = new StreamReader(profile.Open());
+            root = JsonNode.Parse(reader.ReadToEnd()) as JsonObject ?? throw new FormatException();
+        }
+        catch (Exception ex) when (ex is JsonException or FormatException)
+        {
+            throw new ProfileException("file_error", $"{notProfile} (perfil.json és malmès)");
+        }
+        int? version = Int(root["schemaVersion"]);
+        if (version != ProfileSchemaVersion)
+            throw new ProfileException("file_error",
+                $"El perfil és d'una versió que aquest programa no coneix ({version?.ToString() ?? "sense versió"}). Potser cal actualitzar Ona Bages Play.");
+        return root;
+    }
+
+    /// <summary>
+    /// Nom de fitxer d'una llista del .zip (<c>llistes/xxx.obpl</c>), o null si l'entrada no ho és.
+    /// Només un nom de fitxer, sense camins: cap entrada no pot escriure fora de la carpeta del perfil.
+    /// </summary>
+    private static string? ImportedListName(string entryName)
+    {
+        string normalized = entryName.Replace('\\', '/');
+        if (!normalized.StartsWith("llistes/", StringComparison.OrdinalIgnoreCase))
+            return null;
+        string file = normalized["llistes/".Length..];
+        if (file.Length == 0 || file.Contains('/') || file.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0
+            || file.StartsWith('.') || !file.EndsWith(PlaylistFiles.Extension, StringComparison.OrdinalIgnoreCase))
+            return null;
+        return file;
     }
 
     private static void CopyFolder(string source, string target)

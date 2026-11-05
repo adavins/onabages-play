@@ -134,6 +134,8 @@ public sealed partial class CommandRouter
                 "profile.rename" => ProfileRename(msg),
                 "profile.delete" => ProfileDelete(msg),
                 "profile.switch" => ProfileSwitch(msg),
+                "profile.export" => ProfileExport(msg),
+                "profile.import" => ProfileImport(msg),
                 _ => null,
             };
 

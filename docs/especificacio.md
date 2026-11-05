@@ -517,6 +517,7 @@ Els canvis de paràmetres s'han d'aplicar de manera progressiva (sense clics). E
 - Un perfil = una carpeta amb fitxers JSON: distribució de la pantalla, reproductors, enregistradors, rutes, llistes, processament i dreceres.
   - Fet (pas 1a, D-057): `perfils\<nom>\perfil.json` (dispositius, enregistradors, preescolta, distribució i nom del programa) i `perfils\<nom>\llistes\` (últimes llistes). El que és de l'ordinador es queda a `config.json`. La configuració d'abans es converteix sola en el primer perfil.
   - Fet (pas 1b, D-058): menú del perfil a la barra superior per canviar de perfil, crear-ne un de buit, duplicar l'actual, canviar-li el nom i eliminar-ne un altre. Canviar de perfil reinicia el motor (uns 3 s).
+  - Fet (pas 1c, D-061): exportar un perfil en un `.zip` i importar-lo com a perfil nou.
 - Operacions: crear, duplicar (copiar la carpeta), canviar, eliminar, exportar i importar (un fitxer .zip).
 - Els perfils guarden **referències** als fitxers d'àudio, mai còpies.
 - **Canvi de perfil segur:** no es permet amb reproduccions o enregistraments actius sense confirmació explícita, i mai s'atura un enregistrament sense avís. Si falten dispositius, s'avisa i l'element corresponent queda en estat `Error`.

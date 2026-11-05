@@ -61,6 +61,7 @@ Tots els missatges són objectes JSON amb el camp `"v": 1`.
 | `recording_active` | `engine.shutdown` sense `force`, amb enregistraments en curs. No s'atura res |
 | `file_error` | No s'ha pogut llegir o escriure un fitxer de llista (no existeix, és malmès, no hi ha permís...). El missatge n'explica el motiu |
 | `file_exists` | `editor.save`: el fitxer de destinació ja existeix. No s'ha desat res; cal confirmar-ho i tornar-ho a enviar amb `overwrite: true` |
+| `profile_exists` | `profile.import`: ja hi ha un perfil amb el nom del que s'importa. No s'ha importat res; es pot tornar a enviar amb un altre `name` |
 | `unknown_command` | L'ordre no existeix |
 | `internal` | Error inesperat del motor (el motor continua funcionant) |
 
@@ -363,7 +364,7 @@ Mentre `busy` no és `null`, `delete`, `keep`, `undo`, `redo` i `save` donen `ba
 - `error`: motiu de l'última feina que ha fallat (obrir o desar). Es neteja amb l'ordre següent.
 - Es desen els fotogrames **tal qual** (sense recodificar). Les etiquetes ID3v2 i ID3v1 es conserven; el fotograma Xing/Info de LAME es treu (diria una durada falsa).
 
-### 4.11. Perfils (fase 4, D-057 i D-058)
+### 4.11. Perfils (fase 4, D-057, D-058 i D-061)
 
 Un perfil és la configuració de treball d'un programa (vegeu 4.9). El paràmetre que diu quin perfil és es diu `profile` (no `id`, que ja és l'identificador del missatge) i porta l'`id` del perfil: el nom de la seva carpeta.
 
@@ -373,6 +374,8 @@ Un perfil és la configuració de treball d'un programa (vegeu 4.9). El paràmet
 | `profile.create` | `name`; opcional `copyFrom` (l'`id` d'un perfil) | `{ profile: { id, name }, profiles }`. Sense `copyFrom`, un perfil buit (2 reproductors, 2 enregistradors, sense dispositius) amb el programa del mateix nom; amb `copyFrom`, una còpia d'aquell, amb les seves últimes llistes. No canvia el perfil actiu |
 | `profile.rename` | `profile`, `name` | `{ profiles, settings }`. La carpeta no canvia |
 | `profile.delete` | `profile` | `{ profiles }`. Esborra la carpeta del perfil (configuració i últimes llistes; mai fitxers d'àudio). L'actiu no es pot eliminar: `bad_state` |
+| `profile.export` | `profile`, `path` (ruta completa del `.zip`; si ja hi és, se substitueix) | `{ profile: { id, name }, path }`. El `.zip` porta `perfil.json` i `llistes/*.obpl` (mai fitxers d'àudio) |
+| `profile.import` | `path` (ruta completa del `.zip`); opcional `name` | `{ profile: { id, name }, profiles }`. Un perfil nou amb el contingut del `.zip`; no canvia l'actiu. Sense `name`, es diu com el perfil del `.zip`; si ja n'hi ha un que es diu així, `profile_exists` (es pot tornar a enviar amb un altre `name`). Si el fitxer no és un perfil, és d'una versió desconeguda o passa dels límits (200 entrades, 10 MB per fitxer, 50 MB en total): `file_error`. Del `.zip` només s'agafen `perfil.json` i `llistes/<nom>.obpl`; les entrades amb camins (`..`, subcarpetes) s'ignoren |
 | `profile.switch` | `profile` | `{ switching: true, profile: { id, name } }`, i **el motor s'atura** poc després (com `engine.shutdown`). La interfície l'ha de tornar a arrencar: el motor nou llegeix el perfil triat (el nombre de reproductors i d'enregistradors només es pot canviar en arrencar). Des d'aquest moment el motor ja no desa res més de la configuració |
 
 - Noms: de 1 a 60 caràcters (es treuen els espais repetits); no n'hi pot haver dos d'iguals (sense distingir majúscules). Si no, `bad_params`. Un perfil que no existeix, també `bad_params`.

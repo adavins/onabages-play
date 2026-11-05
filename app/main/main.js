@@ -610,6 +610,38 @@ ipcMain.handle('dialog:choose-folder', async (_event, currentFolder) => {
 });
 
 /** Diàleg per desar una llista (.obpl). Retorna la ruta, o null. */
+// --- Perfils en .zip (fase 4, pas 1c; D-061) ---
+
+let lastProfileFolder = undefined;
+
+/** Diàleg per desar un perfil exportat. Proposa «Perfil <nom>.zip» a Documents. Retorna la ruta, o null. */
+ipcMain.handle('dialog:save-profile', async (_event, profileName) => {
+  if (!mainWindow) return null;
+  const name = (typeof profileName === 'string' && profileName ? profileName : 'perfil').replace(/[<>:"/\\|?*]/g, '-');
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: 'Exportar el perfil',
+    defaultPath: path.join(lastProfileFolder ?? app.getPath('documents'), `Perfil ${name}.zip`),
+    filters: [{ name: 'Perfil d\'Ona Bages Play (.zip)', extensions: ['zip'] }],
+  });
+  if (result.canceled || !result.filePath) return null;
+  lastProfileFolder = path.dirname(result.filePath);
+  return result.filePath;
+});
+
+/** Diàleg per triar un perfil exportat (.zip) per importar-lo. Retorna la ruta, o null. */
+ipcMain.handle('dialog:open-profile', async () => {
+  if (!mainWindow) return null;
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Importar un perfil',
+    defaultPath: lastProfileFolder ?? app.getPath('documents'),
+    properties: ['openFile'],
+    filters: [{ name: 'Perfil d\'Ona Bages Play (.zip)', extensions: ['zip'] }],
+  });
+  if (result.canceled || result.filePaths.length === 0) return null;
+  lastProfileFolder = path.dirname(result.filePaths[0]);
+  return result.filePaths[0];
+});
+
 ipcMain.handle('dialog:save-playlist', async (_event, suggestedName) => {
   if (!mainWindow) return null;
   const name = typeof suggestedName === 'string' && suggestedName ? suggestedName : 'Llista';

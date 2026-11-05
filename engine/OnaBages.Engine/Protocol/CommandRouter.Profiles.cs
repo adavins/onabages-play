@@ -79,6 +79,42 @@ public sealed partial class CommandRouter
         };
     }
 
+    /// <summary>profile (id del perfil), path (ruta completa del .zip; si ja hi és, se substitueix).</summary>
+    private JsonObject ProfileExport(JsonObject msg)
+    {
+        var config = RequireConfig();
+        string id = RequireString(msg, "profile");
+        string path = RequireFullPath(msg, "path");
+        var profile = config.ExportProfile(id, path);
+        return new JsonObject
+        {
+            ["profile"] = new JsonObject { ["id"] = profile.Id, ["name"] = profile.Name },
+            ["path"] = path,
+        };
+    }
+
+    /// <summary>path (ruta completa del .zip); opcional name (si no, el del perfil del .zip).</summary>
+    private JsonObject ProfileImport(JsonObject msg)
+    {
+        var config = RequireConfig();
+        string path = RequireFullPath(msg, "path");
+        string? name = ReadString(msg["name"]);
+        var imported = config.ImportProfile(path, name);
+        return new JsonObject
+        {
+            ["profile"] = new JsonObject { ["id"] = imported.Id, ["name"] = imported.Name },
+            ["profiles"] = ProfilesJson(config),
+        };
+    }
+
+    private static string RequireFullPath(JsonObject msg, string field)
+    {
+        string path = RequireString(msg, field);
+        if (!Path.IsPathFullyQualified(path))
+            throw new BadParamsException($"'{field}' ha de ser una ruta completa.");
+        return path;
+    }
+
     /// <summary>Què impedeix reiniciar el motor ara (en català, per a l'operador). Buit = res.</summary>
     private List<string> WhatIsBusy()
     {

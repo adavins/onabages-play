@@ -109,6 +109,7 @@ Per defecte hi ha dos reproductors, `"1"` i `"2"`; se'n poden configurar fins a 
 | `player.load` | `player`, `path` (ruta completa) | tots menys `playing`. Afegeix el fitxer al final de la llista i el deixa preparat (`ready`). Només per a la consola de proves: la interfície fa servir `playlist.add` | `{ player }` |
 | `player.retry` | `player` | `error`. Torna a obrir la sortida i el fitxer i queda `ready` **a la mateixa posició**. No torna a sonar sol: cal `player.play` | `{ player }` |
 | `player.seek` | `player`, `position` (segons des de l'inici) | `ready`, `playing`, `paused`, `ended`. Salta a aquest punt (si és més enllà del final, es queda al final). Si sonava, **continua sonant** des d'allà, amb un silenci molt curt mentre es torna a obrir la sortida; si era en pausa, continua en pausa; si havia acabat, queda `ready`. Tornar a començar la pista és `position: 0` | `{ player }` |
+| `player.setProcessing` | `player`; `processing` (els camps que es volen canviar, vegeu 4.13) **o** `preset` (l'`id` d'un preset de `settings.processingPresets`) | tots, també mentre sona: s'aplica de seguida i sense clics. Es desa al perfil (`playerProcessing` a `perfil.json`) i es conserva d'una pista a l'altra. Preset desconegut, reproductor que no existeix o sense `processing` ni `preset`: `bad_params` | `{ player }` |
 | `player.setVolume` | `player`, `db` (de `-60` a `0`) | tots, també mentre sona. A `-60` el reproductor queda en silenci; fora de marge es queda al límit. El canvi es fa amb una rampa curta (sense clics). En arrencar el motor, tots els reproductors són a 0 dB (no es desa) | `{ player }` |
 
 Objecte `player` (també a `state.get` i a l'esdeveniment `player.state`):
@@ -129,6 +130,7 @@ Objecte `player` (també a `state.get` i a l'esdeveniment `player.state`):
 - `error`: el motiu, en català, quan `state` és `error`. La pista i la posició es conserven. Per continuar: `player.retry` (mateixa sortida) o `player.setDevice` (una altra), i després `player.play`. El reproductor **no reprèn mai sol**. El detall tècnic de Windows no s'envia: només queda al registre del motor.
 - `underruns`: talls des que es va obrir el reproductor (la targeta ha demanat so i no n'hi havia de preparat). Ha de ser 0; serveix per a les proves llargues.
 - `volumeDb`: volum del fader (de `-60`, silenci, a `0`).
+- `processing`: el compressor/limitador del reproductor (vegeu 4.13).
 
 ### 4.3. Enregistradors
 
@@ -397,6 +399,30 @@ Cada perfil té les seves carpetes per a dues pestanyes: `kind` = `"audios"` (fi
 - `explorer.list` **només llegeix dins de les carpetes configurades** per a aquella pestanya (la carpeta mateixa o una subcarpeta). Qualsevol altra ruta, també amb `..` o una carpeta germana que comenci igual (`Música2` no és dins de `Música`), dona `bad_params`. Una carpeta que no hi és o no es pot llegir: `file_error`.
 - Per afegir el que es tria a un reproductor es fa servir `playlist.add` amb les rutes (també accepta llistes `.obpl` i `.m3u`, i n'afegeix les pistes).
 
+### 4.13. Compressor/limitador dels reproductors (fase 4, D-066 i D-067)
+
+Objecte `processing` (al reproductor, a `player.setProcessing` i a cada preset):
+
+```json
+{ "enabled": true, "inputGainDb": 9.5, "thresholdDb": -2.9, "ratio": 100,
+  "attackMs": 4.2, "releaseMs": 1450, "outputGainDb": 0, "stereoLink": false, "ceilingDb": -0.3 }
+```
+
+| Camp | Marge (fora, al límit) | Per defecte | Què fa (equivalent del SqrSoft) |
+|---|---|---|---|
+| `enabled` | — | `false` | Desactivat, el so passa exactament igual (sense retard ni sostre) |
+| `inputGainDb` | −20 a +30 | 0 | Guany abans de comprimir («Gain») |
+| `thresholdDb` | −40 a 0 | −3 | Llindar («Threshold») |
+| `ratio` | 1 a 100 | 4 | Relació; 100 = limitador («Ratio») |
+| `attackMs` | 0,1 a 200 | 5 | Atac («AttackTime») |
+| `releaseMs` | 10 a 5000 | 500 | Alliberament («ReleaseTime») |
+| `outputGainDb` | −20 a +20 | 0 | Guany després de comprimir («OutputGain») |
+| `stereoLink` | — | `false` | Canals junts («StereoTie») |
+| `ceilingDb` | −6 a 0 | −0,3 | Sostre: la sortida no el passa mai (limitador amb 1,5 ms d'anticipació) |
+
+- Ordre: pista → compressor → sostre → **volum (fader)** → sortida. El fader no canvia com comprimeix.
+- `settings.get` porta `processingPresets: [{ id, name, processing }]`: `sqrsoft-la-central` (la configuració del Winamp de La Central), `suau` i `nomes-sostre`.
+
 ## 5. Esdeveniments
 
 | Esdeveniment | Camps | Freqüència | Des de |
@@ -445,8 +471,11 @@ Cada perfil té les seves carpetes per a dues pestanyes: `kind` = `"audios"` (fi
 { "v": 1, "ev": "meters",
   "players":   { "1": [-12.3, -11.8], "2": [-90, -90] },
   "recorders": { "1": [-18.0, -17.5], "2": [-90, -90] },
-  "cue": [-24.1, -23.9] }
+  "cue": [-24.1, -23.9],
+  "playerReduction": { "1": 6.4, "2": 0 } }
 ```
+
+- `playerReduction`: quant abaixa el compressor/limitador de cada reproductor (dB, ≥ 0; el màxim des de l'esdeveniment anterior), per a l'indicador de reducció. `0` si està desactivat o no sona (fase 4, 4.13).
 
 - Per a cada element, `[esquerre, dret]` en **dBFS**: el pic més alt des de l'esdeveniment anterior (uns 40 ms). `-90` vol dir silenci.
 - Reproductors: el que surt, **després del volum**. Preescolta: igual, el que surt pels auriculars. Enregistradors: el que entra, **amb el volum d'enregistrament aplicat**, també quan no s'enregistra (si `inputActive`).

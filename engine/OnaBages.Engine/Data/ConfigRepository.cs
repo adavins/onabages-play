@@ -638,6 +638,17 @@ public sealed class ConfigRepository
             }
         }
 
+        // Compressor/limitador de cada reproductor (pas 4b; camp opcional, sense canvi de versió).
+        if (root["playerProcessing"] is JsonArray processing)
+        {
+            foreach (var item in processing)
+            {
+                string? id = Text(item?["id"]);
+                if (string.IsNullOrEmpty(id) || item is not JsonObject obj) continue;
+                config.PlayerDynamics[id] = ReadDynamics(obj);
+            }
+        }
+
         config.AudioFolders = ReadExplorerFolders(root["explorer"]?["audios"]);
         config.ListFolders = ReadExplorerFolders(root["explorer"]?["lists"]);
     }
@@ -751,6 +762,9 @@ public sealed class ConfigRepository
                 ["folder"] = s.Value.Folder,
                 ["gainDb"] = s.Value.GainDb,
             }).ToArray()),
+        ["playerProcessing"] = new JsonArray(config.PlayerDynamics
+            .OrderBy(p => p.Key, StringComparer.Ordinal)
+            .Select(p => (JsonNode)WriteDynamics(p.Key, p.Value)).ToArray()),
         // Explorador del panell lateral (pas 2a; camp opcional, sense canvi de versió).
         ["explorer"] = new JsonObject
         {
@@ -758,6 +772,46 @@ public sealed class ConfigRepository
             ["lists"] = WriteExplorerFolders(config.ListFolders),
         },
     };
+
+    /// <summary>Ajustos del compressor/limitador en JSON (els mateixos noms que al protocol).</summary>
+    public static JsonObject WriteDynamics(string? id, DynamicsSettings s)
+    {
+        var obj = new JsonObject();
+        if (id is not null) obj["id"] = id;
+        obj["enabled"] = s.Enabled;
+        obj["inputGainDb"] = s.InputGainDb;
+        obj["thresholdDb"] = s.ThresholdDb;
+        obj["ratio"] = s.Ratio;
+        obj["attackMs"] = s.AttackMs;
+        obj["releaseMs"] = s.ReleaseMs;
+        obj["outputGainDb"] = s.OutputGainDb;
+        obj["stereoLink"] = s.StereoLink;
+        obj["ceilingDb"] = s.CeilingDb;
+        return obj;
+    }
+
+    /// <summary>
+    /// Llegeix ajustos del compressor/limitador. Els camps que no hi són es prenen de <paramref name="current"/>
+    /// (per defecte, els valors per defecte); els que són fora de marge es porten al límit.
+    /// </summary>
+    public static DynamicsSettings ReadDynamics(JsonObject obj, DynamicsSettings? current = null)
+    {
+        var s = current ?? new DynamicsSettings();
+        static double? Number(JsonNode? n) => n is JsonValue v && v.TryGetValue(out double d) ? d : null;
+        static bool? Flag(JsonNode? n) => n is JsonValue v && v.TryGetValue(out bool b) ? b : null;
+        return (s with
+        {
+            Enabled = Flag(obj["enabled"]) ?? s.Enabled,
+            InputGainDb = Number(obj["inputGainDb"]) ?? s.InputGainDb,
+            ThresholdDb = Number(obj["thresholdDb"]) ?? s.ThresholdDb,
+            Ratio = Number(obj["ratio"]) ?? s.Ratio,
+            AttackMs = Number(obj["attackMs"]) ?? s.AttackMs,
+            ReleaseMs = Number(obj["releaseMs"]) ?? s.ReleaseMs,
+            OutputGainDb = Number(obj["outputGainDb"]) ?? s.OutputGainDb,
+            StereoLink = Flag(obj["stereoLink"]) ?? s.StereoLink,
+            CeilingDb = Number(obj["ceilingDb"]) ?? s.CeilingDb,
+        }).Clamped();
+    }
 
     private static JsonArray WriteExplorerFolders(List<ExplorerFolder> folders) =>
         new(folders.Select(f => (JsonNode)new JsonObject { ["name"] = f.Name, ["path"] = f.Path }).ToArray());

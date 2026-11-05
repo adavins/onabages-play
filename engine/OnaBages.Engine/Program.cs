@@ -326,6 +326,12 @@ foreach (var recorder in state.Recorders)
 
 // Volum de la preescolta (config.json; depèn dels auriculars, per això es recorda).
 state.Cue.SetVolume(config.Read(c => c.CueVolumeDb));
+// Compressor/limitador de cada reproductor (fase 4, pas 4b): el que hi ha al perfil.
+foreach (var player in state.Players)
+{
+    if (config.Read(c => c.PlayerDynamics.GetValueOrDefault(player.Id)) is { } dynamics)
+        player.SetDynamics(dynamics);
+}
 
 // Enregistraments interromputs (el motor o l'ordinador van caure): es recuperen abans de res
 // i surten a «Recents» amb l'etiqueta «Recuperat» (especificació 8.5).

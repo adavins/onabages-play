@@ -37,12 +37,20 @@ public sealed class PlayerStream : IWaveProvider
     /// <summary>Pic del que surt (després del volum), per al mesurador.</summary>
     public PeakMeter Meter { get; } = new();
 
+    /// <summary>
+    /// Compressor/limitador (fase 4, pas 4b; D-067): s'aplica a l'estèreo abans del volum, com un DSP del Winamp.
+    /// Els seus paràmetres es poden canviar mentre sona (<see cref="DynamicsProcessor.Settings"/>).
+    /// </summary>
+    public DynamicsProcessor Dynamics { get; }
+
     /// <param name="ring">Memòria amb mostres estèreo intercalades.</param>
     /// <param name="sampleRate">Freqüència de la sortida.</param>
     /// <param name="outChannels">Canals de la sortida. L'estèreo va als dos primers; la resta, silenci.</param>
     /// <param name="gain">Guany inicial (el volum del reproductor).</param>
-    public PlayerStream(SampleRingBuffer ring, int sampleRate, int outChannels, float gain = 1f)
+    /// <param name="dynamics">Compressor/limitador (per defecte, desactivat).</param>
+    public PlayerStream(SampleRingBuffer ring, int sampleRate, int outChannels, float gain = 1f, DynamicsSettings? dynamics = null)
     {
+        Dynamics = new DynamicsProcessor(sampleRate, dynamics);
         _ring = ring;
         _outChannels = outChannels;
         _drainFrames = sampleRate * DrainMilliseconds / 1000;
@@ -107,8 +115,11 @@ public sealed class PlayerStream : IWaveProvider
                 Interlocked.Add(ref _framesAfterEnd, frames - framesRead);
         }
 
-        ApplyGain(output, framesRead);
-        Meter.AddInterleaved(output[..(framesRead * _outChannels)], _outChannels);
+        // Tot el bloc (també el silenci del final): el compressor retarda el so uns 1,5 ms i així no se'n perd la cua.
+        if (_outChannels == 2)
+            Dynamics.Process(output[..(frames * 2)]);
+        ApplyGain(output, frames);
+        Meter.AddInterleaved(output[..(frames * _outChannels)], _outChannels);
 
         Interlocked.Add(ref _framesPlayed, framesRead);
         return buffer.Length;
@@ -142,6 +153,7 @@ public sealed class PlayerStream : IWaveProvider
         {
             int chunk = Math.Min(frames - framesRead, _stereo.Length / 2);
             int got = _ring.Read(_stereo.AsSpan(0, chunk * 2)) / 2;
+            Dynamics.Process(_stereo.AsSpan(0, got * 2));
             for (int i = 0; i < got; i++)
             {
                 int o = (framesRead + i) * _outChannels;

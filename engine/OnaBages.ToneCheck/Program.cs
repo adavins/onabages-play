@@ -28,7 +28,7 @@ if (args.Length >= 1 && args[0] == "convivencia")
 }
 if (args.Length >= 3 && args[0] == "processar")
 {
-    // Ajustos: per defecte, els del SqrSoft de La Central; «desactivat» per comparar (només el sostre a 0 dB).
+    // Ajustos: per defecte, els del SqrSoft de La Central; «desactivat» per comparar (el so tal qual).
     var settings = args.Length >= 4 && args[3] == "desactivat" ? new DynamicsSettings() : DynamicsSettings.SqrSoftLaCentral;
     return Processar.Run(Path.GetFullPath(args[1]), Path.GetFullPath(args[2]), settings);
 }

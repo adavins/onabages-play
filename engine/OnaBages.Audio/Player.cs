@@ -153,6 +153,31 @@ public sealed class Player : IDisposable
         RaiseStateChanged();
     }
 
+    /// <summary>
+    /// Compressor/limitador del reproductor (fase 4, pas 4b; D-067). Es conserva d'una pista a l'altra.
+    /// </summary>
+    public DynamicsSettings Dynamics { get; private set; } = new();
+
+    /// <summary>Canvia el compressor/limitador (en qualsevol estat; si sona, s'aplica de seguida i sense clics).</summary>
+    public void SetDynamics(DynamicsSettings settings)
+    {
+        lock (_sync)
+        {
+            Dynamics = settings.Clamped();
+            if (_stream is not null)
+                _stream.Dynamics.Settings = Dynamics;
+            _changed = true;
+        }
+        RaiseStateChanged();
+    }
+
+    /// <summary>Abaixada màxima del compressor/limitador des de l'última crida (dB, ≥ 0), per a l'indicador.</summary>
+    public float TakeGainReductionDb()
+    {
+        var stream = _stream;
+        return stream is null ? 0f : stream.Dynamics.TakeMaxReductionDb();
+    }
+
     /// <summary>Pic del que ha sortit des de l'última crida, per al mesurador (0 si no sona).</summary>
     public (float Left, float Right) TakePeaks()
     {
@@ -491,7 +516,7 @@ public sealed class Player : IDisposable
         Duration = source.Duration;
         var ring = new SampleRingBuffer(_output.SampleRate * 2 * BufferSeconds);
         _ring = ring;
-        _stream = new PlayerStream(ring, _output.SampleRate, _output.Channels, GainFor(VolumeDb));
+        _stream = new PlayerStream(ring, _output.SampleRate, _output.Channels, GainFor(VolumeDb), Dynamics);
 
         var output = _output;
         output.Stopped += error =>

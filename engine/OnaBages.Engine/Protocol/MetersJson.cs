@@ -14,8 +14,13 @@ public static class MetersJson
     public static JsonObject Event(IEnumerable<Player> players, IEnumerable<Recorder> recorders, CuePlayer? cue = null)
     {
         var playerLevels = new JsonObject();
+        // Abaixada del compressor/limitador de cada reproductor (dB, ≥ 0), per a l'indicador de reducció.
+        var reductions = new JsonObject();
         foreach (var p in players)
+        {
             playerLevels[p.Id] = Levels(p.TakePeaks());
+            reductions[p.Id] = Math.Round(p.TakeGainReductionDb(), 1);
+        }
 
         var recorderLevels = new JsonObject();
         foreach (var r in recorders)
@@ -23,6 +28,7 @@ public static class MetersJson
 
         var ev = Messages.Event("meters");
         ev["players"] = playerLevels;
+        ev["playerReduction"] = reductions;
         ev["recorders"] = recorderLevels;
         if (cue is not null)
             ev["cue"] = Levels(cue.TakePeaks());

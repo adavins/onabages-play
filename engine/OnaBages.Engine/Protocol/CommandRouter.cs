@@ -91,6 +91,7 @@ public sealed partial class CommandRouter
                 "player.retry" => PlayerCommand(msg, p => p.Retry()),
                 "player.seek" => PlayerSeek(msg),
                 "player.setVolume" => PlayerSetVolume(msg),
+                "player.setProcessing" => PlayerSetProcessing(msg),
                 "player.playItem" => PlayerCommand(msg, p => p.PlayItem(RequireString(msg, "itemId"))),
                 "playlist.get" => new JsonObject { ["playlist"] = PlaylistJson.Playlist(GetPlayer(msg)) },
                 "playlist.add" => PlaylistAdd(msg),
@@ -398,6 +399,8 @@ public sealed partial class CommandRouter
         {
             // Perfil actiu (fase 4): la configuració de treball d'aquest programa.
             ["profile"] = new JsonObject { ["id"] = profileId, ["name"] = profileName },
+            // Presets del compressor/limitador dels reproductors (fase 4, pas 4b).
+            ["processingPresets"] = ProcessingPresetsJson(),
             ["ui"] = new JsonObject { ["zoom"] = zoom, ["recordersPerRow"] = perRow, ["endWarningSeconds"] = warning },
             ["layout"] = new JsonObject { ["players"] = players, ["recorders"] = recorders },
             ["program"] = new JsonObject { ["name"] = programName },

@@ -55,26 +55,33 @@ public class DynamicsTests
     // --- Desactivat ---
 
     [Fact]
-    public void Desactivat_el_so_passa_net_nomes_retardat()
+    public void Desactivat_el_so_passa_exactament_igual()
     {
-        var input = Sine(-6, 0.2);
+        var input = Sine(+6, 0.2); // també un senyal que passa de 0 dBFS: desactivat, no es toca
         var output = (float[])input.Clone();
         var dynamics = new DynamicsProcessor(Rate);
 
         ProcessInBlocks(dynamics, output);
 
-        int delay = (int)Math.Round(Rate * DynamicsProcessor.LookaheadMs / 1000) - 1;
-        for (int f = delay; f < input.Length / 2; f++)
-            Assert.Equal(input[(f - delay) * 2], output[f * 2], 1e-6f);
+        Assert.Equal(input, output);
     }
 
     [Fact]
-    public void Desactivat_un_senyal_massa_fort_no_passa_de_0_dBFS()
+    public void Desactivar_lo_a_mig_so_no_fa_clics_i_despres_passa_igual()
     {
-        var buffer = Sine(+6, 0.2);
-        new DynamicsProcessor(Rate).Process(buffer);
+        var input = Sine(-12, 1, frequency: 100);
+        var buffer = (float[])input.Clone();
+        var dynamics = new DynamicsProcessor(Rate, DynamicsSettings.SqrSoftLaCentral);
+        dynamics.Process(buffer.AsSpan(0, Rate));
+        dynamics.Settings = new DynamicsSettings();
+        dynamics.Process(buffer.AsSpan(Rate));
 
-        Assert.True(MaxAbs(buffer) <= 1f);
+        float maxStep = 0;
+        for (int i = 2; i < buffer.Length; i += 2)
+            maxStep = Math.Max(maxStep, Math.Abs(buffer[i] - buffer[i - 2]));
+        Assert.True(maxStep < 0.02f, $"salt de {maxStep}");
+        // Passada la transició, exactament el so d'entrada.
+        Assert.Equal(input.AsSpan(input.Length - 960).ToArray(), buffer.AsSpan(buffer.Length - 960).ToArray());
     }
 
     // --- Configuració del SqrSoft (La Central) ---

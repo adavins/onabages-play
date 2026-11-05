@@ -75,6 +75,11 @@ public sealed class EngineConfig
 
     public const int MaxProgramName = 60;
 
+    // --- Compressor/limitador de cada reproductor (fase 4, pas 4b; del perfil) ---
+
+    /// <summary>Ajustos del compressor/limitador de cada reproductor (clau: identificador). Sense, desactivat.</summary>
+    public Dictionary<string, DynamicsSettings> PlayerDynamics { get; } = [];
+
     // --- Explorador del panell lateral (fase 4, pas 2a; del perfil) ---
 
     /// <summary>Carpetes de la pestanya Àudios (p. ex. «Sintonies», «Talls»), en l'ordre que es mostren.</summary>

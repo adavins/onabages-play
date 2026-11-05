@@ -23,6 +23,8 @@ public static class PlayerJson
         ["currentItemId"] = player.CurrentItemId,
         ["lastPlayedId"] = player.LastPlayedId,
         ["format"] = player.Format,
+        // Compressor/limitador (fase 4, pas 4b; protocol 4.13).
+        ["processing"] = Data.ConfigRepository.WriteDynamics(null, player.Dynamics),
     };
 
     public static JsonArray All(IEnumerable<Player> players) =>

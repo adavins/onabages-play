@@ -4,7 +4,7 @@ namespace OnaBages.Audio;
 /// Paràmetres del compressor/limitador d'un reproductor (fase 4, pas 4a; D-066).
 /// Són els mateixos que el plugin SqrSoft Compressor/Limiter del Winamp, més el sostre de seguretat.
 /// </summary>
-/// <param name="Enabled">Desactivat, el so passa net (només hi queda el sostre a 0 dBFS).</param>
+/// <param name="Enabled">Desactivat, el so passa exactament igual (sense retard ni sostre).</param>
 /// <param name="InputGainDb">Guany abans del compressor («Gain» del SqrSoft).</param>
 /// <param name="ThresholdDb">Llindar: a partir d'aquí comprimeix («Threshold»).</param>
 /// <param name="Ratio">Relació de compressió. 100 = pràcticament un limitador («Ratio»).</param>
@@ -66,7 +66,8 @@ public sealed record DynamicsSettings(
 /// <see cref="Process"/> s'executa al fil d'àudio: no crea objectes, no bloqueja i no escriu registres.
 /// Els paràmetres es canvien des d'un altre fil (<see cref="Settings"/>); els guanys d'entrada i de
 /// sortida hi arriben de mica en mica (uns 20 ms), perquè canviar-los (o activar-lo) no faci clics.
-/// El sostre sempre retarda el so <see cref="LookaheadMs"/>, també desactivat: així activar-lo no fa salts.
+/// Activat, el sostre retarda el so <see cref="LookaheadMs"/>. Desactivat, el so passa exactament igual, sense
+/// retard; en activar-lo o desactivar-lo hi ha una transició de 10 ms entre els dos, perquè el salt no faci clic.
 /// </summary>
 public sealed class DynamicsProcessor
 {
@@ -78,6 +79,9 @@ public sealed class DynamicsProcessor
 
     /// <summary>Alliberament del sostre: com de de pressa torna a pujar després d'un cop.</summary>
     private const double CeilingReleaseMs = 60;
+
+    /// <summary>Transició entre el so sense processar i el processat, en activar-lo o desactivar-lo.</summary>
+    private const double CrossfadeMs = 10;
 
     private readonly int _sampleRate;
 
@@ -96,6 +100,8 @@ public sealed class DynamicsProcessor
     private float _ceilingGain = 1f;                      // guany del sostre, amb alliberament
     private readonly int _lookahead;                      // mostres per canal d'anticipació
     private int _samplesSinceResum;
+    private float _wet;                                   // 0 = so sense processar, 1 = processat (transició)
+    private readonly float _wetStep;                      // quant avança la transició per mostra
 
     /// <summary>Abaixada màxima (compressor + sostre) des de l'última lectura, en centèsimes de dB.</summary>
     private int _maxReductionCentiDb;
@@ -114,11 +120,14 @@ public sealed class DynamicsProcessor
         Array.Fill(_hold, 1f);
         _holdSum = _lookahead;
 
+        _wetStep = (float)(1000.0 / (CrossfadeMs * sampleRate));
+
         _settings = (settings ?? new DynamicsSettings()).Clamped();
         _coefficients = Coefficients.From(_settings, sampleRate);
         // Al principi, els guanys ja són els definitius (no cal arribar-hi a poc a poc).
         _inputGain = _coefficients.InputGain;
         _outputGain = _coefficients.OutputGain;
+        _wet = _settings.Enabled ? 1f : 0f;
     }
 
     /// <summary>Paràmetres actuals. Es poden canviar en qualsevol moment, des de qualsevol fil.</summary>
@@ -147,9 +156,25 @@ public sealed class DynamicsProcessor
         float maxReductionDb = 0;
         int frames = stereo.Length / 2;
 
+        // Desactivat (i la transició ja acabada): el so passa exactament igual, sense retard.
+        // Només es va guardant a la memòria d'anticipació, per tenir-la plena si s'activa.
+        if (!c.Enabled && _wet <= 0f)
+        {
+            for (int f = 0; f < frames; f++)
+            {
+                _delayLeft[_position] = stereo[f * 2];
+                _delayRight[_position] = stereo[f * 2 + 1];
+                _position = (_position + 1) % _lookahead;
+            }
+            return;
+        }
+
+        float wetTarget = c.Enabled ? 1f : 0f;
         for (int f = 0; f < frames; f++)
         {
             int i = f * 2;
+            float dryLeft = stereo[i], dryRight = stereo[i + 1];
+            _wet = wetTarget > _wet ? Math.Min(1f, _wet + _wetStep) : Math.Max(0f, _wet - _wetStep);
 
             // Guanys d'entrada i de sortida: cap al valor nou, de mica en mica.
             _inputGain += (c.InputGain - _inputGain) * c.GainSmoothing;
@@ -212,12 +237,28 @@ public sealed class DynamicsProcessor
             _position = oldest;
 
             // Per si de cas (arrodoniments): mai per sobre del sostre.
-            stereo[i] = Math.Clamp(outLeft, -c.Ceiling, c.Ceiling);
-            stereo[i + 1] = Math.Clamp(outRight, -c.Ceiling, c.Ceiling);
+            outLeft = Math.Clamp(outLeft, -c.Ceiling, c.Ceiling);
+            outRight = Math.Clamp(outRight, -c.Ceiling, c.Ceiling);
 
-            float reduction = Math.Max(_reductionLeft, _reductionRight) - GainToDb(_ceilingGain);
+            // Normalment, només el processat. Durant la transició (10 ms), una barreja amb el so sense processar.
+            if (_wet >= 1f)
+            {
+                stereo[i] = outLeft;
+                stereo[i + 1] = outRight;
+            }
+            else
+            {
+                stereo[i] = dryLeft + (outLeft - dryLeft) * _wet;
+                stereo[i + 1] = dryRight + (outRight - dryRight) * _wet;
+            }
+
+            float reduction = (Math.Max(_reductionLeft, _reductionRight) - GainToDb(_ceilingGain)) * _wet;
             if (reduction > maxReductionDb) maxReductionDb = reduction;
         }
+
+        // S'acaba de desactivar del tot: l'estat torna a zero, perquè en tornar-lo a activar comenci net.
+        if (!c.Enabled && _wet <= 0f)
+            ResetDynamicsState();
 
         // Indicador de reducció: el màxim des de l'última lectura.
         int centi = (int)(maxReductionDb * 100);
@@ -226,6 +267,17 @@ public sealed class DynamicsProcessor
                && Interlocked.CompareExchange(ref _maxReductionCentiDb, centi, current) != current)
         {
         }
+    }
+
+    private void ResetDynamicsState()
+    {
+        _reductionLeft = _reductionRight = 0;
+        _ceilingGain = 1f;
+        Array.Fill(_required, 1f);
+        Array.Fill(_hold, 1f);
+        _holdSum = _lookahead;
+        _inputGain = _coefficients.InputGain;
+        _outputGain = _coefficients.OutputGain;
     }
 
     /// <summary>Quant s'ha d'abaixar (dB) una mostra d'aquest nivell: el que passa del llindar, per (1 − 1/ràtio).</summary>
@@ -249,11 +301,11 @@ public sealed class DynamicsProcessor
     private sealed class Coefficients
     {
         public float InputGain, OutputGain, ThresholdDb, ThresholdLinear, Slope, Attack, Release, Ceiling, CeilingRelease, GainSmoothing;
-        public bool StereoLink;
+        public bool StereoLink, Enabled;
 
         public static Coefficients From(DynamicsSettings s, int sampleRate)
         {
-            // Desactivat: guanys a 0 dB, sense compressió; el sostre, a 0 dBFS (només evita el clip).
+            // Desactivat: guanys a 0 dB i sense compressió (és cap on va el so durant la transició de desactivar-lo).
             bool on = s.Enabled;
             return new Coefficients
             {
@@ -268,6 +320,7 @@ public sealed class DynamicsProcessor
                 CeilingRelease = SmoothingFactor(CeilingReleaseMs, sampleRate),
                 GainSmoothing = SmoothingFactor(GainSmoothingMs, sampleRate),
                 StereoLink = s.StereoLink,
+                Enabled = on,
             };
         }
 

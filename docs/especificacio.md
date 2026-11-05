@@ -653,7 +653,7 @@ No calen Visual Studio Build Tools, MSVC ni CMake.
 - Perfils amb exportació i importació.
 - Panells configurables.
 - Fosos a l'editor.
-- **Explorador d'àudios:** panell lateral, minimitzat per defecte, amb diverses carpetes per perfil (p. ex. «Sintonies», «Talls», «Entrevistes»); les pistes s'arrosseguen als reproductors. El contingut de les carpetes el llegeix el motor.
+- **Explorador d'àudios:** panell lateral, minimitzat per defecte, amb diverses carpetes per perfil (p. ex. «Sintonies», «Talls», «Entrevistes»); les pistes s'arrosseguen als reproductors. El contingut de les carpetes el llegeix el motor. Fet al motor (pas 2a, D-063): carpetes de cada perfil per a les pestanyes Àudios i Llistes, i `explorer.list`, que només llegeix dins d'aquestes carpetes.
 - **Panell de llistes desades:** les llistes `.obpl` d'un programa (p. ex. les seccions de cada dia de «La Central») a punt per arrossegar-les senceres a un reproductor. Si es troba a faltar abans, es pot avançar com a millora de final de la fase 2.
 
 ### Fase 5 — Ampliacions segons l'ús real

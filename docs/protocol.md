@@ -383,6 +383,19 @@ Un perfil és la configuració de treball d'un programa (vegeu 4.9). El paràmet
 - Un enregistrament pendent (sense desar ni descartar) no impedeix el canvi: el fitxer ja és al disc i surt a Recents.
 - Errors de disc en crear, canviar el nom o eliminar: `file_error`.
 
+### 4.12. Explorador del panell lateral (fase 4, D-063)
+
+Cada perfil té les seves carpetes per a dues pestanyes: `kind` = `"audios"` (fitxers d'àudio) o `"lists"` (llistes desades: `.obpl`, `.m3u`, `.m3u8`).
+
+| Ordre | Paràmetres | Resposta |
+|---|---|---|
+| `explorer.get` | — | `{ audios: [{ name, path, exists }], lists: [...] }`. `exists`: la carpeta hi és ara (una unitat de xarxa o un USB poden no ser-hi) |
+| `explorer.setFolders` | `kind`, `folders: [{ name?, path }]` (en l'ordre que es mostren; substitueixen les d'abans) | El mateix que `explorer.get`. `path`: ruta completa; no cal que existeixi. Sense `name`, el de la carpeta. Com a molt 20 carpetes i 40 caràcters per nom; una carpeta repetida dona `bad_params`. Es desa al perfil actiu (`explorer` a `perfil.json`) |
+| `explorer.list` | `kind`, `path` | `{ path, folders: [{ name, path }], files: [{ name, path, size, modified }], truncated }`: subcarpetes i fitxers de la pestanya (sense baixar a les subcarpetes), en l'ordre de l'Explorador de Windows («2» abans de «10»). Se salten els fitxers ocults i de sistema. Com a molt 5.000 de cada; si n'hi ha més, `truncated: true`. `modified`: data i hora local |
+
+- `explorer.list` **només llegeix dins de les carpetes configurades** per a aquella pestanya (la carpeta mateixa o una subcarpeta). Qualsevol altra ruta, també amb `..` o una carpeta germana que comenci igual (`Música2` no és dins de `Música`), dona `bad_params`. Una carpeta que no hi és o no es pot llegir: `file_error`.
+- Per afegir el que es tria a un reproductor es fa servir `playlist.add` amb les rutes (també accepta llistes `.obpl` i `.m3u`, i n'afegeix les pistes).
+
 ## 5. Esdeveniments
 
 | Esdeveniment | Camps | Freqüència | Des de |

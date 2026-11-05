@@ -637,6 +637,9 @@ public sealed class ConfigRepository
                 config.RecorderSettings[id] = new RecorderSettings(Text(item?["name"]), Text(item?["folder"]), gain);
             }
         }
+
+        config.AudioFolders = ReadExplorerFolders(root["explorer"]?["audios"]);
+        config.ListFolders = ReadExplorerFolders(root["explorer"]?["lists"]);
     }
 
     private static void ReadAssignments(JsonNode? node, Dictionary<string, DeviceRef> target)
@@ -748,7 +751,42 @@ public sealed class ConfigRepository
                 ["folder"] = s.Value.Folder,
                 ["gainDb"] = s.Value.GainDb,
             }).ToArray()),
+        // Explorador del panell lateral (pas 2a; camp opcional, sense canvi de versió).
+        ["explorer"] = new JsonObject
+        {
+            ["audios"] = WriteExplorerFolders(config.AudioFolders),
+            ["lists"] = WriteExplorerFolders(config.ListFolders),
+        },
     };
+
+    private static JsonArray WriteExplorerFolders(List<ExplorerFolder> folders) =>
+        new(folders.Select(f => (JsonNode)new JsonObject { ["name"] = f.Name, ["path"] = f.Path }).ToArray());
+
+    private static List<ExplorerFolder> ReadExplorerFolders(JsonNode? node)
+    {
+        var list = new List<ExplorerFolder>();
+        if (node is not JsonArray items)
+            return list;
+        foreach (var item in items)
+        {
+            string? path = Text(item?["path"]);
+            if (string.IsNullOrWhiteSpace(path) || !Path.IsPathFullyQualified(path)) continue;
+            string name = Text(item?["name"]) is { } n && CleanProgramName(n) is { Length: > 0 } clean
+                ? clean
+                : ExplorerFolderDefaultName(path);
+            list.Add(new ExplorerFolder(name, path));
+            if (list.Count == EngineConfig.MaxExplorerFolders) break;
+        }
+        return list;
+    }
+
+    /// <summary>Nom per defecte d'una carpeta de l'explorador: el de la carpeta (o la unitat, p. ex. «D:\»).</summary>
+    public static string ExplorerFolderDefaultName(string path)
+    {
+        string trimmed = Path.TrimEndingDirectorySeparator(path);
+        string name = Path.GetFileName(trimmed);
+        return name.Length > 0 ? name : path;
+    }
 
     private static string ToText(JsonObject root) => root.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
 

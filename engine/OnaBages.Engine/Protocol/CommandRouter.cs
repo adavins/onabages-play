@@ -136,6 +136,9 @@ public sealed partial class CommandRouter
                 "profile.switch" => ProfileSwitch(msg),
                 "profile.export" => ProfileExport(msg),
                 "profile.import" => ProfileImport(msg),
+                "explorer.get" => ExplorerGet(),
+                "explorer.setFolders" => ExplorerSetFolders(msg),
+                "explorer.list" => ExplorerList(msg),
                 _ => null,
             };
 

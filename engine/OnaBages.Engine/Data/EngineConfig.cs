@@ -8,6 +8,9 @@ public sealed record DeviceRef(string Id, string Name);
 /// <summary>Ajustos d'un enregistrador. Null = el valor per defecte.</summary>
 public sealed record RecorderSettings(string? Name, string? Folder, double GainDb);
 
+/// <summary>Una carpeta de l'explorador (fase 4, pas 2a): el nom que es mostra i la ruta completa.</summary>
+public sealed record ExplorerFolder(string Name, string Path);
+
 /// <summary>
 /// La configuració de treball: la de l'ordinador (<c>config.json</c>) i la del perfil actiu
 /// (<c>perfils\&lt;id&gt;\perfil.json</c>), juntes (fase 4, D-057). Només la llegeix i l'escriu
@@ -71,6 +74,17 @@ public sealed class EngineConfig
     public string ProgramName { get; set; } = "";
 
     public const int MaxProgramName = 60;
+
+    // --- Explorador del panell lateral (fase 4, pas 2a; del perfil) ---
+
+    /// <summary>Carpetes de la pestanya Àudios (p. ex. «Sintonies», «Talls»), en l'ordre que es mostren.</summary>
+    public List<ExplorerFolder> AudioFolders { get; set; } = [];
+
+    /// <summary>Carpetes de la pestanya Llistes (llistes desades .obpl, .m3u).</summary>
+    public List<ExplorerFolder> ListFolders { get; set; } = [];
+
+    public const int MaxExplorerFolders = 20;
+    public const int MaxExplorerFolderName = 40;
 
     public const int MaxPlayers = 6;
     public const int MaxRecorders = 4;

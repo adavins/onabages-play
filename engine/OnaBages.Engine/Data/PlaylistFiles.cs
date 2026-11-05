@@ -124,7 +124,7 @@ public static class PlaylistFiles
     }
 
     /// <summary>Compara noms com l'Explorador: els números es comparen pel seu valor («Pista 2» &lt; «Pista 10»).</summary>
-    private sealed class NaturalComparer : IComparer<string?>
+    internal sealed class NaturalComparer : IComparer<string?>
     {
         public static readonly NaturalComparer Instance = new();
 

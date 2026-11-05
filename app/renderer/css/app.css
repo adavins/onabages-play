@@ -41,7 +41,7 @@
   --obp-clock-size: calc(2.2rem * var(--obp-ui-scale));
 
   /* Reproductor */
-  --obp-remaining-size: calc(3.2rem * var(--obp-ui-scale)); /* comptador gran (màxim: s'ajusta a l'amplada del panell) */
+  --obp-remaining-size: calc(2rem * var(--obp-ui-scale)); /* comptador gran (màxim: s'ajusta a l'amplada del panell) */
   --obp-control-size: calc(1.8rem * var(--obp-ui-scale));   /* icones de Play, Pausa, Stop */
   --obp-ending-bg: var(--obp-error);  /* temps restant als últims segons */
 
@@ -1697,15 +1697,21 @@ body.engine-offline .side-content {
 .pl-row.pl-in-section:not(.pl-previewing) { box-shadow: inset 3px 0 0 var(--section); }
 
 /* Al panell del reproductor: secció de la pista actual. */
+/* Secció de la pista actual: etiqueta a la fila del títol, perquè no desplaci el panell en aparèixer. */
 .track-section {
-  font-size: 0.8rem;
+  flex: 0 1 auto;
+  max-width: 40%;
+  font-size: 0.75rem;
   font-weight: 600;
+  line-height: 1.2;
   color: var(--section);
   text-transform: uppercase;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  margin-top: -0.3rem;
+  padding: 0.1rem 0.4rem;
+  border: 1px solid var(--section);
+  border-radius: 0.3rem;
 }
 
 /* Diàleg de secció: mostres de color. */

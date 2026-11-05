@@ -128,7 +128,7 @@ export function setupSidePanel(store) {
     toggle.title = isOpen ? 'Plegar el panell' : cueHidden ? 'La preescolta sona: obrir el panell' : 'Obrir el panell';
     // Amb l'avís, la icona són uns auriculars (color i icona, no només color).
     /** @type {HTMLElement} */ (toggle.querySelector('i')).className =
-      `bi ${isOpen ? 'bi-chevron-double-right' : cueHidden ? 'bi-headphones' : 'bi-chevron-double-left'}`;
+      `bi ${isOpen ? 'bi-chevron-double-left' : cueHidden ? 'bi-headphones' : 'bi-chevron-double-right'}`;
   }
 
   return { open, close, refreshSize };

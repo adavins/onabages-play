@@ -74,15 +74,15 @@ export class PlayerPanel {
         <div class="js-device-warning"></div>
 
         <div class="track-row">
+          <div class="track-section js-section"></div>
           <div class="track js-track"></div>
           <button class="btn btn-sm btn-outline-secondary js-edit" type="button" title="Obrir a l'editor la pista actual (o la seleccionada a la llista)">
             <i class="bi bi-scissors"></i>
           </button>
           <button class="btn btn-sm btn-outline-secondary js-open" type="button" title="Afegir pistes al final de la llista">
-            <i class="bi bi-plus-lg"></i> Afegir
+            <i class="bi bi-plus-lg"></i> 
           </button>
         </div>
-        <div class="track-section js-section"></div>
 
         <div class="remaining js-remaining" role="button" title="Temps restant">--:--</div>
         <div class="seek-area js-seek" title="Clica o arrossega per saltar">

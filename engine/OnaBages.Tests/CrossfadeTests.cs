@@ -203,6 +203,24 @@ public class CrossfadeTests : IDisposable
     }
 
     [Fact]
+    public void Fer_sonar_una_pista_a_ma_amb_fos_avisa_del_canvi()
+    {
+        // Error trobat pel desenvolupador: el títol del reproductor no canviava (no s'enviava cap esdeveniment).
+        var player = NewPlayer(200);
+        var ids = player.Playlist.Add([Constant(0.4f, 3), Constant(0.2f, 1)]);
+        player.Play();
+        Thread.Sleep(150);
+        Pump(player, 20);
+        string? notified = null;
+        player.StateChanged += p => notified = p.CurrentItemId;
+
+        player.PlayItem(ids[1]);
+
+        Assert.Equal(ids[1], notified);
+        player.Dispose();
+    }
+
+    [Fact]
     public void Si_la_pista_nova_no_es_pot_obrir_la_que_sona_continua()
     {
         var player = NewPlayer(200);

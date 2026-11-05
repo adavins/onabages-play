@@ -768,6 +768,8 @@ public sealed class Player : IDisposable
         _trackStartFrame = 0;
         Playlist.ClearCueIf(item.Id);
         stream.SwitchTo(ring, (int)((long)_crossfadeMs * sampleRate / 1000));
+        // L'estat continua sent «sonant», però la pista ha canviat: s'ha d'avisar la interfície.
+        _changed = true;
     }
 
     /// <summary>

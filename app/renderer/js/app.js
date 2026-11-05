@@ -65,6 +65,7 @@ let recentsPanel = null;
 let cuePanel = null;
 
 startClock();
+setupWindowControls();
 setupClose();
 setupZoom(saveZoom);
 setupPanels();
@@ -74,6 +75,34 @@ els.editor.addEventListener('click', () => bridge?.openEditor());
 setupProfileMenu({ button: els.profile, request, onSettings: applySettings, onSwitch: restartForProfile });
 setupShortcuts(store, request, (playerId, text) => playerPanels.get(playerId)?.showMessage(text));
 init();
+
+// ---------------------------------------------------------------------------
+// Capçalera com a barra de títol (D-060)
+// ---------------------------------------------------------------------------
+
+/**
+ * La finestra no té barra de títol: la capçalera la substitueix (es pot arrossegar) i els botons de
+ * Windows (minimitzar, maximitzar, tancar) es dibuixen a sobre, a la dreta. Cal:
+ * - dir a Electron l'alçada de la capçalera, perquè els botons hi encaixin (canvia amb el zoom);
+ * - deixar lloc a la dreta perquè els botons no tapin els de la capçalera (⚙, ✂...).
+ */
+function setupWindowControls() {
+  const topbar = /** @type {HTMLElement} */ (document.querySelector('.topbar'));
+  // Sense la vora de sota (clientHeight): si no, els botons de Windows la taparien.
+  new ResizeObserver(() => bridge?.setTopbarHeight(topbar.clientHeight)).observe(topbar);
+
+  /** @type {any} API del navegador per a aquest cas (Window Controls Overlay) */
+  const overlay = /** @type {any} */ (navigator).windowControlsOverlay;
+  const update = () => {
+    // Espai que ocupen els botons de Windows, en píxels CSS. Si el navegador no ho diu, uns 140.
+    const area = overlay?.visible ? overlay.getTitlebarAreaRect() : null;
+    const width = area && area.width > 0 ? Math.max(0, window.innerWidth - (area.x + area.width)) : 140;
+    document.documentElement.style.setProperty('--obp-window-controls', `${Math.ceil(width)}px`);
+  };
+  overlay?.addEventListener('geometrychange', update);
+  window.addEventListener('resize', update);
+  update();
+}
 
 // ---------------------------------------------------------------------------
 // Connexió amb el motor

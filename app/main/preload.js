@@ -47,6 +47,9 @@ contextBridge.exposeInMainWorld('onabages', {
   /** Escala de la interfície (1 = 100 %, de 0,7 a 1,5). */
   setZoom: (factor) => ipcRenderer.invoke('ui:set-zoom', factor),
 
+  /** Alçada de la capçalera (píxels CSS), perquè els botons de la finestra hi encaixin (D-060). */
+  setTopbarHeight: (cssHeight) => ipcRenderer.send('ui:topbar-height', cssHeight),
+
   /** La interfície confirma que la finestra es pot tancar. */
   confirmClose: () => ipcRenderer.send('app:close-confirmed'),
 

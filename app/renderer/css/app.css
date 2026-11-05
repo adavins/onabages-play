@@ -99,6 +99,22 @@ body {
   background: var(--bs-tertiary-bg);
 }
 
+/*
+ * Capçalera com a barra de títol (D-060): s'hi arrossega la finestra (doble clic = maximitzar),
+ * i a la dreta es deixa lloc als botons de Windows. Els controls de dins s'han de poder clicar.
+ */
+.topbar {
+  -webkit-app-region: drag;
+  padding-right: calc(var(--obp-window-controls, 0px) + var(--obp-pad));
+}
+
+.topbar button,
+.topbar a,
+.topbar input,
+.topbar select {
+  -webkit-app-region: no-drag;
+}
+
 .brand {
   display: flex;
   align-items: center;

@@ -59,6 +59,10 @@ function createWindow() {
     backgroundColor: '#121417',
     icon: APP_ICON,
     autoHideMenuBar: true,
+    // Sense la barra de títol de Windows (D-060): la capçalera de l'aplicació en fa la feina i els
+    // botons de la finestra (minimitzar, maximitzar, tancar) es dibuixen a sobre, a la dreta.
+    titleBarStyle: 'hidden',
+    titleBarOverlay: { ...TITLE_BAR_COLORS, height: titleBarHeight() },
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -307,7 +311,37 @@ ipcMain.handle('dialog:open-audio', async () => {
 ipcMain.handle('ui:set-zoom', (_event, factor) => {
   if (typeof factor === 'number' && factor >= 0.7 && factor <= 1.5) {
     mainWindow?.webContents.setZoomFactor(factor);
+    updateTitleBarOverlay(); // la capçalera ha canviat d'alçada en píxels de pantalla
   }
+});
+
+// ---------------------------------------------------------------------------
+// Capçalera com a barra de títol (D-060)
+// ---------------------------------------------------------------------------
+
+/** Colors dels botons de la finestra: el fons de la capçalera (--bs-tertiary-bg del tema fosc) i el text. */
+const TITLE_BAR_COLORS = { color: '#2b3035', symbolColor: '#dee2e6' };
+
+/** Alçada de la capçalera en píxels CSS, sense la vora de sota (la diu la interfície; de moment, una aproximació). */
+let topbarCssHeight = 47;
+
+/** Alçada dels botons de la finestra: la de la capçalera, en píxels de pantalla (amb el zoom). */
+function titleBarHeight() {
+  const zoom = mainWindow?.webContents.getZoomFactor() ?? 1;
+  // Arrodonit avall: mai més alts que la capçalera, perquè no tapin la vora de sota.
+  return Math.max(24, Math.floor(topbarCssHeight * zoom));
+}
+
+function updateTitleBarOverlay() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.setTitleBarOverlay({ ...TITLE_BAR_COLORS, height: titleBarHeight() });
+}
+
+/** La interfície diu l'alçada de la capçalera (canvia amb el zoom i amb l'escala de la interfície). */
+ipcMain.on('ui:topbar-height', (_event, cssHeight) => {
+  if (typeof cssHeight !== 'number' || !(cssHeight > 0 && cssHeight < 400)) return;
+  topbarCssHeight = cssHeight;
+  updateTitleBarOverlay();
 });
 
 ipcMain.on('app:close-confirmed', () => {

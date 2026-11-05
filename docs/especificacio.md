@@ -493,7 +493,7 @@ El **LUFS** és una unitat que mesura el **volum que percep l'oïda**, no només
 | Normalització de sonoritat per pista (opcional per reproductor) | 4 | Anàlisi en segon pla en afegir la pista; el valor es desa a la memòria cau |
 | Equalitzador per reproductor (paramètric, 3–5 bandes) | 4 | Filtres de NAudio |
 | Limitador per reproductor (sostre configurable) | 4 | Protecció contra pics |
-| Compressor per reproductor | 4 | Threshold, ratio, attack, release, makeup; indicador de reducció |
+| Compressor per reproductor | 4 | Threshold, ratio, attack, release, makeup; indicador de reducció. **Es fa primer** (D-066): com el plugin SqrSoft del Winamp que es fa servir ara, amb el preset «SqrSoft La Central» |
 | Presets de processament | 4 | Desats al perfil |
 
 **Cadena:** fitxer → descodificació → guany de sonoritat → EQ → compressor → limitador → volum → sortida.

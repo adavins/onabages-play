@@ -7,6 +7,7 @@ using OnaBages.ToneCheck;
 //   generar <fitxer.wav> <minuts>            crea el to de prova
 //   analitzar <fitxer> [segons esperats]     busca talls en un enregistrament del to
 //   convivencia [minuts] [carpeta]           editor + dos enregistradors alhora (fase 3, pas 5)
+//   processar <entrada> <sortida.wav>        passa un fitxer pel compressor/limitador (fase 4, pas 4a)
 
 Console.OutputEncoding = Encoding.UTF8;
 
@@ -25,12 +26,19 @@ if (args.Length >= 1 && args[0] == "convivencia")
     string folder = args.Length >= 3 ? Path.GetFullPath(args[2]) : Path.Combine(Path.GetTempPath(), "OnaBagesConvivencia");
     return Convivencia.Run(minutes, folder);
 }
+if (args.Length >= 3 && args[0] == "processar")
+{
+    // Ajustos: per defecte, els del SqrSoft de La Central; «desactivat» per comparar (només el sostre a 0 dB).
+    var settings = args.Length >= 4 && args[3] == "desactivat" ? new DynamicsSettings() : DynamicsSettings.SqrSoftLaCentral;
+    return Processar.Run(Path.GetFullPath(args[1]), Path.GetFullPath(args[2]), settings);
+}
 
 Console.WriteLine("""
     Ús:
       OnaBages.ToneCheck generar <fitxer.wav> <minuts>
       OnaBages.ToneCheck analitzar <fitxer.mp3> [segons que havia de durar el to]
       OnaBages.ToneCheck convivencia [minuts, per defecte 60] [carpeta]
+      OnaBages.ToneCheck processar <entrada> <sortida.wav> [desactivat]   compressor/limitador (SqrSoft de La Central)
     """);
 return 2;
 

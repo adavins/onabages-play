@@ -98,7 +98,27 @@ public sealed class WasapiAudioOutput : IAudioOutput
         }
     }
 
-    public void Init(IWaveProvider source) => _out.Init(source);
+    /// <summary>
+    /// Amb més de 2 canals (p. ex. una sortida configurada com a 5.1 o 7.1), Windows no accepta
+    /// el format senzill: cal el format «extensible» amb la mateixa disposició d'altaveus que el
+    /// mescladiu (si no, l'error és 0x80070057). Llavors s'hi declara exactament el del dispositiu,
+    /// que en mode compartit sempre és float de 32 bits, com el que envia el reproductor.
+    /// </summary>
+    public void Init(IWaveProvider source)
+    {
+        var mix = _out.DeviceMixFormat;
+        if (Channels > 2 && mix.BitsPerSample == 32)
+            source = new FormatOverride(source, mix);
+        _out.Init(source);
+    }
+
+    /// <summary>La mateixa font, però declarant el format exacte del dispositiu.</summary>
+    private sealed class FormatOverride(IWaveProvider source, WaveFormat format) : IWaveProvider
+    {
+        public WaveFormat WaveFormat => format;
+        public int Read(Span<byte> buffer) => source.Read(buffer);
+    }
+
     public void Play() => _out.Play();
     public void Pause() => _out.Pause();
     public void Stop() => _out.Stop();

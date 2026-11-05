@@ -45,19 +45,25 @@ public sealed class WasapiAudioInput : IAudioInput
     private readonly WasapiRecorder _recorder;
     private readonly ManualResetEventSlim _stopped = new(true);
 
-    private WasapiAudioInput(MMDevice device, int sampleRate, int channels)
+    private WasapiAudioInput(MMDevice device, WaveFormat mix)
     {
         _device = device;
-        SampleRate = sampleRate;
-        Channels = channels;
+        SampleRate = mix.SampleRate;
+        Channels = mix.Channels;
+
+        // Sempre float a la freqüència i canals del dispositiu: Windows només canvia el format de mostra.
+        // Amb més de 2 canals cal el format «extensible» del dispositiu (si no, error 0x80070057);
+        // en mode compartit ja és float de 32 bits.
+        var format = Channels > 2 && mix.BitsPerSample == 32
+            ? mix
+            : WaveFormat.CreateIeeeFloatWaveFormat(SampleRate, Channels);
 
         _recorder = new WasapiRecorderBuilder()
             .WithDevice(device)
             .WithSharedMode()
             .WithEventSync()
             .WithBufferLength(BufferMs)
-            // Sempre float a la freqüència i canals del dispositiu: Windows només canvia el format de mostra.
-            .WithFormat(WaveFormat.CreateIeeeFloatWaveFormat(sampleRate, channels))
+            .WithFormat(format)
             .WithMmcssThreadPriority("Pro Audio")
             .Build();
 
@@ -100,7 +106,7 @@ public sealed class WasapiAudioInput : IAudioInput
             using (var client = device.CreateAudioClient())
                 mix = client.MixFormat;
 
-            return new WasapiAudioInput(device, mix.SampleRate, mix.Channels);
+            return new WasapiAudioInput(device, mix);
         }
         catch (AudioDeviceException)
         {

@@ -1,10 +1,12 @@
 using System.Globalization;
 using System.Text;
 using OnaBages.Audio;
+using OnaBages.ToneCheck;
 
 // Eina de la prova de to (fase 1, pas 8).
 //   generar <fitxer.wav> <minuts>            crea el to de prova
 //   analitzar <fitxer> [segons esperats]     busca talls en un enregistrament del to
+//   convivencia [minuts] [carpeta]           editor + dos enregistradors alhora (fase 3, pas 5)
 
 Console.OutputEncoding = Encoding.UTF8;
 
@@ -12,11 +14,23 @@ if (args.Length >= 3 && args[0] == "generar")
     return Generate(args[1], args[2]);
 if (args.Length >= 2 && args[0] == "analitzar")
     return Analyze(args[1], args.Length >= 3 ? args[2] : null);
+if (args.Length >= 1 && args[0] == "convivencia")
+{
+    double minutes = 60;
+    if (args.Length >= 2 && (!double.TryParse(args[1].Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out minutes) || minutes < 1))
+    {
+        Console.Error.WriteLine($"Minuts no vàlids: {args[1]}");
+        return 2;
+    }
+    string folder = args.Length >= 3 ? Path.GetFullPath(args[2]) : Path.Combine(Path.GetTempPath(), "OnaBagesConvivencia");
+    return Convivencia.Run(minutes, folder);
+}
 
 Console.WriteLine("""
     Ús:
       OnaBages.ToneCheck generar <fitxer.wav> <minuts>
       OnaBages.ToneCheck analitzar <fitxer.mp3> [segons que havia de durar el to]
+      OnaBages.ToneCheck convivencia [minuts, per defecte 60] [carpeta]
     """);
 return 2;
 

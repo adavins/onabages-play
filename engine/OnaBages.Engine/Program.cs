@@ -70,9 +70,14 @@ var analyzer = new TrackAnalyzer();
 
 // Quants reproductors i enregistradors hi ha: ho diu la configuració (pas 9 de la fase 2; per defecte, 2 i 2).
 // Es llegeix només el nombre; la resta de la configuració la llegeix més avall el ConfigStore.
-var savedLayout = new ConfigRepository().Load().Config;
+// La primera vegada amb perfils, aquesta lectura converteix la configuració antiga en el primer perfil (D-057).
+var configRepository = new ConfigRepository();
+var savedLayout = configRepository.Load().Config;
 int playerCount = savedLayout.PlayerCount;
 int recorderCount = savedLayout.RecorderCount;
+// Les últimes llistes són del perfil actiu. El perfil només canvia en reiniciar el motor.
+string lastListsFolder = configRepository.LastListsFolder(savedLayout.ProfileId);
+log.LogInformation("Perfil: {Name} ({Folder})", savedLayout.ProfileName, configRepository.ProfileFolder(savedLayout.ProfileId));
 var state = new EngineState(
     Enumerable.Range(1, playerCount).Select(i => new Player(i.ToString(), analyzer: analyzer)),
     Enumerable.Range(1, recorderCount).Select(i => new Recorder(i.ToString())),
@@ -93,13 +98,13 @@ foreach (var player in state.Players)
 
 void SaveLastList(Player player)
 {
-    try { PlaylistFiles.Write(PlaylistFiles.LastListPath(player.Id), player.Playlist.Items); }
+    try { PlaylistFiles.Write(PlaylistFiles.LastListPath(lastListsFolder, player.Id), player.Playlist.Items); }
     catch (PlaylistFileException ex) { log.LogWarning("Reproductor {Id}: no s'ha pogut desar la llista: {Message}", player.Id, ex.Message); }
 }
 
 foreach (var player in state.Players)
 {
-    string lastList = PlaylistFiles.LastListPath(player.Id);
+    string lastList = PlaylistFiles.LastListPath(lastListsFolder, player.Id);
     if (!File.Exists(lastList)) continue;
     try
     {
@@ -197,7 +202,7 @@ void SaveRecordings()
 }
 
 // Configuració desada (config.json): dispositiu de cada element i ajustos de la interfície.
-var config = new ConfigStore(new ConfigRepository());
+var config = new ConfigStore(configRepository);
 config.Warning += message => log.LogWarning("Configuració: {Message}", message);
 var hardware = new HardwareAssignments(state, config);
 hardware.Warning += message => log.LogWarning("Maquinari: {Message}", message);

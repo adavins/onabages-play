@@ -515,6 +515,7 @@ Els canvis de paràmetres s'han d'aplicar de manera progressiva (sense clics). E
 ## 11.2. Perfils (fase 4)
 
 - Un perfil = una carpeta amb fitxers JSON: distribució de la pantalla, reproductors, enregistradors, rutes, llistes, processament i dreceres.
+  - Fet (pas 1a, D-057): `perfils\<nom>\perfil.json` (dispositius, enregistradors, preescolta, distribució i nom del programa) i `perfils\<nom>\llistes\` (últimes llistes). El que és de l'ordinador es queda a `config.json`. La configuració d'abans es converteix sola en el primer perfil.
 - Operacions: crear, duplicar (copiar la carpeta), canviar, eliminar, exportar i importar (un fitxer .zip).
 - Els perfils guarden **referències** als fitxers d'àudio, mai còpies.
 - **Canvi de perfil segur:** no es permet amb reproduccions o enregistraments actius sense confirmació explícita, i mai s'atura un enregistrament sense avís. Si falten dispositius, s'avisa i l'element corresponent queda en estat `Error`.
@@ -569,7 +570,8 @@ Les dues opcions poden conviure: configuració i perfils en JSON (fàcils de cop
 
 | Dada | Format | Ubicació |
 |---|---|---|
-| Configuració i perfils | JSON | `%APPDATA%\OnaBages\` |
+| Configuració de l'ordinador (zoom, dispositius coneguts, sortida de l'editor, perfil actiu) | JSON | `%APPDATA%\OnaBages\config.json` (versió 2, D-057) |
+| Perfils (configuració de treball de cada programa i últimes llistes dels reproductors) | JSON | `%APPDATA%\OnaBages\perfils\<nom>\perfil.json` i `...\llistes\` |
 | Fitxer d'execució del motor (port, testimoni) | JSON | `%APPDATA%\OnaBages\engine.json` |
 | Llistes de reproducció | JSON propi (importació M3U) | On triï l'usuari i dins del perfil |
 | Historial de reproducció | CSV diari | `%APPDATA%\OnaBages\historial\` |
@@ -641,6 +643,7 @@ No calen Visual Studio Build Tools, MSVC ni CMake.
 - Forma d'ona, selecció, reproducció, retallar inici i final, eliminar fragment, desfer, desar sense recodificar.
 
 **Criteri:** editar i desar un enregistrament d'1 hora en pocs minuts, mentre un altre enregistrador funciona, sense pèrdues.
+- Fet amb la prova automàtica (D-053). Pendent (D-056): la mateixa prova amb el maquinari real i a l'ordinador modest, i comparar un tall amb el mp3DirectCut.
 
 ### Fase 4 — Processament, perfils i distribució flexible
 - Normalització de sonoritat, EQ, limitador, compressor i presets.

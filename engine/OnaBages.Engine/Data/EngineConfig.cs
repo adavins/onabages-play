@@ -9,10 +9,23 @@ public sealed record DeviceRef(string Id, string Name);
 public sealed record RecorderSettings(string? Name, string? Folder, double GainDb);
 
 /// <summary>
-/// Contingut de <c>config.json</c>. Només el llegeix i l'escriu <see cref="ConfigRepository"/>.
+/// La configuració de treball: la de l'ordinador (<c>config.json</c>) i la del perfil actiu
+/// (<c>perfils\&lt;id&gt;\perfil.json</c>), juntes (fase 4, D-057). Només la llegeix i l'escriu
+/// <see cref="ConfigRepository"/>, que sap què va a cada fitxer; la resta del motor no ho ha de saber.
 /// </summary>
 public sealed class EngineConfig
 {
+    // --- Perfil actiu (fase 4) ---
+
+    /// <summary>Identificador del perfil actiu: el nom de la seva carpeta dins de «perfils».</summary>
+    public string ProfileId { get; set; } = ConfigRepository.DefaultProfileId;
+
+    /// <summary>Nom del perfil, tal com es mostra (p. ex. «La Central»).</summary>
+    public string ProfileName { get; set; } = ConfigRepository.DefaultProfileName;
+
+    // --- Del perfil: dispositius, enregistradors, distribució i programa. Del perfil, també les últimes llistes. ---
+    // --- De l'ordinador (config.json): KnownDevices, UiZoom i EditorDevice. ---
+
     /// <summary>Sortida que vol cada reproductor (clau: identificador del reproductor).</summary>
     public Dictionary<string, DeviceRef> Players { get; } = [];
 

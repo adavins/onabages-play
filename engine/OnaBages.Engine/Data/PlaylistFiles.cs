@@ -21,9 +21,6 @@ public static class PlaylistFiles
     public const int SchemaVersion = 1;
     public const string Extension = ".obpl";
 
-    /// <summary>Carpeta on es desa sola l'última llista de cada reproductor.</summary>
-    public static string LastListsFolder => Path.Combine(RuntimeFile.DirectoryPath, "llistes");
-
     /// <summary>És un fitxer de llista (propi o M3U), no un fitxer d'àudio?</summary>
     public static bool IsPlaylistFile(string path) =>
         Path.GetExtension(path).ToLowerInvariant() is Extension or ".m3u" or ".m3u8";
@@ -158,8 +155,11 @@ public static class PlaylistFiles
         }
     }
 
-    /// <summary>Fitxer on es desa sola l'última llista d'un reproductor.</summary>
-    public static string LastListPath(string playerId) => Path.Combine(LastListsFolder, $"reproductor-{playerId}{Extension}");
+    /// <summary>
+    /// Fitxer on es desa sola l'última llista d'un reproductor, dins de la carpeta de llistes
+    /// del perfil actiu (<see cref="ConfigRepository.LastListsFolder"/>).
+    /// </summary>
+    public static string LastListPath(string folder, string playerId) => Path.Combine(folder, $"reproductor-{playerId}{Extension}");
 
     // -----------------------------------------------------------------------
 

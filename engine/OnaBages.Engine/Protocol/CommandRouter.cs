@@ -378,8 +378,11 @@ public sealed class CommandRouter
     {
         var (zoom, perRow, warning, players, recorders, programName) =
             config.Read(c => (c.UiZoom, c.RecordersPerRow, c.EndWarningSeconds, c.PlayerCount, c.RecorderCount, c.ProgramName));
+        var (profileId, profileName) = config.Read(c => (c.ProfileId, c.ProfileName));
         return new JsonObject
         {
+            // Perfil actiu (fase 4): la configuració de treball d'aquest programa.
+            ["profile"] = new JsonObject { ["id"] = profileId, ["name"] = profileName },
             ["ui"] = new JsonObject { ["zoom"] = zoom, ["recordersPerRow"] = perRow, ["endWarningSeconds"] = warning },
             ["layout"] = new JsonObject { ["players"] = players, ["recorders"] = recorders },
             ["program"] = new JsonObject { ["name"] = programName },

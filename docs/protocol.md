@@ -74,7 +74,7 @@ Tots els missatges són objectes JSON amb el camp `"v": 1`.
 | `engine.shutdown` | `force` (opcional, `true`) | `{ stopping: true }` i el motor es tanca. Si hi ha enregistraments en curs, es rebutja amb `recording_active`, tret que s'enviï `force: true`: llavors es tanquen correctament (fitxers vàlids, sense marcador `.rec`) abans d'aturar-se | fase 0 (`force`: fase 1) |
 | `devices.list` | `kind`: `"output"`, `"input"` o `"all"` (per defecte); `includeInactive`: `true` per incloure també els desactivats i desconnectats (per defecte, `false`) | `{ devices: [ … ] }` (vegeu 4.1) | fase 1 |
 | `hardware.report` | — | `{ report: { … } }`: resum de l'arrencada (vegeu 4.4) | fase 1 |
-| `settings.get` | — | `{ settings: { ui: { zoom, recordersPerRow, endWarningSeconds }, layout: { players, recorders }, program: { name }, folders: { history, logs }, restartNeeded } }`: ajustos desats a `config.json` (vegeu 4.9) | fase 2 (`layout`, `recordersPerRow`, `endWarningSeconds`, `restartNeeded`: pas 9; `program`: pas 10) |
+| `settings.get` | — | `{ settings: { profile: { id, name }, ui: { zoom, recordersPerRow, endWarningSeconds }, layout: { players, recorders }, program: { name }, folders: { history, logs }, restartNeeded } }`: ajustos desats a `config.json` i al perfil actiu (vegeu 4.9) | fase 2 (`layout`, `recordersPerRow`, `endWarningSeconds`, `restartNeeded`: pas 9; `program`: pas 10); `profile`: fase 4 |
 | `settings.set` | `ui`, `layout` i/o `program`: només els ajustos a canviar, p. ex. `{ "ui": { "zoom": 1.25 } }` (vegeu 4.9) | `{ settings }` amb tots els ajustos. Es desa de seguida. Si algun valor és fora de marge, `bad_params` i no es canvia res | fase 2 |
 
 ### 4.1. Dispositius
@@ -302,7 +302,8 @@ Objecte `cue` (a `state.get` i a l'esdeveniment `cue.state`):
 Objecte `settings` (resultat de `settings.get` i `settings.set`):
 
 ```json
-{ "ui": { "zoom": 1.0, "recordersPerRow": 2, "endWarningSeconds": 10 },
+{ "profile": { "id": "La Central", "name": "La Central" },
+  "ui": { "zoom": 1.0, "recordersPerRow": 2, "endWarningSeconds": 10 },
   "layout": { "players": 2, "recorders": 4 },
   "program": { "name": "Magazín dels dissabtes" },
   "folders": { "history": "C:\\Users\\...\\AppData\\Roaming\\OnaBages\\historial",
@@ -312,6 +313,7 @@ Objecte `settings` (resultat de `settings.get` i `settings.set`):
 
 | Camp | Valors | Què fa |
 |---|---|---|
+| `profile` | només es llegeix | Perfil actiu (fase 4, D-057): `id` és el nom de la seva carpeta (`perfils\<id>\`) i `name`, el nom que es mostra |
 | `ui.zoom` | de `0.5` a `1.5` (per defecte `1`) | Escala de la interfície. Per sota de `0.7` la lletra no es fa més petita |
 | `ui.recordersPerRow` | enter de `1` a `4` (per defecte `2`) | Enregistradors per fila a la interfície |
 | `ui.endWarningSeconds` | enter de `0` a `60` (per defecte `10`; `0` = sense avís) | Segons abans del final en què el temps restant d'un reproductor canvia d'aspecte |
@@ -319,6 +321,7 @@ Objecte `settings` (resultat de `settings.get` i `settings.set`):
 | `layout.recorders` | enter de `1` a `4` (per defecte `2`) | Nombre d'enregistradors |
 | `program.name` | text de com a molt 60 caràcters (per defecte `""`; `""` el treu) | Nom del programa: surt a la barra superior i a l'historial de reproducció (D-043). Els espais repetits i els salts de línia es treuen |
 
+- **On es desa cada cosa (fase 4, D-057):** `ui.zoom` és de l'ordinador (`config.json`); la resta (`ui.recordersPerRow`, `ui.endWarningSeconds`, `layout`, `program`), com també els dispositius dels reproductors, enregistradors i preescolta, els ajustos dels enregistradors i les últimes llistes, és del **perfil actiu** (`perfils\<id>\perfil.json` i `perfils\<id>\llistes\`). On aquest document diu que alguna cosa «es desa a `config.json`», vol dir a la configuració: al fitxer que li toca segons aquesta regla.
 - `folders` només es llegeix (no es pot canviar amb `settings.set`): carpetes de l'historial de reproducció (D-043) i dels registres del motor (D-045), perquè la interfície les pugui obrir.
 - `layout` **s'aplica en tornar a arrencar el motor** (mai amb el motor en marxa, perquè no s'aturi res que soni o enregistri). Mentrestant, `restartNeeded` és `true`: el nombre desat no és el que té el motor ara.
 - Si es treuen reproductors o enregistradors, **la seva configuració no s'esborra** (sortida o entrada, nom, carpeta, volum i última llista): si es tornen a posar, tornen tal com eren. En arrencar, també es busquen enregistraments interromputs a les carpetes dels que s'han tret.

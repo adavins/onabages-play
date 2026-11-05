@@ -10,8 +10,8 @@ L'especificació completa és a `docs/especificacio.md`. Llegeix-ne la secció c
 
 ## Fase actual
 
-**Fase 3 — Editor** (vegeu `docs/especificacio.md`, seccions 9 i 14.3).
-Pendent de les fases 1 i 2 (D-026, D-048): la prova de 3 hores, la desconnexió d'un USB real i un programa complet en paral·lel amb el Winamp.
+**Fase 4 — Processament, perfils i distribució flexible** (vegeu `docs/especificacio.md`, seccions 10, 11.2, 12.2 i 14.3).
+Pendent de les fases 1, 2 i 3 (D-026, D-048, D-056): la prova de 3 hores, la desconnexió d'un USB real, un programa complet en paral·lel amb el Winamp i la prova de l'editor amb el maquinari real.
 Ordinador de proves i repartiment de dispositius: `docs/inventari/`.
 Quan una fase s'acabi, actualitza aquesta línia i afegeix una entrada a `docs/decisions.md`.
 

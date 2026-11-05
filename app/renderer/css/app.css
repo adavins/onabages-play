@@ -100,9 +100,19 @@ body {
 }
 
 .brand {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
   font-weight: 600;
   font-size: 1.1rem;
   white-space: nowrap;
+}
+
+/* Logotip (app/assets/logo.svg). */
+.brand-logo {
+  width: 1.6rem;
+  height: 1.6rem;
+  flex: none;
 }
 
 .clock {

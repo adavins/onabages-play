@@ -25,6 +25,9 @@ const IS_PORTABLE = DATA_DIR !== path.join(app.getPath('appData'), 'OnaBages');
 if (IS_PORTABLE) app.setPath('userData', path.join(DATA_DIR, 'electron')); // abans de res més
 const RUNTIME_FILE = path.join(DATA_DIR, 'engine.json');
 
+/** Icona de les finestres (la de l'executable la posa empaquetar.cmd). Es genera amb tools/icona/generar-icona.js. */
+const APP_ICON = path.join(__dirname, '..', 'assets', 'icona.ico');
+
 /** @type {BrowserWindow | null} */
 let mainWindow = null;
 /** @type {{ port: number, token: string } | null} */
@@ -54,6 +57,7 @@ function createWindow() {
     show: false,
     title: 'Ona Bages Play',
     backgroundColor: '#121417',
+    icon: APP_ICON,
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -404,6 +408,7 @@ function openEditorWindow(filePath) {
     show: false,
     title: 'Editor — Ona Bages Play',
     backgroundColor: '#121417',
+    icon: APP_ICON,
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),

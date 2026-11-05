@@ -39,6 +39,7 @@ cd app
 if not exist node_modules call npm install
 call npx electron-packager . OnaBagesPlay --platform=win32 --arch=x64 --out=..\build --overwrite ^
     --extra-resource=..\build\engine ^
+    --icon=assets\icona.ico ^
     --app-version=%VERSION% ^
     --win32metadata.ProductName="Ona Bages Play" ^
     --win32metadata.FileDescription="Ona Bages Play" ^

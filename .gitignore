@@ -20,3 +20,6 @@ Thumbs.db
 # Fitxers de proves d'àudio locals
 test-audio/
 *.rec
+
+# Mostra de la icona (tools/icona/generar-icona.js)
+tools/icona/icona-mostra.png

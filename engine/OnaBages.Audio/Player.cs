@@ -74,7 +74,7 @@ public sealed class Player : IDisposable
     /// <summary>Pistes encadenades pel fil de lectura que encara no han començat a sonar.</summary>
     private readonly ConcurrentQueue<Transition> _transitions = new();
 
-    private sealed record Transition(long StartFrame, PlaylistItem Item, TimeSpan Duration, double? NormalizationDb);
+    private sealed record Transition(long StartFrame, PlaylistItem Item, TimeSpan Duration, double? NormalizationDb, TimeSpan StartOffset);
 
     /// <param name="id">Identificador del reproductor ("1", "2"...).</param>
     /// <param name="openOutput">Obre una sortida per identificador de dispositiu. Per defecte, WASAPI.</param>
@@ -197,6 +197,102 @@ public sealed class Player : IDisposable
 
     /// <summary>Mostres (estèreo intercalades) que dura el fos a aquesta freqüència.</summary>
     private int CrossfadeSamples(int sampleRate) => (int)((long)_crossfadeMs * sampleRate / 1000) * 2;
+
+    // --- Retall automàtic de silencis (fase 5, pas 8b; D-080) ---
+
+    /// <summary>Ajustos del retall: llindar (dBFS, un de <see cref="TrackLoudness.SilenceThresholdsDb"/>) i marges en ms.</summary>
+    public readonly record struct TrimSettings(bool Enabled, int ThresholdDb = -60, int LeadMs = 10, int TailMs = 50);
+
+    public const int MaxTrimMarginMs = 2000;
+
+    private volatile TrimSettingsBox _trim = new(new TrimSettings(false));
+
+    /// <summary>Capsa immutable perquè el fil de lectura llegeixi els ajustos d'un sol cop (sense bloqueig).</summary>
+    private sealed record TrimSettingsBox(TrimSettings Value);
+
+    /// <summary>Retall de silencis del reproductor. Desactivat per defecte.</summary>
+    public TrimSettings Trim => _trim.Value;
+
+    /// <summary>
+    /// Activa o desactiva el retall i en fixa el llindar i els marges (fora de marge, al límit; un llindar
+    /// que no és dels que es mesuren, el més proper). S'aplica a partir de la pista següent.
+    /// </summary>
+    public void SetTrim(TrimSettings settings)
+    {
+        int threshold = TrackLoudness.SilenceThresholdsDb.MinBy(t => Math.Abs(t - settings.ThresholdDb));
+        var clean = new TrimSettings(settings.Enabled, threshold,
+            Math.Clamp(settings.LeadMs, 0, MaxTrimMarginMs), Math.Clamp(settings.TailMs, 0, MaxTrimMarginMs));
+        lock (_sync)
+        {
+            _trim = new TrimSettingsBox(clean);
+            _changed = true;
+        }
+        RaiseStateChanged();
+    }
+
+    /// <summary>
+    /// On comença i on acaba de sonar una pista: amb el retall, del primer so (menys el marge) a l'últim
+    /// (més el marge); si no, de <paramref name="requestedStart"/> al final. Si se n'ha demanat un començament
+    /// concret (p. ex. un salt), es respecta. Es pot cridar des del fil de lectura (llegeix els ajustos d'un cop).
+    /// </summary>
+    private (TimeSpan Start, TimeSpan? End, bool Exact) TrimFor(PlaylistItem item, TimeSpan requestedStart)
+    {
+        var trim = _trim.Value;
+        if (!trim.Enabled || item.Sound is null) return (requestedStart, null, false);
+        SoundBounds? bounds = null;
+        foreach (var b in item.Sound)
+        {
+            if (b.ThresholdDb == trim.ThresholdDb) bounds = b;
+        }
+        if (bounds is not { } sound) return (requestedStart, null, false); // tot silenci, o sense anàlisi: no es toca
+
+        var end = TimeSpan.FromSeconds(sound.End + trim.TailMs / 1000.0);
+        if (requestedStart > TimeSpan.Zero) return (requestedStart, end, false);
+        var start = TimeSpan.FromSeconds(Math.Max(0, sound.Start - trim.LeadMs / 1000.0));
+        return (start, end, start > TimeSpan.Zero);
+    }
+
+    /// <summary>Quantes mostres per canal es poden llegir d'una pista que comença a <paramref name="start"/> (−1 = fins al final).</summary>
+    private static long FramesUntil(TimeSpan start, TimeSpan? end, int sampleRate) =>
+        end is { } e ? Math.Max(0, (long)Math.Round((e - start).TotalSeconds * sampleRate)) : -1;
+
+    /// <summary>
+    /// Obre una pista per al fil de lectura: des de <paramref name="start"/> (a la mostra exacta si
+    /// <paramref name="exact"/>) i, amb el retall, fins a <paramref name="end"/>.
+    /// </summary>
+    /// <exception cref="AudioFileException">Si no es pot llegir.</exception>
+    private static TrackReader OpenTrack(PlaylistItem item, int sampleRate, TimeSpan start, TimeSpan? end, bool exact)
+    {
+        var source = AudioFileSource.Open(item.Path, sampleRate, start, exact);
+        // El final no pot passar del final del fitxer.
+        TimeSpan? limit = end is { } e && e < source.Duration ? e : null;
+        return new TrackReader(source, start, limit is { } l ? l : source.Duration, FramesUntil(start, limit, sampleRate));
+    }
+
+    /// <summary>
+    /// Una pista oberta per al fil de lectura: no en dona més mostres de les que toquen (amb el retall,
+    /// para a l'últim so més el marge). <see cref="Duration"/> és on s'acaba de sonar (temps del fitxer).
+    /// </summary>
+    private sealed class TrackReader(AudioFileSource source, TimeSpan start, TimeSpan duration, long frames) : IDisposable
+    {
+        private long _remaining = frames < 0 ? long.MaxValue : frames * 2; // mostres (estèreo)
+
+        /// <summary>On comença a sonar (temps del fitxer).</summary>
+        public TimeSpan Start => start;
+
+        /// <summary>On s'acaba de sonar (temps del fitxer): el final o, amb el retall, l'últim so més el marge.</summary>
+        public TimeSpan Duration => duration;
+
+        public int Read(Span<float> buffer)
+        {
+            if (_remaining <= 0) return 0;
+            int read = source.Read(buffer[..(int)Math.Min(buffer.Length, _remaining)]);
+            _remaining -= read;
+            return read;
+        }
+
+        public void Dispose() => source.Dispose();
+    }
 
     // --- Normalització de sonoritat (fase 4, pas 5b; D-071) ---
 
@@ -461,7 +557,7 @@ public sealed class Player : IDisposable
                     LastPlayedId = CurrentItemId;
                     SetCurrent(next.Item, next.Duration);
                     NormalizationDb = next.NormalizationDb;
-                    _startOffset = TimeSpan.Zero;
+                    _startOffset = next.StartOffset; // amb el retall, el primer so (temps del fitxer)
                     _trackStartFrame = next.StartFrame;
                     Playlist.ClearCueIf(next.Item.Id);
                     _changed = true;
@@ -565,11 +661,16 @@ public sealed class Player : IDisposable
         }
         SetCurrent(item, item.Duration ?? TimeSpan.Zero);
 
-        AudioFileSource? source = null;
+        // Retall de silencis (D-080): on comença i on acaba de sonar (sense retall, tota la pista).
+        var (start, end, exact) = TrimFor(item, startAt);
+        _keptPosition = start;
+        _startOffset = start;
+
+        TrackReader source;
         try
         {
             _output = _openOutput(DeviceId!);
-            source = AudioFileSource.Open(item.Path, _output.SampleRate, startAt);
+            source = OpenTrack(item, _output.SampleRate, start, end, exact);
         }
         catch (Exception ex) when (ex is AudioDeviceException or AudioFileException)
         {
@@ -623,10 +724,12 @@ public sealed class Player : IDisposable
         int sampleRate = output.SampleRate;
 
         // 1. La pista nova s'obre abans de tocar res: si no es pot, la que sona no s'interromp.
-        AudioFileSource source;
+        var (start, end, exact) = TrimFor(item, startAt);
+        startAt = start;
+        TrackReader source;
         try
         {
-            source = AudioFileSource.Open(item.Path, sampleRate, startAt);
+            source = OpenTrack(item, sampleRate, start, end, exact);
         }
         catch (AudioFileException ex)
         {
@@ -700,7 +803,7 @@ public sealed class Player : IDisposable
     /// continua escrivint: així no hi ha silenci entre pistes.
     /// </summary>
     /// <param name="gain">Guany de normalització de la pista (lineal; 1 = cap). Cada pista encadenada porta el seu.</param>
-    private void ReaderLoop(AudioFileSource source, SampleRingBuffer ring, PlayerStream stream, int sampleRate, string itemId, float gain)
+    private void ReaderLoop(TrackReader source, SampleRingBuffer ring, PlayerStream stream, int sampleRate, string itemId, float gain)
     {
         var chunk = new float[ReadChunkSamples];
         var overflow = new float[ReadChunkSamples];
@@ -793,7 +896,7 @@ public sealed class Player : IDisposable
                     source = nextSource;
                     itemId = next.Id;
                     gain = nextGain;
-                    _transitions.Enqueue(new Transition(startFrame, next, nextSource.Duration, normalization));
+                    _transitions.Enqueue(new Transition(startFrame, next, nextSource.Duration, normalization, nextSource.Start));
                     ResetTail(); // la durada del fos es torna a llegir per a cada pista
                     continue;
                 }
@@ -828,11 +931,13 @@ public sealed class Player : IDisposable
     }
 
     /// <summary>Obre la pista següent; si no es pot, la marca a la llista i retorna null (la llista s'atura).</summary>
-    private AudioFileSource? TryOpen(PlaylistItem item, int sampleRate)
+    private TrackReader? TryOpen(PlaylistItem item, int sampleRate)
     {
         try
         {
-            return AudioFileSource.Open(item.Path, sampleRate);
+            // Una pista encadenada sempre comença des del principi (o del primer so, amb el retall).
+            var (start, end, exact) = TrimFor(item, TimeSpan.Zero);
+            return OpenTrack(item, sampleRate, start, end, exact);
         }
         catch (AudioFileException ex)
         {

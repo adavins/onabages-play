@@ -658,6 +658,22 @@ public sealed class ConfigRepository
             }
         }
 
+        // Retall de silencis (fase 5; camp opcional, sense canvi de versió).
+        if (root["trim"] is JsonObject trim)
+        {
+            if (Int(trim["thresholdDb"]) is { } threshold)
+                config.TrimThresholdDb = TrackLoudness.SilenceThresholdsDb.MinBy(t => Math.Abs(t - threshold));
+            if (Int(trim["leadMs"]) is { } lead) config.TrimLeadMs = Math.Clamp(lead, 0, Player.MaxTrimMarginMs);
+            if (Int(trim["tailMs"]) is { } tail) config.TrimTailMs = Math.Clamp(tail, 0, Player.MaxTrimMarginMs);
+            if (trim["players"] is JsonArray trimmed)
+            {
+                foreach (var item in trimmed)
+                {
+                    if (Text(item) is { Length: > 0 } playerId) config.TrimPlayers.Add(playerId);
+                }
+            }
+        }
+
         // Normalització de sonoritat (pas 5b; camp opcional, sense canvi de versió).
         if (root["normalization"] is JsonObject normalization)
         {
@@ -806,6 +822,13 @@ public sealed class ConfigRepository
             .Where(p => p.Value > 0)
             .OrderBy(p => p.Key, StringComparer.Ordinal)
             .Select(p => KeyValuePair.Create(p.Key, (JsonNode?)p.Value))),
+        ["trim"] = new JsonObject
+        {
+            ["thresholdDb"] = config.TrimThresholdDb,
+            ["leadMs"] = config.TrimLeadMs,
+            ["tailMs"] = config.TrimTailMs,
+            ["players"] = new JsonArray(config.TrimPlayers.Order(StringComparer.Ordinal).Select(id => (JsonNode)id).ToArray()),
+        },
         ["normalization"] = new JsonObject
         {
             ["targetLufs"] = config.LoudnessTargetLufs,

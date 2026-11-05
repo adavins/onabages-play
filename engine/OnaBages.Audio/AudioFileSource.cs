@@ -20,7 +20,7 @@ public sealed class AudioFileSource : IDisposable
     private readonly WaveStream _reader;
     private readonly ISampleProvider _output;
 
-    private AudioFileSource(WaveStream reader, int targetSampleRate, TimeSpan startAt)
+    private AudioFileSource(WaveStream reader, int targetSampleRate, TimeSpan startAt, bool exactStart)
     {
         _reader = reader;
         Duration = reader.TotalTime;
@@ -29,7 +29,7 @@ public sealed class AudioFileSource : IDisposable
 
         // Començar a mig fitxer (p. ex. en reintentar després d'un error). Es fa abans de
         // muntar el remostrejador perquè aquest comenci net.
-        if (startAt > TimeSpan.Zero)
+        if (startAt > TimeSpan.Zero && !exactStart)
             reader.CurrentTime = startAt < Duration ? startAt : Duration;
 
         ISampleProvider samples = ToStereo(reader.ToSampleProvider());
@@ -38,6 +38,21 @@ public sealed class AudioFileSource : IDisposable
             samples = new WdlResamplingSampleProvider(samples, targetSampleRate);
 
         _output = samples;
+
+        // Començament exacte (retall de silencis, fase 5; D-080): saltar dins d'un MP3 no cau a la mostra
+        // exacta (es van mesurar desplaçaments de fins a 15 ms), així que es descodifica des del principi i es
+        // descarten les mostres d'abans. Per a uns pocs segons (el silenci inicial) és molt ràpid.
+        if (startAt > TimeSpan.Zero && exactStart)
+        {
+            long skip = (long)Math.Round(startAt.TotalSeconds * _output.WaveFormat.SampleRate) * _output.WaveFormat.Channels;
+            var discard = new float[8192];
+            while (skip > 0)
+            {
+                int read = _output.Read(discard.AsSpan(0, (int)Math.Min(discard.Length, skip)));
+                if (read == 0) break;
+                skip -= read;
+            }
+        }
     }
 
     /// <summary>Durada total del fitxer.</summary>
@@ -59,7 +74,9 @@ public sealed class AudioFileSource : IDisposable
     /// <param name="targetSampleRate">Freqüència de sortida (es remostreja si cal). 0 = la del fitxer.</param>
     /// <param name="startAt">Punt on comença la lectura (per defecte, l'inici).</param>
     /// <exception cref="AudioFileException">Si el fitxer no existeix o no es pot llegir.</exception>
-    public static AudioFileSource Open(string path, int targetSampleRate, TimeSpan startAt = default)
+    /// <param name="exactStart">Començar exactament a <paramref name="startAt"/>, a la mostra (descodificant des del principi).
+    /// Per defecte, es salta directament, que és més ràpid però pot quedar uns mil·lisegons desplaçat.</param>
+    public static AudioFileSource Open(string path, int targetSampleRate, TimeSpan startAt = default, bool exactStart = false)
     {
         if (!File.Exists(path))
             throw new AudioFileException($"No es troba el fitxer: {path}");
@@ -71,7 +88,7 @@ public sealed class AudioFileSource : IDisposable
                 reader = TryOpenWave(path);
 
             reader ??= new MediaFoundationReader(path);
-            return new AudioFileSource(reader, targetSampleRate, startAt);
+            return new AudioFileSource(reader, targetSampleRate, startAt, exactStart);
         }
         catch (Exception ex) when (ex is not AudioFileException)
         {

@@ -27,6 +27,14 @@ public static class PlayerJson
         ["processing"] = Data.ConfigRepository.WriteDynamics(null, player.Dynamics),
         // Fos entre pistes encadenades (fase 5): 0 = cap.
         ["crossfadeMs"] = player.CrossfadeMs,
+        // Retall de silencis (fase 5): enabled i els ajustos (comuns al perfil).
+        ["trim"] = new JsonObject
+        {
+            ["enabled"] = player.Trim.Enabled,
+            ["thresholdDb"] = player.Trim.ThresholdDb,
+            ["leadMs"] = player.Trim.LeadMs,
+            ["tailMs"] = player.Trim.TailMs,
+        },
         // Normalització de sonoritat (fase 4, pas 5b): gainDb és el guany de la pista que sona (null = cap).
         ["normalization"] = new JsonObject
         {

@@ -106,6 +106,27 @@ public sealed partial class CommandRouter
     }
 
     /// <summary>
+    /// Retall automàtic de silencis d'un reproductor (fase 5; D-080): player, enabled. El llindar i els marges
+    /// són comuns al perfil (settings.set trim). S'aplica a partir de la pista següent. Es desa al perfil.
+    /// </summary>
+    private JsonObject PlayerSetTrim(JsonObject msg)
+    {
+        var player = GetPlayer(msg);
+        if (msg["enabled"] is not JsonValue v || !v.TryGetValue(out bool enabled))
+            throw new BadParamsException("'enabled' ha de ser true o false.");
+
+        var (threshold, lead, tail) = _config?.Read(c => (c.TrimThresholdDb, c.TrimLeadMs, c.TrimTailMs))
+            ?? (player.Trim.ThresholdDb, player.Trim.LeadMs, player.Trim.TailMs);
+        player.SetTrim(new Player.TrimSettings(enabled, threshold, lead, tail));
+        _config?.Update(c =>
+        {
+            if (enabled) c.TrimPlayers.Add(player.Id);
+            else c.TrimPlayers.Remove(player.Id);
+        });
+        return new JsonObject { ["player"] = PlayerJson.Player(player) };
+    }
+
+    /// <summary>
     /// Desa un preset propi: name, i els ajustos (processing) o els del reproductor (player).
     /// Si ja n'hi ha un de propi amb aquest nom, se substitueix (la interfície ho confirma abans).
     /// { preset: { id, name }, processingPresets }

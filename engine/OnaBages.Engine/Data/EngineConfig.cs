@@ -89,6 +89,20 @@ public sealed class EngineConfig
     /// <summary>Presets propis del compressor/limitador, en l'ordre en què es van desar (D-069).</summary>
     public List<ProcessingPreset> ProcessingPresets { get; set; } = [];
 
+    // --- Retall automàtic de silencis (fase 5, pas 8b; del perfil) ---
+
+    /// <summary>Reproductors que retallen els silencis inicials i finals (per defecte, cap: D-079).</summary>
+    public HashSet<string> TrimPlayers { get; } = [];
+
+    /// <summary>Llindar del silenci (dBFS de pic): un de −40, −50, −60, −70 o −80.</summary>
+    public int TrimThresholdDb { get; set; } = -60;
+
+    /// <summary>Marge abans del primer so (ms), perquè l'atac quedi sencer.</summary>
+    public int TrimLeadMs { get; set; } = 10;
+
+    /// <summary>Marge després de l'últim so (ms), per a la cua.</summary>
+    public int TrimTailMs { get; set; } = 50;
+
     // --- Normalització de sonoritat (fase 4, pas 5b; del perfil) ---
 
     /// <summary>Reproductors que normalitzen (per defecte, cap: D-070).</summary>

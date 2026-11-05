@@ -339,6 +339,8 @@ foreach (var player in state.Players)
     player.SetNormalization(normalize, target);
     // Fos entre pistes encadenades (fase 5).
     player.SetCrossfade(config.Read(c => c.PlayerCrossfadeMs.GetValueOrDefault(player.Id)));
+    // Retall de silencis (fase 5).
+    player.SetTrim(config.Read(c => new Player.TrimSettings(c.TrimPlayers.Contains(player.Id), c.TrimThresholdDb, c.TrimLeadMs, c.TrimTailMs)));
 }
 
 // Enregistraments interromputs (el motor o l'ordinador van caure): es recuperen abans de res

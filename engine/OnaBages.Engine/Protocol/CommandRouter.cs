@@ -94,6 +94,7 @@ public sealed partial class CommandRouter
                 "player.setProcessing" => PlayerSetProcessing(msg),
                 "player.setNormalization" => PlayerSetNormalization(msg),
                 "player.setCrossfade" => PlayerSetCrossfade(msg),
+                "player.setTrim" => PlayerSetTrim(msg),
                 "processing.savePreset" => ProcessingSavePreset(msg),
                 "processing.deletePreset" => ProcessingDeletePreset(msg),
                 "player.playItem" => PlayerCommand(msg, p => p.PlayItem(RequireString(msg, "itemId"))),
@@ -372,8 +373,9 @@ public sealed partial class CommandRouter
         var layout = msg["layout"] as JsonObject;
         var program = msg["program"] as JsonObject;
         var loudness = msg["loudness"] as JsonObject;
-        if (ui is null && layout is null && program is null && loudness is null)
-            throw new BadParamsException("Falta el camp 'ui', 'layout', 'program' o 'loudness' amb els ajustos a canviar.");
+        var trim = msg["trim"] as JsonObject;
+        if (ui is null && layout is null && program is null && loudness is null && trim is null)
+            throw new BadParamsException("Falta el camp 'ui', 'layout', 'program', 'loudness' o 'trim' amb els ajustos a canviar.");
 
         double? zoom = OptionalNumber(ui?["zoom"], "ui.zoom", EngineConfig.MinZoom, EngineConfig.MaxZoom);
         int? perRow = OptionalInt(ui?["recordersPerRow"], "ui.recordersPerRow", 1, EngineConfig.MaxRecorders);
@@ -382,6 +384,11 @@ public sealed partial class CommandRouter
         int? recorders = OptionalInt(layout?["recorders"], "layout.recorders", 1, EngineConfig.MaxRecorders);
         string? programName = OptionalProgramName(program?["name"]);
         double? target = OptionalNumber(loudness?["targetLufs"], "loudness.targetLufs", EngineConfig.MinLoudnessTargetLufs, EngineConfig.MaxLoudnessTargetLufs);
+        int? trimThreshold = OptionalInt(trim?["thresholdDb"], "trim.thresholdDb", -80, -40);
+        if (trimThreshold is { } tt && !TrackLoudness.SilenceThresholdsDb.Contains(tt))
+            throw new BadParamsException("'trim.thresholdDb' ha de ser -40, -50, -60, -70 o -80.");
+        int? trimLead = OptionalInt(trim?["leadMs"], "trim.leadMs", 0, Player.MaxTrimMarginMs);
+        int? trimTail = OptionalInt(trim?["tailMs"], "trim.tailMs", 0, Player.MaxTrimMarginMs);
 
         config.Update(c =>
         {
@@ -394,7 +401,18 @@ public sealed partial class CommandRouter
             if (recorders is { } n) c.RecorderCount = n;
             if (programName is not null) c.ProgramName = programName;
             if (target is { } t) c.LoudnessTargetLufs = Math.Round(t, 1);
+            if (trimThreshold is { } th) c.TrimThresholdDb = th;
+            if (trimLead is { } lead) c.TrimLeadMs = lead;
+            if (trimTail is { } tail) c.TrimTailMs = tail;
         });
+
+        // El retall nou s'aplica a tots els reproductors (a partir de la pista següent).
+        if (trim is not null)
+        {
+            var (trimmed, th, lead, tail) = config.Read(c => (c.TrimPlayers.ToHashSet(), c.TrimThresholdDb, c.TrimLeadMs, c.TrimTailMs));
+            foreach (var player in _state.Players)
+                player.SetTrim(new Player.TrimSettings(trimmed.Contains(player.Id), th, lead, tail));
+        }
 
         // L'objectiu nou s'aplica a tots els reproductors (a partir de la pista següent).
         if (target is not null)
@@ -418,6 +436,15 @@ public sealed partial class CommandRouter
             ["profile"] = new JsonObject { ["id"] = profileId, ["name"] = profileName },
             // Normalització de sonoritat (fase 4, pas 5b).
             ["loudness"] = new JsonObject { ["targetLufs"] = config.Read(c => c.LoudnessTargetLufs), ["maxBoostDb"] = Player.MaxNormalizationBoostDb },
+            // Retall de silencis (fase 5): comú a tots els reproductors del perfil; cada un l'activa amb player.setTrim.
+            ["trim"] = config.Read(c => new JsonObject
+            {
+                ["thresholdDb"] = c.TrimThresholdDb,
+                ["leadMs"] = c.TrimLeadMs,
+                ["tailMs"] = c.TrimTailMs,
+                ["thresholds"] = new JsonArray(TrackLoudness.SilenceThresholdsDb.Select(t => (JsonNode)t).ToArray()),
+                ["maxMarginMs"] = Player.MaxTrimMarginMs,
+            }),
             // Presets del compressor/limitador dels reproductors (fase 4, pas 4b).
             ["processingPresets"] = ProcessingPresetsJson(),
             ["ui"] = new JsonObject { ["zoom"] = zoom, ["recordersPerRow"] = perRow, ["endWarningSeconds"] = warning },

@@ -33,6 +33,9 @@ public static class PlaylistJson
         ["format"] = item.Format,
         // Sonoritat en LUFS (fase 4, pas 5b), quan ja s'ha mesurat; si no (o és silenci), null.
         ["loudness"] = item.LoudnessLufs is { } lufs ? Math.Round(lufs, 1) : null,
+        // On hi ha so per a cada llindar (retall de silencis, fase 5): [[llindar, inici, final], ...] en segons; null si encara no s'ha analitzat.
+        ["sound"] = item.Sound is null ? null : new JsonArray(item.Sound
+            .Select(b => (JsonNode)new JsonArray(b.ThresholdDb, Math.Round(b.Start, 4), Math.Round(b.End, 4))).ToArray()),
         ["status"] = item.Status switch
         {
             TrackStatus.Analyzing => "analyzing",

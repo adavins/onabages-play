@@ -460,7 +460,7 @@ Editar ràpidament un enregistrament acabat, com amb mp3DirectCut: retallar, tre
 - Desar com a fitxer nou, o sobreescriure amb confirmació.
 
 **Segona versió:**
-- Fos d'entrada i de sortida.
+- Fos d'entrada i de sortida. Fet (fase 4, D-073–D-075): sobre la selecció, sense recodificar, amb els botons «Fos d'entrada» i «Fos de sortida» (tecles E i S); es veuen a l'ona i se senten a la previsualització.
 - Marcadors.
 - Normalització del volum del fitxer.
 

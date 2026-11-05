@@ -39,6 +39,8 @@ export class Waveform {
   // Dades
   /** @type {Uint8Array} */ #peaks = new Uint8Array(0);   // de l'original: 2 bytes (E, D) per fotograma
   #peaksDone = 0;                                            // fotogrames de l'original amb pic
+  /** Guany dels fosos per fotograma de l'original (1 = sense canvi; null = cap fos). @type {Float32Array | null} */
+  #gains = null;
   /** @type {Int32Array} */ #map = new Int32Array(0);       // editat → original
   /** @type {number[]} */ #cuts = [];                       // fotogrames (editats) on hi ha un tall
   frameSeconds = 0.026;
@@ -92,6 +94,7 @@ export class Waveform {
   reset(/** @type {number} */ originalFrames, /** @type {number} */ frameSeconds) {
     this.#peaks = new Uint8Array(originalFrames * 2);
     this.#peaksDone = 0;
+    this.#gains = null;
     this.frameSeconds = frameSeconds;
     this.cursor = 0;
     this.selection = null;
@@ -102,6 +105,28 @@ export class Waveform {
   addPeaks(/** @type {number} */ start, /** @type {Uint8Array} */ data) {
     this.#peaks.set(data.subarray(0, Math.max(0, this.#peaks.length - start * 2)), start * 2);
     this.#peaksDone = Math.max(this.#peaksDone, start + data.length / 2);
+    this.requestDraw();
+  }
+
+  /**
+   * Fosos (fase 4, pas 6c): [[fotograma de l'original, passos del grànul 1, passos del grànul 2], ...].
+   * Cada pas és de 1,5 dB; silenceSteps o menys = silenci. L'ona es dibuixa amb el pic multiplicat
+   * pel guany més alt dels grànuls de cada fotograma.
+   * @param {[number, number, number][]} gains
+   * @param {number} silenceSteps
+   * @param {number} granulesPerFrame
+   */
+  setGains(gains, silenceSteps, granulesPerFrame) {
+    if (!gains || gains.length === 0) {
+      this.#gains = null;
+    } else {
+      const factor = (/** @type {number} */ steps) => (steps <= silenceSteps ? 0 : Math.pow(10, (steps * 1.5) / 20));
+      const result = new Float32Array(this.#peaks.length / 2).fill(1);
+      for (const [frame, g0, g1] of gains) {
+        if (frame < result.length) result[frame] = Math.max(factor(g0), granulesPerFrame > 1 ? factor(g1) : 0);
+      }
+      this.#gains = result;
+    }
     this.requestDraw();
   }
 
@@ -264,7 +289,7 @@ export class Waveform {
       for (let f = Math.max(0, f0); f < Math.min(total, f1); f++) {
         const original = map[f];
         if (original >= this.#peaksDone) { missing = true; continue; }
-        const v = peaks[original * 2 + channel];
+        const v = peaks[original * 2 + channel] * (this.#gains ? this.#gains[original] : 1);
         if (v > max) max = v;
       }
 
@@ -337,7 +362,7 @@ export class Waveform {
       for (let f = f0; f < Math.min(total, f1); f += stepF) {
         const original = this.#map[f];
         if (original >= this.#peaksDone) continue;
-        const v = Math.max(this.#peaks[original * 2], this.#peaks[original * 2 + 1]);
+        const v = Math.max(this.#peaks[original * 2], this.#peaks[original * 2 + 1]) * (this.#gains ? this.#gains[original] : 1);
         if (v > max) max = v;
       }
       const h = Math.max(0.5, (max / 255) * (mid - 1));

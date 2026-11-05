@@ -33,6 +33,8 @@ const els = {
   trimEnd: /** @type {HTMLButtonElement} */ ($('ed-trim-end')),
   del: /** @type {HTMLButtonElement} */ ($('ed-delete')),
   keep: /** @type {HTMLButtonElement} */ ($('ed-keep')),
+  fadeIn: /** @type {HTMLButtonElement} */ ($('ed-fade-in')),
+  fadeOut: /** @type {HTMLButtonElement} */ ($('ed-fade-out')),
   undo: /** @type {HTMLButtonElement} */ ($('ed-undo')),
   redo: /** @type {HTMLButtonElement} */ ($('ed-redo')),
   zoomIn: /** @type {HTMLButtonElement} */ ($('ed-zoom-in')),
@@ -53,6 +55,8 @@ let peaksFetched = 0;
 let fetchingPeaks = false;
 /** Segments que té la forma d'ona (per no refer-la si no canvien). */
 let segmentsKey = '';
+/** Últims fosos dibuixats (per no recalcular-los si no canvien). */
+let loadedGainsKey = '';
 /** Sortides de so (per al desplegable). @type {any[]} */
 let outputs = [];
 let cueDeviceName = '';
@@ -170,6 +174,7 @@ function apply(/** @type {any} */ state) {
   const ready = state.open && !state.busy && state.frames !== null;
   if (ready && state.path !== loadedPath) {
     loadedPath = state.path;
+    loadedGainsKey = '';
     peaksFetched = 0;
     segmentsKey = '';
     wave.reset(state.originalFrames, state.frameSeconds);
@@ -188,6 +193,12 @@ function apply(/** @type {any} */ state) {
       segmentsKey = key;
       wave.setSegments(state.segments);
       if (first) wave.zoomAll();
+    }
+    // Fosos (fase 4, pas 6c): l'ona es dibuixa amb el volum que tindrà.
+    const gainsKey = JSON.stringify(state.gains ?? []);
+    if (gainsKey !== loadedGainsKey) {
+      loadedGainsKey = gainsKey;
+      wave.setGains(state.gains ?? [], state.silenceSteps, state.granulesPerFrame);
     }
     fetchPeaks();
   }
@@ -271,6 +282,8 @@ function renderControls() {
   els.trimEnd.disabled = !ready || wave.cursor >= wave.frames;
   els.del.disabled = !hasSel;
   els.keep.disabled = !hasSel;
+  els.fadeIn.disabled = !hasSel;
+  els.fadeOut.disabled = !hasSel;
   els.undo.disabled = !ready || !editor.canUndo;
   els.redo.disabled = !ready || !editor.canRedo;
   els.zoomIn.disabled = !ready;
@@ -428,6 +441,14 @@ async function deleteRange(/** @type {number} */ start, /** @type {number} */ en
   }
 }
 
+/** Fos d'entrada o de sortida a la selecció (sense recodificar; D-073). La selecció es manté, per sentir-lo. */
+async function fadeSelection(/** @type {'editor.fadeIn' | 'editor.fadeOut'} */ cmd) {
+  const sel = wave.selection;
+  if (!sel || !editor?.open) return;
+  const fs = editor.frameSeconds;
+  await send(cmd, { start: sel.start * fs, end: sel.end * fs });
+}
+
 async function keepSelection() {
   const sel = wave.selection;
   if (!sel || !editor?.open) return;
@@ -476,6 +497,8 @@ function setupButtons() {
   els.trimEnd.addEventListener('click', () => deleteRange(wave.cursor, wave.frames));
   els.del.addEventListener('click', () => wave.selection && deleteRange(wave.selection.start, wave.selection.end));
   els.keep.addEventListener('click', keepSelection);
+  els.fadeIn.addEventListener('click', () => fadeSelection('editor.fadeIn'));
+  els.fadeOut.addEventListener('click', () => fadeSelection('editor.fadeOut'));
   els.undo.addEventListener('click', () => send('editor.undo'));
   els.redo.addEventListener('click', () => send('editor.redo'));
   els.zoomIn.addEventListener('click', () => wave.zoom(0.5));
@@ -509,6 +532,9 @@ function setupKeyboard() {
     else if (ctrl && e.key.toLowerCase() === 's') action = saveOver;
     else if (ctrl && e.key.toLowerCase() === 'o') action = chooseAndOpen;
     else if (ctrl && e.key.toLowerCase() === 'a') action = selectAll;
+    // Fosos: E (entrada) i S (sortida), sense Ctrl (Ctrl+S és desar).
+    else if (!ctrl && e.key.toLowerCase() === 'e') action = () => fadeSelection('editor.fadeIn');
+    else if (!ctrl && e.key.toLowerCase() === 's') action = () => fadeSelection('editor.fadeOut');
     else if (e.key === 'Home') action = () => moveCursor(0);
     else if (e.key === 'End') action = () => moveCursor(wave.frames);
     else if (e.key === 'ArrowLeft') action = () => moveCursor(wave.cursor - second * (e.shiftKey ? 10 : 1));

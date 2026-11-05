@@ -265,7 +265,7 @@ function setupPanels() {
   store.addEventListener('cuePosition', () => cuePanel?.render());
   store.addEventListener('devices', renderAll);
   store.addEventListener('meters', () => {
-    for (const [id, panel] of playerPanels) panel.updateMeter(store.meters.players?.[id]);
+    for (const [id, panel] of playerPanels) panel.updateMeter(store.meters.players?.[id], store.meters.playerReduction?.[id]);
     for (const [id, panel] of recorderPanels) panel.updateMeter(store.meters.recorders?.[id]);
     cuePanel?.updateMeter(store.meters.cue);
   });

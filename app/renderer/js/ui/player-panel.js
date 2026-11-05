@@ -11,6 +11,7 @@ import { VolumeFader } from './fader.js';
 import { PlaylistView, sectionOf } from './playlist-view.js';
 import { escapeHtml, formatDuration } from './format.js';
 import { playKey } from './shortcuts.js';
+import { openProcessingDialog } from './processing-dialog.js';
 
 /** @typedef {import('../store.js').Store} Store */
 /** @typedef {(cmd: string, params?: object) => Promise<any>} Request */
@@ -43,6 +44,8 @@ export class PlayerPanel {
   /** @type {number | null} */ #dragFraction = null;
   /** El comptador gran mostra el temps transcorregut en lloc del restant. */
   #showElapsed = false;
+  /** Reducció del compressor que es mostra (amb caiguda suau). */
+  #shownReduction = 0;
 
   /**
    * @param {Store} store
@@ -60,7 +63,10 @@ export class PlayerPanel {
     this.element.innerHTML = `
       <div class="card-header panel-header">
         <span class="panel-title"><i class="bi bi-music-note-list"></i> Reproductor ${escapeHtml(id)}</span>
-        <span class="js-state"></span>
+        <span class="panel-header-right">
+          <button class="btn btn-sm dsp-btn js-dsp" type="button"><i class="bi bi-sliders"></i> <span class="dsp-label">DSP</span></button>
+          <span class="js-state"></span>
+        </span>
       </div>
       <div class="card-body panel-body">
         <div class="js-device-slot"></div>
@@ -90,6 +96,11 @@ export class PlayerPanel {
         </div>
 
         <div class="js-meter-slot"></div>
+        <div class="gr-row js-gr d-none" title="Quant abaixa ara el compressor/limitador">
+          <span class="gr-caption">Reducció</span>
+          <div class="gr-bar"><div class="gr-fill js-gr-fill"></div></div>
+          <span class="gr-value js-gr-value">0,0 dB</span>
+        </div>
         <div class="js-fader-slot"></div>
 
         <div class="controls">
@@ -142,6 +153,7 @@ export class PlayerPanel {
     this.#el.retry.addEventListener('click', () => this.#send('player.retry'));
     this.#el.open.addEventListener('click', () => this.#open());
     this.#el.edit.addEventListener('click', () => this.#edit());
+    this.#el.dsp.addEventListener('click', () => openProcessingDialog(this.#store, this.#request, this.#id));
     this.#setupDrop();
 
     this.render();
@@ -155,6 +167,16 @@ export class PlayerPanel {
     const el = this.#el;
 
     el.state.innerHTML = stateBadge(PLAYER_STATES[p.state]);
+
+    // Compressor/limitador (D-068): botó encès (color, icona i text) i indicador de reducció.
+    const dsp = p.processing ?? {};
+    el.dsp.classList.toggle('on', !!dsp.enabled);
+    el.dsp.setAttribute('aria-pressed', String(!!dsp.enabled));
+    el.dsp.title = dsp.enabled
+      ? `Compressor/limitador ACTIVAT (guany ${dsp.inputGainDb} dB, llindar ${dsp.thresholdDb} dB, ràtio ${dsp.ratio}:1). Clica per canviar-lo.`
+      : 'Compressor/limitador desactivat. Clica per configurar-lo.';
+    /** @type {HTMLElement} */ (el.dsp.querySelector('.dsp-label')).textContent = dsp.enabled ? 'DSP ON' : 'DSP';
+    el.gr.classList.toggle('d-none', !dsp.enabled);
     this.#deviceSelect.update(this.#store, p.deviceId, playing);
     el['device-warning'].innerHTML = deviceWarning(this.#store, p.deviceId);
 
@@ -243,8 +265,14 @@ export class PlayerPanel {
   }
 
   /** Nivells nous del motor (esdeveniment meters): [esquerre, dret] en dBFS. */
-  updateMeter(/** @type {number[] | undefined} */ levels) {
+  updateMeter(/** @type {number[] | undefined} */ levels, /** @type {number | undefined} */ reduction) {
     if (levels) this.#meter.update(levels);
+    // Reducció del compressor, amb una caiguda suau perquè es pugui llegir (escala de 0 a 20 dB).
+    if (reduction !== undefined && !this.#el.gr.classList.contains('d-none')) {
+      this.#shownReduction = Math.max(reduction, this.#shownReduction - 0.4);
+      this.#el['gr-fill'].style.width = `${Math.min(100, (this.#shownReduction / 20) * 100)}%`;
+      this.#el['gr-value'].textContent = `${this.#shownReduction.toFixed(1).replace('.', ',')} dB`;
+    }
   }
 
   // -------------------------------------------------------------------------

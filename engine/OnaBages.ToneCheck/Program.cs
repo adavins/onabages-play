@@ -8,6 +8,7 @@ using OnaBages.ToneCheck;
 //   analitzar <fitxer> [segons esperats]     busca talls en un enregistrament del to
 //   convivencia [minuts] [carpeta]           editor + dos enregistradors alhora (fase 3, pas 5)
 //   processar <entrada> <sortida.wav>        passa un fitxer pel compressor/limitador (fase 4, pas 4a)
+//   sonoritat <fitxer> [fitxer...]           mesura la sonoritat (LUFS) i el pic (fase 4, pas 5a)
 
 Console.OutputEncoding = Encoding.UTF8;
 
@@ -26,6 +27,8 @@ if (args.Length >= 1 && args[0] == "convivencia")
     string folder = args.Length >= 3 ? Path.GetFullPath(args[2]) : Path.Combine(Path.GetTempPath(), "OnaBagesConvivencia");
     return Convivencia.Run(minutes, folder);
 }
+if (args.Length >= 2 && args[0] == "sonoritat")
+    return Sonoritat.Run(args.Skip(1).Select(Path.GetFullPath));
 if (args.Length >= 3 && args[0] == "processar")
 {
     // Ajustos: per defecte, els del SqrSoft de La Central; «desactivat» per comparar (el so tal qual).
@@ -39,6 +42,7 @@ Console.WriteLine("""
       OnaBages.ToneCheck analitzar <fitxer.mp3> [segons que havia de durar el to]
       OnaBages.ToneCheck convivencia [minuts, per defecte 60] [carpeta]
       OnaBages.ToneCheck processar <entrada> <sortida.wav> [desactivat]   compressor/limitador (SqrSoft de La Central)
+      OnaBages.ToneCheck sonoritat <fitxer> [fitxer...]                  sonoritat (LUFS, EBU R128) i pic
     """);
 return 2;
 

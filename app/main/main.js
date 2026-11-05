@@ -209,7 +209,7 @@ function engineCommand(port, token) {
  * El motor s'arrenca com a procés independent: continua funcionant encara que
  * la interfície es tanqui de manera inesperada.
  */
-async function ensureEngine() {
+async function ensureEngine(reuseToken = null) {
   const existing = readRuntimeFile();
   if (existing && (await isEngineAlive(existing.port))) {
     engineInfo = existing;
@@ -217,7 +217,7 @@ async function ensureEngine() {
   }
 
   const port = DEFAULT_PORT;
-  const token = crypto.randomBytes(24).toString('hex');
+  const token = reuseToken ?? crypto.randomBytes(24).toString('hex');
   const { command, args } = engineCommand(port, token);
 
   let spawnError = null;
@@ -256,6 +256,24 @@ ipcMain.handle('engine:get-info', async () => engineInfo ?? ensureEngine());
 ipcMain.handle('engine:ensure', async () => {
   engineInfo = null;
   return ensureEngine();
+});
+
+/**
+ * Canvi de perfil (D-058): el motor s'ha aturat sol després de profile.switch. S'espera que s'acabi
+ * d'aturar i se n'arrenca un de nou, que llegirà el perfil triat. Amb el mateix port i testimoni,
+ * perquè les altres finestres (l'editor) s'hi tornin a connectar soles.
+ */
+ipcMain.handle('engine:restart', async () => {
+  const previous = engineInfo ?? readRuntimeFile();
+  engineInfo = null;
+  if (previous) {
+    const deadline = Date.now() + 20_000;
+    while (await isEngineAlive(previous.port)) {
+      if (Date.now() > deadline) throw new Error('El motor no s\'ha aturat en 20 s.');
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    }
+  }
+  return ensureEngine(previous?.token ?? null);
 });
 
 /** Formats que el motor pot llegir (especificació 6.3). */

@@ -12,6 +12,7 @@ import { CuePanel } from './ui/cue-panel.js';
 import { editSettings } from './ui/settings-dialog.js';
 import { setupShortcuts } from './ui/shortcuts.js';
 import { choose } from './ui/dialogs.js';
+import { setupProfileMenu } from './ui/profile-menu.js';
 import { setupZoom, applyZoom } from './ui/zoom.js';
 import { formatDuration } from './ui/format.js';
 
@@ -38,6 +39,7 @@ const els = {
   editor: $('btn-editor'),
   restartNotice: $('restart-notice'),
   programName: $('program-name'),
+  profile: $('btn-profile'),
 };
 
 const STATUS = {
@@ -69,6 +71,7 @@ setupPanels();
 els.restart.addEventListener('click', restartEngine);
 els.settings.addEventListener('click', openSettings);
 els.editor.addEventListener('click', () => bridge?.openEditor());
+setupProfileMenu({ button: els.profile, request, onSettings: applySettings, onSwitch: restartForProfile });
 setupShortcuts(store, request, (playerId, text) => playerPanels.get(playerId)?.showMessage(text));
 init();
 
@@ -94,6 +97,21 @@ async function restartEngine() {
   setStatus('connecting', 'Arrencant el motor…');
   try {
     connectTo(await bridge.ensureEngine());
+  } catch (err) {
+    setStatus('error', /** @type {Error} */ (err).message);
+  }
+}
+
+/**
+ * Canvi de perfil (D-058): el motor ja s'està aturant. Electron espera que s'aturi i n'arrenca un
+ * de nou, que llegeix el perfil triat; aquí ens hi tornem a connectar i es tornen a muntar els panells.
+ * @param {{ name: string }} profile
+ */
+async function restartForProfile(profile) {
+  client?.close(); // sense els reintents normals: ara és normal que el motor no respongui
+  setStatus('connecting', `Canviant al perfil «${profile.name}»…`);
+  try {
+    connectTo(await bridge.restartEngine());
   } catch (err) {
     setStatus('error', /** @type {Error} */ (err).message);
   }
@@ -275,9 +293,12 @@ async function saveZoom(zoom) {
 function applySettings(settings) {
   store.settings = settings;
   applyZoom(settings.ui.zoom);
+  // Perfil actiu (fase 4). El programa només es mostra a part si es diu diferent que el perfil.
+  const profileName = settings.profile?.name ?? '';
+  /** @type {HTMLElement} */ (els.profile.querySelector('.profile-label')).textContent = profileName || 'Perfil';
   const programName = settings.program?.name ?? '';
   els.programName.textContent = programName;
-  els.programName.classList.toggle('d-none', !programName);
+  els.programName.classList.toggle('d-none', !programName || programName.toLowerCase() === profileName.toLowerCase());
   document.documentElement.style.setProperty('--obp-recorders-per-row', String(settings.ui.recordersPerRow));
   els.restartNotice.classList.toggle('d-none', !settings.restartNeeded);
   els.restartNotice.title = settings.restartNeeded

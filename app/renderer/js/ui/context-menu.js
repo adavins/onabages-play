@@ -8,7 +8,11 @@
 
 import { escapeHtml } from './format.js';
 
-/** @typedef {{ label: string, icon?: string, action: () => void }} MenuItem */
+/**
+ * Una opció del menú. Amb `separator: true` és només una línia de separació.
+ * `active` la marca com a triada (p. ex. el perfil actual).
+ * @typedef {{ label?: string, icon?: string, active?: boolean, separator?: boolean, action?: () => void }} MenuItem
+ */
 
 /** @type {HTMLElement | null} */
 let open = null;
@@ -23,16 +27,18 @@ export function showContextMenu(event, items) {
 
   const menu = document.createElement('div');
   menu.className = 'obp-menu dropdown-menu show';
-  menu.innerHTML = items.map((item, i) => `
-    <button class="dropdown-item" type="button" data-index="${i}">
-      ${item.icon ? `<i class="bi ${item.icon}"></i> ` : ''}${escapeHtml(item.label)}
+  menu.innerHTML = items.map((item, i) => item.separator
+    ? '<hr class="dropdown-divider">'
+    : `
+    <button class="dropdown-item${item.active ? ' active' : ''}" type="button" data-index="${i}">
+      ${item.icon ? `<i class="bi ${item.icon}"></i> ` : ''}${escapeHtml(item.label ?? '')}
     </button>`).join('');
 
   menu.addEventListener('click', (e) => {
     const button = /** @type {HTMLElement} */ (e.target).closest('[data-index]');
     if (!button) return;
     closeContextMenu();
-    items[Number(/** @type {HTMLElement} */ (button).dataset.index)].action();
+    items[Number(/** @type {HTMLElement} */ (button).dataset.index)].action?.();
   });
 
   document.body.appendChild(menu);

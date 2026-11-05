@@ -363,6 +363,23 @@ Mentre `busy` no és `null`, `delete`, `keep`, `undo`, `redo` i `save` donen `ba
 - `error`: motiu de l'última feina que ha fallat (obrir o desar). Es neteja amb l'ordre següent.
 - Es desen els fotogrames **tal qual** (sense recodificar). Les etiquetes ID3v2 i ID3v1 es conserven; el fotograma Xing/Info de LAME es treu (diria una durada falsa).
 
+### 4.11. Perfils (fase 4, D-057 i D-058)
+
+Un perfil és la configuració de treball d'un programa (vegeu 4.9). El paràmetre que diu quin perfil és es diu `profile` (no `id`, que ja és l'identificador del missatge) i porta l'`id` del perfil: el nom de la seva carpeta.
+
+| Ordre | Paràmetres | Resposta |
+|---|---|---|
+| `profile.list` | — | `{ profiles: [{ id, name, active }] }`, ordenats pel nom |
+| `profile.create` | `name`; opcional `copyFrom` (l'`id` d'un perfil) | `{ profile: { id, name }, profiles }`. Sense `copyFrom`, un perfil buit (2 reproductors, 2 enregistradors, sense dispositius) amb el programa del mateix nom; amb `copyFrom`, una còpia d'aquell, amb les seves últimes llistes. No canvia el perfil actiu |
+| `profile.rename` | `profile`, `name` | `{ profiles, settings }`. La carpeta no canvia |
+| `profile.delete` | `profile` | `{ profiles }`. Esborra la carpeta del perfil (configuració i últimes llistes; mai fitxers d'àudio). L'actiu no es pot eliminar: `bad_state` |
+| `profile.switch` | `profile` | `{ switching: true, profile: { id, name } }`, i **el motor s'atura** poc després (com `engine.shutdown`). La interfície l'ha de tornar a arrencar: el motor nou llegeix el perfil triat (el nombre de reproductors i d'enregistradors només es pot canviar en arrencar). Des d'aquest moment el motor ja no desa res més de la configuració |
+
+- Noms: de 1 a 60 caràcters (es treuen els espais repetits); no n'hi pot haver dos d'iguals (sense distingir majúscules). Si no, `bad_params`. Un perfil que no existeix, també `bad_params`.
+- `profile.switch` dona `bad_state`, i no canvia res, si: algun enregistrador enregistra, algun reproductor o la preescolta sonen, o l'editor està obrint o desant o té canvis sense desar. El missatge diu què cal aturar. Canviar al perfil que ja és l'actiu: `bad_params`.
+- Un enregistrament pendent (sense desar ni descartar) no impedeix el canvi: el fitxer ja és al disc i surt a Recents.
+- Errors de disc en crear, canviar el nom o eliminar: `file_error`.
+
 ## 5. Esdeveniments
 
 | Esdeveniment | Camps | Freqüència | Des de |

@@ -9,7 +9,7 @@ namespace OnaBages.Engine.Protocol;
 /// Rep el text d'una ordre, la valida i en retorna la resposta.
 /// Totes les ordres noves s'afegeixen aquí (i a docs/protocol.md, i a les proves).
 /// </summary>
-public sealed class CommandRouter
+public sealed partial class CommandRouter
 {
     private readonly EngineState _state;
     private readonly Action _requestShutdown;
@@ -129,6 +129,11 @@ public sealed class CommandRouter
                 "editor.play" => EditorPlay(msg),
                 "editor.stop" => EditorDo(e => e.StopPlayback()),
                 "editor.setDevice" => EditorSetDevice(msg),
+                "profile.list" => ProfileList(),
+                "profile.create" => ProfileCreate(msg),
+                "profile.rename" => ProfileRename(msg),
+                "profile.delete" => ProfileDelete(msg),
+                "profile.switch" => ProfileSwitch(msg),
                 _ => null,
             };
 
@@ -152,6 +157,10 @@ public sealed class CommandRouter
         catch (EditorFileExistsException ex)
         {
             return Messages.Error(id, "file_exists", ex.Message);
+        }
+        catch (ProfileException ex)
+        {
+            return Messages.Error(id, ex.Code, ex.Message);
         }
         catch (RecordingActiveException ex)
         {

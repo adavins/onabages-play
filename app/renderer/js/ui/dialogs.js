@@ -72,3 +72,84 @@ export function choose(options) {
     });
   });
 }
+
+/**
+ * Demana un text (p. ex. el nom d'un perfil). Retorna el text escrit, o null si es cancel·la.
+ * @param {{ title: string, label: string, value?: string, okLabel: string, icon?: string, maxLength?: number }} options
+ * @returns {Promise<string | null>}
+ */
+export function askText(options) {
+  const dialog = document.createElement('dialog');
+  dialog.className = 'obp-dialog';
+  const icon = options.icon ? `<i class="bi ${options.icon}"></i> ` : '';
+  dialog.innerHTML = `
+    <form method="dialog">
+      <h2 class="obp-dialog-title">${icon}${escapeHtml(options.title)}</h2>
+      <label class="form-label" for="obp-ask-text">${escapeHtml(options.label)}</label>
+      <input id="obp-ask-text" class="form-control" type="text" autocomplete="off"
+             maxlength="${options.maxLength ?? 60}" value="${escapeHtml(options.value ?? '')}">
+      <div class="obp-dialog-buttons">
+        <button class="btn btn-secondary" value="cancel" formnovalidate>Cancel·lar</button>
+        <button class="btn btn-primary js-ok" value="ok">${escapeHtml(options.okLabel)}</button>
+      </div>
+    </form>`;
+
+  document.body.appendChild(dialog);
+  const input = /** @type {HTMLInputElement} */ (dialog.querySelector('input'));
+  const ok = /** @type {HTMLButtonElement} */ (dialog.querySelector('.js-ok'));
+  // Sense text no es pot acceptar.
+  const update = () => { ok.disabled = input.value.trim() === ''; };
+  input.addEventListener('input', update);
+  // Retorn accepta (si no, el formulari faria servir el primer botó, que és Cancel·lar).
+  input.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    if (!ok.disabled) dialog.close('ok');
+  });
+  update();
+  dialog.showModal();
+  input.select();
+
+  return new Promise((resolve) => {
+    dialog.addEventListener('close', () => {
+      resolve(dialog.returnValue === 'ok' && input.value.trim() !== '' ? input.value.trim() : null);
+      dialog.remove();
+    });
+  });
+}
+
+/**
+ * Fa triar un element d'una llista (un desplegable). Retorna el `value` triat, o null si es cancel·la.
+ * @param {{ title: string, label: string, message?: string, okLabel: string, okStyle?: string, icon?: string,
+ *           options: { value: string, label: string }[] }} options
+ * @returns {Promise<string | null>}
+ */
+export function pickOne(options) {
+  const dialog = document.createElement('dialog');
+  dialog.className = 'obp-dialog';
+  const icon = options.icon ? `<i class="bi ${options.icon}"></i> ` : '';
+  dialog.innerHTML = `
+    <form method="dialog">
+      <h2 class="obp-dialog-title">${icon}${escapeHtml(options.title)}</h2>
+      <label class="form-label" for="obp-pick-one">${escapeHtml(options.label)}</label>
+      <select id="obp-pick-one" class="form-select">
+        ${options.options.map((o) => `<option value="${escapeHtml(o.value)}">${escapeHtml(o.label)}</option>`).join('')}
+      </select>
+      ${options.message ? `<div class="obp-dialog-message mt-3">${escapeHtml(options.message).replaceAll('\n', '<br>')}</div>` : ''}
+      <div class="obp-dialog-buttons">
+        <button class="btn btn-secondary" value="cancel">Cancel·lar</button>
+        <button class="btn btn-${options.okStyle ?? 'primary'}" value="ok">${escapeHtml(options.okLabel)}</button>
+      </div>
+    </form>`;
+
+  document.body.appendChild(dialog);
+  const select = /** @type {HTMLSelectElement} */ (dialog.querySelector('select'));
+  dialog.showModal();
+
+  return new Promise((resolve) => {
+    dialog.addEventListener('close', () => {
+      resolve(dialog.returnValue === 'ok' ? select.value : null);
+      dialog.remove();
+    });
+  });
+}

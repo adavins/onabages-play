@@ -12,6 +12,9 @@ contextBridge.exposeInMainWorld('onabages', {
   /** Torna a comprovar el motor i, si no respon, n'arrenca un de nou. */
   ensureEngine: () => ipcRenderer.invoke('engine:ensure'),
 
+  /** Canvi de perfil: espera que el motor s'aturi i n'arrenca un de nou (mateix port i testimoni). */
+  restartEngine: () => ipcRenderer.invoke('engine:restart'),
+
   /** L'usuari vol tancar la finestra. */
   onCloseRequested: (callback) => {
     ipcRenderer.on('app:close-requested', () => callback());

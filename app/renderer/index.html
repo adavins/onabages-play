@@ -16,7 +16,14 @@
 
     <div id="clock" class="clock" aria-label="Hora actual">--:--:--</div>
 
-    <!-- Nom del programa (⚙ Configuració; pas 10). Amagat si no n'hi ha. -->
+    <!-- Perfil actiu (fase 4): menú per canviar-lo, crear-ne, duplicar-lo, canviar-li el nom i eliminar-ne. -->
+    <button id="btn-profile" class="btn btn-sm btn-outline-secondary profile-button" type="button" title="Perfil (configuració de treball del programa)">
+      <i class="bi bi-person-badge"></i>
+      <span class="profile-label">Perfil</span>
+      <i class="bi bi-caret-down-fill"></i>
+    </button>
+
+    <!-- Nom del programa (⚙ Configuració; pas 10). Amagat si no n'hi ha o si és igual que el del perfil. -->
     <span id="program-name" class="program-name d-none" title="Programa (es canvia a ⚙ Configuració)"></span>
 
     <!-- Canvis de configuració que s'aplicaran en tornar a obrir l'aplicació (pas 9). -->

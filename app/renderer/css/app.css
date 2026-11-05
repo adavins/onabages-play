@@ -124,6 +124,29 @@ body {
 
 .program-name.d-none { display: none; }
 
+/* Perfil actiu (fase 4): botó amb el nom, que obre el menú de perfils. */
+.profile-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+  max-width: 22rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--bs-emphasis-color);
+}
+
+.profile-button .profile-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-button .bi-caret-down-fill {
+  font-size: 0.7em;
+  opacity: 0.7;
+}
+
 .engine {
   margin-left: auto;
   display: flex;

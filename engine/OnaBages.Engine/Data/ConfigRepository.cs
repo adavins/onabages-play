@@ -10,6 +10,15 @@ namespace OnaBages.Engine.Data;
 /// <param name="Problem">Si algun fitxer no s'ha pogut fer servir, el motiu (en català).</param>
 public sealed record ConfigLoadResult(EngineConfig Config, string? Problem);
 
+/// <summary>Un perfil: <paramref name="Id"/> és el nom de la seva carpeta; <paramref name="Name"/>, el que es mostra.</summary>
+public sealed record ProfileInfo(string Id, string Name);
+
+/// <summary>Una operació amb perfils no es pot fer. <paramref name="Code"/> és el codi d'error del protocol.</summary>
+public sealed class ProfileException(string code, string message) : Exception(message)
+{
+    public string Code { get; } = code;
+}
+
 /// <summary>
 /// Repositori de la configuració. És l'únic codi que llegeix o escriu aquests fitxers (CLAUDE.md, «Dades»):
 /// <list type="bullet">
@@ -218,6 +227,143 @@ public sealed class ConfigRepository
         for (int n = 2; Directory.Exists(ProfileFolder(id)); n++)
             id = $"{clean} ({n})";
         return id;
+    }
+
+    // -----------------------------------------------------------------------
+    // Operacions amb perfils (pas 1b). Les crida ConfigStore, que sap quin és l'actiu.
+    // -----------------------------------------------------------------------
+
+    /// <summary>Perfils que hi ha a la carpeta, ordenats pel nom.</summary>
+    public List<ProfileInfo> ListProfiles()
+    {
+        lock (_sync)
+        {
+            var list = new List<ProfileInfo>();
+            if (!Directory.Exists(ProfilesFolder))
+                return list;
+            foreach (string folder in Directory.EnumerateDirectories(ProfilesFolder))
+            {
+                string id = Path.GetFileName(folder);
+                if (!IsValidProfileId(id) || !File.Exists(ProfileFilePath(id)))
+                    continue;
+                list.Add(new ProfileInfo(id, ReadProfileName(id)));
+            }
+            list.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.CurrentCultureIgnoreCase));
+            return list;
+        }
+    }
+
+    /// <summary>Nom d'un perfil (el de la carpeta si el fitxer no es pot llegir).</summary>
+    private string ReadProfileName(string id)
+    {
+        try
+        {
+            if (JsonNode.Parse(File.ReadAllText(ProfileFilePath(id)))?["name"] is JsonValue v
+                && v.TryGetValue(out string? name) && CleanProgramName(name) is { Length: > 0 } clean)
+                return clean;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException) { }
+        return id;
+    }
+
+    /// <summary>
+    /// Crea un perfil nou. Amb <paramref name="copyFromId"/>, és una còpia d'aquell (amb les seves últimes
+    /// llistes); si no, un perfil buit (2 reproductors, 2 enregistradors, sense dispositius) amb el programa
+    /// del mateix nom. El nom ja ha d'estar comprovat.
+    /// </summary>
+    public ProfileInfo CreateProfile(string name, string? copyFromId)
+    {
+        lock (_sync)
+        {
+            string id = NewProfileId(name);
+            string folder = ProfileFolder(id);
+            try
+            {
+                if (copyFromId is not null)
+                {
+                    CopyFolder(ProfileFolder(copyFromId), folder);
+                    var root = JsonNode.Parse(File.ReadAllText(ProfileFilePath(id))) as JsonObject
+                        ?? throw new FormatException("no és un objecte JSON");
+                    root["name"] = name;
+                    AtomicFile.WriteAllText(ProfileFilePath(id), ToText(root));
+                }
+                else
+                {
+                    var config = new EngineConfig { ProfileId = id, ProfileName = name, ProgramName = name };
+                    AtomicFile.WriteAllText(ProfileFilePath(id), ToText(ProfileJson(config)));
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or FormatException)
+            {
+                // A mitges no serveix: es treu el que s'hagi copiat.
+                try { if (Directory.Exists(folder)) Directory.Delete(folder, recursive: true); }
+                catch (Exception) { /* es veurà com una carpeta sense perfil i no es llistarà */ }
+                throw new ProfileException("file_error", $"No s'ha pogut crear el perfil: {ex.Message}");
+            }
+            return new ProfileInfo(id, name);
+        }
+    }
+
+    /// <summary>Canvia el nom d'un perfil que <b>no</b> és l'actiu (el de l'actiu el desa ConfigStore). La carpeta no canvia.</summary>
+    public void RenameProfile(string id, string name)
+    {
+        lock (_sync)
+        {
+            try
+            {
+                var root = JsonNode.Parse(File.ReadAllText(ProfileFilePath(id))) as JsonObject
+                    ?? throw new FormatException("no és un objecte JSON");
+                root["name"] = name;
+                AtomicFile.WriteAllText(ProfileFilePath(id), ToText(root));
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or FormatException)
+            {
+                throw new ProfileException("file_error", $"No s'ha pogut canviar el nom del perfil: {ex.Message}");
+            }
+        }
+    }
+
+    /// <summary>Esborra la carpeta d'un perfil que no és l'actiu. Els fitxers d'àudio no hi són mai: només es perden les referències.</summary>
+    public void DeleteProfile(string id)
+    {
+        lock (_sync)
+        {
+            try
+            {
+                Directory.Delete(ProfileFolder(id), recursive: true);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                throw new ProfileException("file_error", $"No s'ha pogut eliminar el perfil: {ex.Message}");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Fa que el perfil <paramref name="id"/> sigui l'actiu a partir del pròxim arrencada del motor:
+    /// només canvia <c>activeProfile</c> de config.json (la resta, la de <paramref name="current"/>).
+    /// </summary>
+    public void SetActiveProfile(EngineConfig current, string id)
+    {
+        var machine = MachineJson(current);
+        machine["activeProfile"] = id;
+        string text = ToText(machine);
+        lock (_sync)
+            AtomicFile.WriteAllText(FilePath, text);
+    }
+
+    private static void CopyFolder(string source, string target)
+    {
+        Directory.CreateDirectory(target);
+        foreach (string file in Directory.EnumerateFiles(source))
+        {
+            // Els temporals i les còpies de fitxers malmesos no es copien.
+            if (file.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase) || file.EndsWith(".malmes", StringComparison.OrdinalIgnoreCase))
+                continue;
+            File.Copy(file, Path.Combine(target, Path.GetFileName(file)));
+        }
+        foreach (string folder in Directory.EnumerateDirectories(source))
+            CopyFolder(folder, Path.Combine(target, Path.GetFileName(folder)));
     }
 
     // -----------------------------------------------------------------------

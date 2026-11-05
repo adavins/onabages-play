@@ -567,7 +567,7 @@ Les dues opcions poden conviure: configuració i perfils en JSON (fàcils de cop
 
 - Distribució fixa amb la graella de Bootstrap, amb nombre de reproductors i enregistradors configurable.
 - **Fase 4:** panells que es poden moure i redimensionar (GridStack.js), amb la distribució desada al perfil.
-- **Panell lateral (fase 4, pas 2b; D-062):** la preescolta i Recents passen a un panell lateral a la dreta, plegat per defecte (una franja d'icones: Àudios, Llistes, Recents, Preescolta). Obert, mostra la pestanya triada i, a baix, la preescolta. En obrir-lo la finestra es fa més ampla, i els reproductors i enregistradors no canvien de mida. S'obre sol quan la preescolta es posa a sonar. Els reproductors i enregistradors ocupen tota l'amplada de la distribució.
+- **Panell lateral (fase 4, pas 2b; D-062):** la preescolta i Recents passen a un panell lateral a la dreta, plegat per defecte (una franja d'icones: Àudios, Llistes i Recents, i el botó de desplegar, que avisa si la preescolta sona amb el panell plegat). Obert, mostra la pestanya triada i, a baix, la preescolta. En obrir-lo la finestra es fa més ampla, i els reproductors i enregistradors no canvien de mida. S'obre sol quan la preescolta es posa a sonar. Els reproductors i enregistradors ocupen tota l'amplada de la distribució.
 
 # 13. Dades i fitxers
 

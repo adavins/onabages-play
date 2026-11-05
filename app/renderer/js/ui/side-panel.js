@@ -1,7 +1,7 @@
 // @ts-check
 // Panell lateral de la dreta (fase 4, pas 2b; D-062).
 //
-// - Plegat: només una franja d'icones (Àudios, Llistes, Recents, Preescolta).
+// - Plegat: només una franja d'icones (Àudios, Llistes, Recents i, a baix, plegar/desplegar).
 // - Obert: la pestanya triada a dalt i la preescolta sempre a baix.
 // - En obrir-lo, la finestra es fa més ampla (ho fa Electron), perquè els reproductors i els
 //   enregistradors no canviïn de mida. Si no pot créixer, el panell surt per sobre (.side-overlay).
@@ -23,7 +23,6 @@ export function setupSidePanel(store) {
   const side = /** @type {HTMLElement} */ (document.getElementById('side'));
   const measure = /** @type {HTMLElement} */ (side.querySelector('.side-measure'));
   const toggle = /** @type {HTMLElement} */ (side.querySelector('.side-btn-toggle'));
-  const cueButton = /** @type {HTMLElement} */ (side.querySelector('.side-btn-cue'));
 
   let isOpen = false;
   /** La pestanya que es veu (es recorda d'una vegada per l'altra). */
@@ -40,7 +39,7 @@ export function setupSidePanel(store) {
     const button = /** @type {HTMLElement | null} */ (/** @type {HTMLElement} */ (e.target).closest('.side-btn'));
     if (!button) return;
     const wanted = button.dataset.tab;
-    if (button === toggle || wanted === 'cue') {
+    if (button === toggle) {
       // Plegar o desplegar (la preescolta sempre hi és, a baix).
       isOpen ? close() : open();
     } else if (wanted) {
@@ -56,8 +55,6 @@ export function setupSidePanel(store) {
   let openedByCue = false;
   store.addEventListener('cue', () => {
     const playing = store.cue?.state === 'playing';
-    cueButton.classList.toggle('cue-on', playing);
-    cueButton.title = playing ? 'Preescolta: sona' : 'Preescolta';
     if (playing && !cuePlaying && !isOpen) {
       openedByCue = true;
       open();
@@ -66,6 +63,7 @@ export function setupSidePanel(store) {
       close();
     }
     cuePlaying = playing;
+    updateToggle();
   });
   // Qualsevol clic dins del panell (o a les icones) vol dir que l'operador l'està fent servir: ja no es plega sol.
   side.addEventListener('pointerdown', () => { openedByCue = false; });
@@ -120,10 +118,17 @@ export function setupSidePanel(store) {
     return queue;
   }
 
+  /**
+   * Botó de plegar/desplegar. Amb el panell plegat i la preescolta sonant, es posa taronja i
+   * parpelleja: és l'únic avís que sona (la preescolta no es veu).
+   */
   function updateToggle() {
-    toggle.title = isOpen ? 'Plegar el panell' : 'Obrir el panell';
+    const cueHidden = cuePlaying && !isOpen;
+    toggle.classList.toggle('cue-on', cueHidden);
+    toggle.title = isOpen ? 'Plegar el panell' : cueHidden ? 'La preescolta sona: obrir el panell' : 'Obrir el panell';
+    // Amb l'avís, la icona són uns auriculars (color i icona, no només color).
     /** @type {HTMLElement} */ (toggle.querySelector('i')).className =
-      `bi ${isOpen ? 'bi-chevron-double-right' : 'bi-chevron-double-left'}`;
+      `bi ${isOpen ? 'bi-chevron-double-right' : cueHidden ? 'bi-headphones' : 'bi-chevron-double-left'}`;
   }
 
   return { open, close, refreshSize };

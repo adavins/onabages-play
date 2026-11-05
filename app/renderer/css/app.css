@@ -336,8 +336,9 @@ body.engine-offline .side-content {
   background: var(--bs-body-bg);
 }
 
-/* Preescolta sonant: la icona es posa del color de la preescolta i parpelleja (també amb el panell plegat). */
-.side-btn-cue.cue-on {
+/* Preescolta sonant amb el panell plegat: el botó de desplegar es posa del color de la preescolta i parpelleja. */
+.side-btn.cue-on,
+.side-btn.cue-on:hover {
   color: #000;
   background: var(--obp-cue);
   animation: obp-blink 1s steps(2, start) infinite;

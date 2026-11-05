@@ -23,6 +23,7 @@ public enum TrackStatus
 /// <param name="IsSection">És un separador de secció (pas 9c): no és cap fitxer i no sona mai. <c>Name</c> és el títol.</param>
 /// <param name="Color">Color del separador (un de <see cref="Playlist.SectionColors"/>), o null.</param>
 /// <param name="Collapsed">Separador plegat: la interfície n'amaga les pistes fins al separador següent.</param>
+/// <param name="LoudnessLufs">Sonoritat (LUFS), quan ja s'ha mesurat (fase 4, pas 5b). Null = encara no, o silenci.</param>
 public sealed record PlaylistItem(
     string Id,
     string Path,
@@ -35,7 +36,8 @@ public sealed record PlaylistItem(
     bool AutoNext,
     bool IsSection = false,
     string? Color = null,
-    bool Collapsed = false);
+    bool Collapsed = false,
+    double? LoudnessLufs = null);
 
 /// <summary>
 /// Un element per afegir a una llista (p. ex. llegit d'una llista desada): un fitxer amb les seves marques
@@ -337,6 +339,12 @@ public sealed class Playlist
             ? item with { Duration = probe.Duration, Format = probe.Format, Status = TrackStatus.Ok, Problem = null }
             : item with { Status = TrackStatus.Error, Problem = problem });
     }
+
+    /// <summary>
+    /// Sonoritat mesurada en segon pla (fase 4, pas 5b; D-071). Null = silenci (no es normalitza).
+    /// </summary>
+    public void SetLoudness(string id, double? lufs) =>
+        Update(id, item => item with { LoudnessLufs = lufs });
 
     /// <summary>El reproductor no ha pogut obrir la pista en anar-la a fer sonar.</summary>
     public void MarkError(string id, string problem) =>

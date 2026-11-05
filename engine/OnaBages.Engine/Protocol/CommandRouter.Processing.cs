@@ -67,6 +67,26 @@ public sealed partial class CommandRouter
     }
 
     /// <summary>
+    /// Normalització de sonoritat d'un reproductor (fase 4, pas 5b; D-071): player, enabled.
+    /// S'aplica a partir de la pista següent (la que sona no canvia de volum). Es desa al perfil.
+    /// </summary>
+    private JsonObject PlayerSetNormalization(JsonObject msg)
+    {
+        var player = GetPlayer(msg);
+        if (msg["enabled"] is not JsonValue v || !v.TryGetValue(out bool enabled))
+            throw new BadParamsException("'enabled' ha de ser true o false.");
+
+        double target = _config?.Read(c => c.LoudnessTargetLufs) ?? EngineConfig.DefaultLoudnessTargetLufs;
+        player.SetNormalization(enabled, target);
+        _config?.Update(c =>
+        {
+            if (enabled) c.NormalizedPlayers.Add(player.Id);
+            else c.NormalizedPlayers.Remove(player.Id);
+        });
+        return new JsonObject { ["player"] = PlayerJson.Player(player) };
+    }
+
+    /// <summary>
     /// Desa un preset propi: name, i els ajustos (processing) o els del reproductor (player).
     /// Si ja n'hi ha un de propi amb aquest nom, se substitueix (la interfície ho confirma abans).
     /// { preset: { id, name }, processingPresets }

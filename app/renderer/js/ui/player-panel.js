@@ -64,7 +64,8 @@ export class PlayerPanel {
       <div class="card-header panel-header">
         <span class="panel-title"><i class="bi bi-music-note-list"></i> Reproductor ${escapeHtml(id)}</span>
         <span class="panel-header-right">
-          <button class="btn btn-sm dsp-btn js-dsp" type="button"><i class="bi bi-sliders"></i> <span class="dsp-label">DSP</span></button>
+          <button class="btn btn-sm dsp-btn norm-btn js-norm" type="button"><i class="d-none"></i><span class="norm-label">NORM</span></button>
+          <button class="btn btn-sm dsp-btn js-dsp" type="button"><i class="d-none"></i><span class="dsp-label">DSP</span></button>
           <span class="js-state"></span>
         </span>
       </div>
@@ -154,6 +155,14 @@ export class PlayerPanel {
     this.#el.open.addEventListener('click', () => this.#open());
     this.#el.edit.addEventListener('click', () => this.#edit());
     this.#el.dsp.addEventListener('click', () => openProcessingDialog(this.#store, this.#request, this.#id));
+    // NORM: activa o desactiva la normalització (a partir de la pista següent).
+    this.#el.norm.addEventListener('click', () => {
+      const enabled = !!this.#store.players.get(this.#id)?.normalization?.enabled;
+      this.#send('player.setNormalization', { enabled: !enabled });
+      if (!enabled && this.#store.players.get(this.#id)?.state === 'playing') {
+        this.#showMessage('Normalització activada: s\'aplicarà a partir de la pista següent.');
+      }
+    });
     this.#setupDrop();
 
     this.render();
@@ -168,15 +177,26 @@ export class PlayerPanel {
 
     el.state.innerHTML = stateBadge(PLAYER_STATES[p.state]);
 
-    // Compressor/limitador (D-068): botó encès (color, icona i text) i indicador de reducció.
+    // Compressor/limitador (D-068): botó encès (color i marca ✓) i indicador de reducció.
     const dsp = p.processing ?? {};
     el.dsp.classList.toggle('on', !!dsp.enabled);
     el.dsp.setAttribute('aria-pressed', String(!!dsp.enabled));
     el.dsp.title = dsp.enabled
       ? `Compressor/limitador ACTIVAT (guany ${dsp.inputGainDb} dB, llindar ${dsp.thresholdDb} dB, ràtio ${dsp.ratio}:1). Clica per canviar-lo.`
       : 'Compressor/limitador desactivat. Clica per configurar-lo.';
-    /** @type {HTMLElement} */ (el.dsp.querySelector('.dsp-label')).textContent = dsp.enabled ? 'DSP ON' : 'DSP';
+    // Activat: ple de color i amb una marca ✓ (el text no canvia, perquè la capçalera és estreta).
+    /** @type {HTMLElement} */ (el.dsp.querySelector('i')).className = dsp.enabled ? 'bi bi-check-lg' : 'd-none';
     el.gr.classList.toggle('d-none', !dsp.enabled);
+
+    // Normalització (D-072): botó encès (color i marca ✓).
+    const norm = p.normalization ?? {};
+    el.norm.classList.toggle('on', !!norm.enabled);
+    el.norm.setAttribute('aria-pressed', String(!!norm.enabled));
+    const target = String(norm.targetLufs ?? -12).replace('-', '−');
+    el.norm.title = norm.enabled
+      ? `Normalització ACTIVADA: cada pista s'iguala a ${target} LUFS abans del DSP. Clica per desactivar-la (a partir de la pista següent).`
+      : `Normalització desactivada. Clica per igualar el volum de les pistes a ${target} LUFS (a partir de la pista següent).`;
+    /** @type {HTMLElement} */ (el.norm.querySelector('i')).className = norm.enabled ? 'bi bi-check-lg' : 'd-none';
     this.#deviceSelect.update(this.#store, p.deviceId, playing);
     el['device-warning'].innerHTML = deviceWarning(this.#store, p.deviceId);
 
@@ -192,8 +212,13 @@ export class PlayerPanel {
     el.section.className = `track-section js-section section-color-${section?.color ?? 'none'}${section ? '' : ' d-none'}`;
     el.section.innerHTML = section ? `<i class="bi bi-bookmark-fill"></i> ${escapeHtml(section.name)}` : '';
     el.section.title = section ? `Secció: ${section.name}` : '';
-    el.format.textContent = p.format ?? '';
-    el.format.title = p.format ?? '';
+    // Format de la pista i, si es normalitza, el guany que se li aplica (p. ex. «· Norm. +7,2 dB»).
+    const normGain = p.normalization?.gainDb;
+    const normText = typeof normGain === 'number'
+      ? `Norm. ${normGain > 0 ? '+' : normGain < 0 ? '−' : ''}${Math.abs(normGain).toFixed(1).replace('.', ',')} dB`
+      : '';
+    el.format.textContent = [p.format, normText].filter(Boolean).join(' · ');
+    el.format.title = el.format.textContent;
 
     // Mentre s'arrossega la barra, es mostra la posició on s'anirà.
     const hasTrack = p.duration > 0;

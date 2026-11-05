@@ -209,8 +209,13 @@ export class PlaylistView {
         ? '<span class="pl-wait" title="Comprovant el fitxer…"><i class="bi bi-hourglass-split"></i></span>'
         : '';
 
+    // Descripció: la ruta i, si ja s'ha mesurat, la sonoritat (fase 4, normalització).
+    const tooltip = typeof item.loudness === 'number'
+      ? `${item.path}\nSonoritat: ${item.loudness.toFixed(1).replace('.', ',').replace('-', '−')} LUFS`
+      : item.path;
+
     return `
-      <div class="${classes.join(' ')}" data-id="${escapeHtml(item.id)}" draggable="true" title="${escapeHtml(item.path)}">
+      <div class="${classes.join(' ')}" data-id="${escapeHtml(item.id)}" draggable="true" title="${escapeHtml(tooltip)}">
         ${flag('loop', item.loop, 'bi-repeat', 'Bucle: la pista es repeteix fins a Stop')}
         <span class="pl-num">${number}</span>
         <span class="pl-name">${escapeHtml(item.name)}</span>

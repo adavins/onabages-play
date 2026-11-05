@@ -66,7 +66,10 @@ try { Directory.CreateDirectory(PlayHistoryFile.DefaultFolder); }
 catch (Exception ex) { log.LogWarning("No s'ha pogut crear la carpeta de l'historial: {Message}", ex.Message); }
 
 // Comprova en segon pla les pistes que s'afegeixen a les llistes (una per a tot el motor).
-var analyzer = new TrackAnalyzer();
+// També en mesura la sonoritat (fase 4, pas 5b), amb memòria cau (les mesures de fa més de 60 dies s'esborren).
+var loudnessCache = new LoudnessCacheFile();
+loudnessCache.DeleteOld();
+var analyzer = new TrackAnalyzer(cache: loudnessCache);
 
 // Quants reproductors i enregistradors hi ha: ho diu la configuració (pas 9 de la fase 2; per defecte, 2 i 2).
 // Es llegeix només el nombre; la resta de la configuració la llegeix més avall el ConfigStore.
@@ -331,6 +334,9 @@ foreach (var player in state.Players)
 {
     if (config.Read(c => c.PlayerDynamics.GetValueOrDefault(player.Id)) is { } dynamics)
         player.SetDynamics(dynamics);
+    // Normalització de sonoritat (fase 4, pas 5b): quins reproductors i amb quin objectiu.
+    var (normalize, target) = config.Read(c => (c.NormalizedPlayers.Contains(player.Id), c.LoudnessTargetLufs));
+    player.SetNormalization(normalize, target);
 }
 
 // Enregistraments interromputs (el motor o l'ordinador van caure): es recuperen abans de res

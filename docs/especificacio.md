@@ -490,7 +490,7 @@ El **LUFS** és una unitat que mesura el **volum que percep l'oïda**, no només
 | Funció | Fase | Comentari |
 |---|---|---|
 | Volum per reproductor | MVP | Imprescindible |
-| Normalització de sonoritat per pista (opcional per reproductor) | 4 | Anàlisi en segon pla en afegir la pista; el valor es desa a la memòria cau |
+| Normalització de sonoritat per pista (opcional per reproductor) | 4 | Anàlisi en segon pla en afegir la pista; el valor es desa a la memòria cau. Fet al motor (D-070, D-071): objectiu −12 LUFS, com a molt +10 dB, a partir de la pista següent; desactivada per defecte; botó NORM a cada reproductor i objectiu a ⚙ (D-072) |
 | Equalitzador per reproductor (paramètric, 3–5 bandes) | 4 | Filtres de NAudio |
 | Limitador per reproductor (sostre configurable) | 4 | Protecció contra pics |
 | Compressor per reproductor | 4 | Threshold, ratio, attack, release, makeup; indicador de reducció. **Es fa primer** (D-066): com el plugin SqrSoft del Winamp que es fa servir ara, amb el preset «SqrSoft La Central». Fet (D-066–D-068): botó DSP a cada reproductor, finestra d'ajustos i indicador de reducció; el limitador (sostre) va inclòs |

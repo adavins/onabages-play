@@ -649,6 +649,20 @@ public sealed class ConfigRepository
             }
         }
 
+        // Normalització de sonoritat (pas 5b; camp opcional, sense canvi de versió).
+        if (root["normalization"] is JsonObject normalization)
+        {
+            if (normalization["targetLufs"] is JsonValue t && t.TryGetValue(out double target) && double.IsFinite(target))
+                config.LoudnessTargetLufs = Math.Clamp(target, EngineConfig.MinLoudnessTargetLufs, EngineConfig.MaxLoudnessTargetLufs);
+            if (normalization["players"] is JsonArray normalized)
+            {
+                foreach (var item in normalized)
+                {
+                    if (Text(item) is { Length: > 0 } playerId) config.NormalizedPlayers.Add(playerId);
+                }
+            }
+        }
+
         // Presets propis del compressor/limitador (D-069; camp opcional, sense canvi de versió).
         if (root["processingPresets"] is JsonArray presets)
         {
@@ -779,6 +793,11 @@ public sealed class ConfigRepository
         ["playerProcessing"] = new JsonArray(config.PlayerDynamics
             .OrderBy(p => p.Key, StringComparer.Ordinal)
             .Select(p => (JsonNode)WriteDynamics(p.Key, p.Value)).ToArray()),
+        ["normalization"] = new JsonObject
+        {
+            ["targetLufs"] = config.LoudnessTargetLufs,
+            ["players"] = new JsonArray(config.NormalizedPlayers.Order(StringComparer.Ordinal).Select(id => (JsonNode)id).ToArray()),
+        },
         ["processingPresets"] = new JsonArray(config.ProcessingPresets
             .Select(p => (JsonNode)new JsonObject
             {

@@ -1,5 +1,41 @@
 namespace OnaBages.Audio;
 
+/// <summary>Sonoritat d'una pista: LUFS integrats (null si és silenci) i pic de mostra (0..1 o més).</summary>
+public sealed record TrackLoudness(double? Lufs, float Peak)
+{
+    /// <summary>
+    /// Mesura un fitxer sencer (el descodifica, fora del fil d'àudio). Les pistes mono es mesuren com
+    /// sonen: el mateix senyal pels dos canals.
+    /// </summary>
+    /// <exception cref="AudioFileException">Si no es pot llegir.</exception>
+    public static TrackLoudness Measure(string path, CancellationToken cancel = default)
+    {
+        const int rate = 48000;
+        using var source = AudioFileSource.Open(path, rate);
+        var meter = new LoudnessMeter(rate);
+        var buffer = new float[rate / 2 * 2]; // 0,5 s
+        int read;
+        while ((read = source.Read(buffer)) > 0)
+        {
+            cancel.ThrowIfCancellationRequested();
+            meter.Add(buffer.AsSpan(0, read));
+        }
+        return new TrackLoudness(meter.IntegratedLufs is { } lufs ? Math.Round(lufs, 2) : null, meter.SamplePeak);
+    }
+}
+
+/// <summary>
+/// Memòria cau de la sonoritat de les pistes (la implementa el mòdul de dades del motor):
+/// així una pista que ja s'ha fet servir no s'ha de tornar a mesurar.
+/// </summary>
+public interface ILoudnessCache
+{
+    /// <summary>La sonoritat desada d'aquest fitxer (tal com és ara), o null.</summary>
+    TrackLoudness? Read(string path);
+
+    void Write(string path, TrackLoudness loudness);
+}
+
 /// <summary>
 /// Mesurador de sonoritat integrada (LUFS) segons la recomanació ITU-R BS.1770-4 i l'EBU R128
 /// (fase 4, pas 5a; D-070). És el que fan servir les ràdios i les televisions per saber com de fort

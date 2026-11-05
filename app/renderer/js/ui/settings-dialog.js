@@ -18,7 +18,7 @@ const MAX_PROGRAM_NAME = 60;
 /**
  * @param {any} settings  objecte settings del motor
  * @param {{ players: number, recorders: number }} running  quants n'hi ha ara al motor
- * @returns {Promise<{ ui: object, layout: object, program: object } | null>}
+ * @returns {Promise<{ ui: object, layout: object, program: object, loudness: object } | null>}
  */
 export function editSettings(settings, running) {
   const options = (/** @type {number} */ max, /** @type {number} */ selected) =>
@@ -26,6 +26,12 @@ export function editSettings(settings, running) {
       .map((n) => `<option value="${n}"${n === selected ? ' selected' : ''}>${n}</option>`).join('');
   const zoomOptions = ZOOM_STEPS
     .map((z) => `<option value="${z}"${Math.abs(z - settings.ui.zoom) < 0.001 ? ' selected' : ''}>${Math.round(z * 100)} %</option>`)
+    .join('');
+  // Objectius de la normalització (LUFS). Si el desat no hi és, s'hi afegeix.
+  const target = Number(settings.loudness?.targetLufs ?? -12);
+  const targets = [...new Set([-9, -10, -11, -12, -13, -14, -16, -18, -20, -23, target])].sort((a, b) => b - a);
+  const loudnessOptions = targets
+    .map((t) => `<option value="${t}"${t === target ? ' selected' : ''}>${String(t).replace('-', '−').replace('.', ',')} LUFS${t === -12 ? ' (recomanat)' : ''}</option>`)
     .join('');
 
   const dialog = document.createElement('dialog');
@@ -69,6 +75,16 @@ export function editSettings(settings, running) {
         </div>
       </div>
       <div class="form-text mb-3">El temps restant es posa vermell i parpelleja. 0 = sense avís.</div>
+
+      <div class="obp-settings-grid">
+        <label for="st-loudness">Normalització: objectiu</label>
+        <select id="st-loudness" class="form-select form-select-sm">${loudnessOptions}</select>
+      </div>
+      <div class="form-text mb-3">
+        Als reproductors amb el botó NORM encès, cada pista s'apuja o s'abaixa fins a aquest nivell
+        (com a molt +${escapeHtml(settings.loudness?.maxBoostDb ?? 10)} dB), abans del DSP. S'aplica a partir de la pista següent.
+        Amb el compressor SqrSoft, −12 LUFS deixa la música forta gairebé igual i apuja les pistes fluixes.
+      </div>
 
       <h3 class="obp-settings-section">Fitxers</h3>
       <div class="d-flex flex-wrap gap-2 mb-1">
@@ -144,6 +160,7 @@ export function editSettings(settings, running) {
           },
           layout: { players: Number(players.value), recorders: Number(recorders.value) },
           program: { name: $('#st-program').value.trim() },
+          loudness: { targetLufs: Number($('#st-loudness').value) },
         }
         : null);
       dialog.remove();

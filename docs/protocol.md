@@ -76,7 +76,7 @@ Tots els missatges són objectes JSON amb el camp `"v": 1`.
 | `devices.list` | `kind`: `"output"`, `"input"` o `"all"` (per defecte); `includeInactive`: `true` per incloure també els desactivats i desconnectats (per defecte, `false`) | `{ devices: [ … ] }` (vegeu 4.1) | fase 1 |
 | `hardware.report` | — | `{ report: { … } }`: resum de l'arrencada (vegeu 4.4) | fase 1 |
 | `settings.get` | — | `{ settings: { profile: { id, name }, ui: { zoom, recordersPerRow, endWarningSeconds }, layout: { players, recorders }, program: { name }, folders: { history, logs }, restartNeeded } }`: ajustos desats a `config.json` i al perfil actiu (vegeu 4.9) | fase 2 (`layout`, `recordersPerRow`, `endWarningSeconds`, `restartNeeded`: pas 9; `program`: pas 10); `profile`: fase 4 |
-| `settings.set` | `ui`, `layout` i/o `program`: només els ajustos a canviar, p. ex. `{ "ui": { "zoom": 1.25 } }` (vegeu 4.9) | `{ settings }` amb tots els ajustos. Es desa de seguida. Si algun valor és fora de marge, `bad_params` i no es canvia res | fase 2 |
+| `settings.set` | `ui`, `layout`, `program` i/o `loudness` (`{ "targetLufs": -12 }`, de −24 a −6; s'aplica a tots els reproductors a partir de la pista següent): només els ajustos a canviar, p. ex. `{ "ui": { "zoom": 1.25 } }` (vegeu 4.9) | `{ settings }` amb tots els ajustos. Es desa de seguida. Si algun valor és fora de marge, `bad_params` i no es canvia res | fase 2 |
 
 ### 4.1. Dispositius
 
@@ -109,6 +109,7 @@ Per defecte hi ha dos reproductors, `"1"` i `"2"`; se'n poden configurar fins a 
 | `player.load` | `player`, `path` (ruta completa) | tots menys `playing`. Afegeix el fitxer al final de la llista i el deixa preparat (`ready`). Només per a la consola de proves: la interfície fa servir `playlist.add` | `{ player }` |
 | `player.retry` | `player` | `error`. Torna a obrir la sortida i el fitxer i queda `ready` **a la mateixa posició**. No torna a sonar sol: cal `player.play` | `{ player }` |
 | `player.seek` | `player`, `position` (segons des de l'inici) | `ready`, `playing`, `paused`, `ended`. Salta a aquest punt (si és més enllà del final, es queda al final). Si sonava, **continua sonant** des d'allà, amb un silenci molt curt mentre es torna a obrir la sortida; si era en pausa, continua en pausa; si havia acabat, queda `ready`. Tornar a començar la pista és `position: 0` | `{ player }` |
+| `player.setNormalization` | `player`, `enabled` (true/false) | tots. S'aplica **a partir de la pista següent** (la que sona no canvia de volum). Es desa al perfil | `{ player }` |
 | `player.setProcessing` | `player`; `processing` (els camps que es volen canviar, vegeu 4.13) **o** `preset` (l'`id` d'un preset de `settings.processingPresets`) | tots, també mentre sona: s'aplica de seguida i sense clics. Es desa al perfil (`playerProcessing` a `perfil.json`) i es conserva d'una pista a l'altra. Preset desconegut, reproductor que no existeix o sense `processing` ni `preset`: `bad_params` | `{ player }` |
 | `player.setVolume` | `player`, `db` (de `-60` a `0`) | tots, també mentre sona. A `-60` el reproductor queda en silenci; fora de marge es queda al límit. El canvi es fa amb una rampa curta (sense clics). En arrencar el motor, tots els reproductors són a 0 dB (no es desa) | `{ player }` |
 
@@ -131,6 +132,7 @@ Objecte `player` (també a `state.get` i a l'esdeveniment `player.state`):
 - `underruns`: talls des que es va obrir el reproductor (la targeta ha demanat so i no n'hi havia de preparat). Ha de ser 0; serveix per a les proves llargues.
 - `volumeDb`: volum del fader (de `-60`, silenci, a `0`).
 - `processing`: el compressor/limitador del reproductor (vegeu 4.13).
+- `normalization`: `{ enabled, targetLufs, gainDb }`: normalització de sonoritat (vegeu 4.14). `gainDb` és el guany aplicat a la pista que sona (`null` si no se n'aplica cap: desactivada, o la pista encara no s'havia mesurat quan va començar).
 
 ### 4.3. Enregistradors
 
@@ -235,6 +237,7 @@ Objecte `playlist` (també a `state.get` → `playlists` i a l'esdeveniment `pla
 
 - `name`: nom del fitxer sense extensió (no es fan servir les metadades).
 - `type`: `track` (una pista) o `section` (**separador de secció**, D-042). Un separador no és cap fitxer (`path` buit) i **no sona mai**: `name` és el títol, `color` el seu color (o `null`) i `collapsed` si la interfície n'ha d'amagar les pistes. Play, el cue i l'avanç automàtic se'l salten (l'avanç continua amb la primera pista de després); no pot tenir cue, bucle ni avanç (`bad_state`); `player.playItem` amb un separador dona `bad_state`. Es desa a les llistes `.obpl` i es mou, s'esborra, es duplica i es copia com una pista. Un fitxer el nom del qual és només guions baixos o guions (p. ex. `______.mp3`, el separador del Winamp) s'afegeix com a separador amb el títol «Secció», també des d'un M3U.
+- `loudness`: sonoritat de la pista en LUFS (fase 4, 4.14), quan ja s'ha mesurat; `null` mentrestant (o si és silenci).
 - `status`: `analyzing` (s'està comprovant), `ok` (sonarà), `error` (malmès o format no compatible) o `missing` (el fitxer ja no hi és). `problem`: el motiu, en català.
 - **Comprovació:** en afegir una pista, el motor l'obre amb el mateix descodificador que el reproductor i en llegeix el principi. **Si una pista és `ok`, sonarà.** Cada 30 s es comprova que els fitxers encara existeixen (sense obrir-los); si un que faltava torna, es torna a comprovar.
 - `totalDuration`: suma de les durades conegudes.
@@ -427,6 +430,14 @@ Objecte `processing` (al reproductor, a `player.setProcessing` i a cada preset):
 |---|---|---|
 | `processing.savePreset` | `name` (1 a 40 caràcters); `processing` (els ajustos) **o** `player` (els d'aquest reproductor) | `{ preset: { id, name }, processingPresets }`. Es desa al perfil. Si ja hi ha un preset propi amb aquest nom (sense distingir majúscules), se substitueix (la interfície ho confirma abans). El nom d'un preset de l'aplicació o més de 30 presets propis: `bad_params` |
 | `processing.deletePreset` | `preset` (id d'un preset propi) | `{ processingPresets }`. Els reproductors que el feien servir no canvien. Un preset de l'aplicació o que no existeix: `bad_params` |
+
+### 4.14. Normalització de sonoritat (fase 4, D-070 i D-071)
+
+- Cada pista que s'afegeix a una llista es comprova (`status`) i, després, amb menys prioritat, se'n mesura la sonoritat (EBU R128 / ITU BS.1770-4): `loudness` a l'element de la llista. Les mesures es desen a la memòria cau (`cache\sonoritat\`, 60 dies des de l'últim ús).
+- Els reproductors amb `normalization.enabled` apliquen a cada pista el guany **objectiu − sonoritat**, com a molt **+10 dB** (`settings.loudness.maxBoostDb`), abans del compressor/limitador (4.13). Cada pista encadenada (bucle o avanç automàtic) porta el seu guany.
+- Activar-la, desactivar-la o canviar l'objectiu té efecte a partir de la pista següent. Una pista que encara no s'havia mesurat quan va començar sona sense normalitzar.
+- Les pistes mono es mesuren com sonen (el mateix senyal pels dos canals).
+- `settings` porta `loudness: { targetLufs, maxBoostDb }` (per defecte, −12 LUFS i +10 dB).
 
 ## 5. Esdeveniments
 

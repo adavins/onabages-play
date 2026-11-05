@@ -31,6 +31,8 @@ public static class PlaylistJson
         ["path"] = item.Path,
         ["duration"] = item.Duration is { } d ? Math.Round(d.TotalSeconds, 3) : null,
         ["format"] = item.Format,
+        // Sonoritat en LUFS (fase 4, pas 5b), quan ja s'ha mesurat; si no (o és silenci), null.
+        ["loudness"] = item.LoudnessLufs is { } lufs ? Math.Round(lufs, 1) : null,
         ["status"] = item.Status switch
         {
             TrackStatus.Analyzing => "analyzing",

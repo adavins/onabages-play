@@ -25,6 +25,13 @@ public static class PlayerJson
         ["format"] = player.Format,
         // Compressor/limitador (fase 4, pas 4b; protocol 4.13).
         ["processing"] = Data.ConfigRepository.WriteDynamics(null, player.Dynamics),
+        // Normalització de sonoritat (fase 4, pas 5b): gainDb és el guany de la pista que sona (null = cap).
+        ["normalization"] = new JsonObject
+        {
+            ["enabled"] = player.Normalize,
+            ["targetLufs"] = player.NormalizationTargetLufs,
+            ["gainDb"] = player.NormalizationDb,
+        },
     };
 
     public static JsonArray All(IEnumerable<Player> players) =>

@@ -92,6 +92,7 @@ public sealed partial class CommandRouter
                 "player.seek" => PlayerSeek(msg),
                 "player.setVolume" => PlayerSetVolume(msg),
                 "player.setProcessing" => PlayerSetProcessing(msg),
+                "player.setNormalization" => PlayerSetNormalization(msg),
                 "processing.savePreset" => ProcessingSavePreset(msg),
                 "processing.deletePreset" => ProcessingDeletePreset(msg),
                 "player.playItem" => PlayerCommand(msg, p => p.PlayItem(RequireString(msg, "itemId"))),
@@ -367,8 +368,9 @@ public sealed partial class CommandRouter
         var ui = msg["ui"] as JsonObject;
         var layout = msg["layout"] as JsonObject;
         var program = msg["program"] as JsonObject;
-        if (ui is null && layout is null && program is null)
-            throw new BadParamsException("Falta el camp 'ui', 'layout' o 'program' amb els ajustos a canviar.");
+        var loudness = msg["loudness"] as JsonObject;
+        if (ui is null && layout is null && program is null && loudness is null)
+            throw new BadParamsException("Falta el camp 'ui', 'layout', 'program' o 'loudness' amb els ajustos a canviar.");
 
         double? zoom = OptionalNumber(ui?["zoom"], "ui.zoom", EngineConfig.MinZoom, EngineConfig.MaxZoom);
         int? perRow = OptionalInt(ui?["recordersPerRow"], "ui.recordersPerRow", 1, EngineConfig.MaxRecorders);
@@ -376,6 +378,7 @@ public sealed partial class CommandRouter
         int? players = OptionalInt(layout?["players"], "layout.players", 1, EngineConfig.MaxPlayers);
         int? recorders = OptionalInt(layout?["recorders"], "layout.recorders", 1, EngineConfig.MaxRecorders);
         string? programName = OptionalProgramName(program?["name"]);
+        double? target = OptionalNumber(loudness?["targetLufs"], "loudness.targetLufs", EngineConfig.MinLoudnessTargetLufs, EngineConfig.MaxLoudnessTargetLufs);
 
         config.Update(c =>
         {
@@ -387,7 +390,16 @@ public sealed partial class CommandRouter
             if (players is { } p) c.PlayerCount = p;
             if (recorders is { } n) c.RecorderCount = n;
             if (programName is not null) c.ProgramName = programName;
+            if (target is { } t) c.LoudnessTargetLufs = Math.Round(t, 1);
         });
+
+        // L'objectiu nou s'aplica a tots els reproductors (a partir de la pista següent).
+        if (target is not null)
+        {
+            var (normalized, newTarget) = config.Read(c => (c.NormalizedPlayers.ToHashSet(), c.LoudnessTargetLufs));
+            foreach (var player in _state.Players)
+                player.SetNormalization(normalized.Contains(player.Id), newTarget);
+        }
 
         return new JsonObject { ["settings"] = SettingsJson(config) };
     }
@@ -401,6 +413,8 @@ public sealed partial class CommandRouter
         {
             // Perfil actiu (fase 4): la configuració de treball d'aquest programa.
             ["profile"] = new JsonObject { ["id"] = profileId, ["name"] = profileName },
+            // Normalització de sonoritat (fase 4, pas 5b).
+            ["loudness"] = new JsonObject { ["targetLufs"] = config.Read(c => c.LoudnessTargetLufs), ["maxBoostDb"] = Player.MaxNormalizationBoostDb },
             // Presets del compressor/limitador dels reproductors (fase 4, pas 4b).
             ["processingPresets"] = ProcessingPresetsJson(),
             ["ui"] = new JsonObject { ["zoom"] = zoom, ["recordersPerRow"] = perRow, ["endWarningSeconds"] = warning },

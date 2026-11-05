@@ -24,6 +24,7 @@
   --obp-info: #3d8bfd;
   --obp-idle: #6c757d;
   --obp-cue: #f07c1a;              /* preescolta (taronja): panell, rètol i fila que hi sona */
+  --obp-norm: #2dd4bf;             /* normalització (verd blavós): botó NORM */
   --obp-dsp: #8b5cf6;              /* compressor/limitador (lila): botó DSP i reducció */
 
   /* Mides de la distribució */
@@ -639,9 +640,13 @@ body.engine-offline .side-content {
 
 /* Compressor/limitador del reproductor (js/ui/processing-dialog.js; D-068) ------ */
 
-/* Botó DSP: desactivat, discret; activat, encès en lila (color, icona i el text «DSP ON»). */
+/* Botons DSP i NORM: desactivats, discrets; activats, plens de color i amb una marca ✓. */
 .dsp-btn {
-  padding: 0.05rem 0.4rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.1rem;
+  white-space: nowrap;
+  padding: 0.05rem 0.35rem;
   font-size: 0.75rem;
   font-weight: 700;
   line-height: 1.3;
@@ -657,6 +662,14 @@ body.engine-offline .side-content {
   color: #fff;
   background: var(--obp-dsp);
   border-color: var(--obp-dsp);
+}
+
+/* Botó NORM (normalització, D-072): el mateix estil, encès en verd blavós. */
+.norm-btn.on,
+.norm-btn.on:hover {
+  color: #000;
+  background: var(--obp-norm);
+  border-color: var(--obp-norm);
 }
 
 /* Reducció: barra que creix cap a la dreta (de 0 a 20 dB). */

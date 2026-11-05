@@ -86,6 +86,18 @@ public sealed class EngineConfig
     /// <summary>Presets propis del compressor/limitador, en l'ordre en què es van desar (D-069).</summary>
     public List<ProcessingPreset> ProcessingPresets { get; set; } = [];
 
+    // --- Normalització de sonoritat (fase 4, pas 5b; del perfil) ---
+
+    /// <summary>Reproductors que normalitzen (per defecte, cap: D-070).</summary>
+    public HashSet<string> NormalizedPlayers { get; } = [];
+
+    /// <summary>Objectiu de la normalització en LUFS (per defecte −12: D-070).</summary>
+    public double LoudnessTargetLufs { get; set; } = DefaultLoudnessTargetLufs;
+
+    public const double DefaultLoudnessTargetLufs = -12;
+    public const double MinLoudnessTargetLufs = -24;
+    public const double MaxLoudnessTargetLufs = -6;
+
     public const int MaxProcessingPresets = 30;
     public const int MaxProcessingPresetName = 40;
 

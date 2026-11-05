@@ -74,7 +74,7 @@ public sealed class Player : IDisposable
     /// <summary>Pistes encadenades pel fil de lectura que encara no han començat a sonar.</summary>
     private readonly ConcurrentQueue<Transition> _transitions = new();
 
-    private sealed record Transition(long StartFrame, PlaylistItem Item, TimeSpan Duration);
+    private sealed record Transition(long StartFrame, PlaylistItem Item, TimeSpan Duration, double? NormalizationDb);
 
     /// <param name="id">Identificador del reproductor ("1", "2"...).</param>
     /// <param name="openOutput">Obre una sortida per identificador de dispositiu. Per defecte, WASAPI.</param>
@@ -170,6 +170,38 @@ public sealed class Player : IDisposable
         }
         RaiseStateChanged();
     }
+
+    // --- Normalització de sonoritat (fase 4, pas 5b; D-071) ---
+
+    /// <summary>Guany màxim de la normalització: que no pugi massa el soroll de les pistes molt fluixes.</summary>
+    public const double MaxNormalizationBoostDb = 10;
+
+    /// <summary>Iguala la sonoritat de les pistes a <see cref="NormalizationTargetLufs"/>. S'aplica a partir de la pista següent.</summary>
+    public bool Normalize { get; private set; }
+
+    /// <summary>Objectiu de la normalització (LUFS).</summary>
+    public double NormalizationTargetLufs { get; private set; } = -12;
+
+    /// <summary>Guany de normalització de la pista que sona (dB), o null si no se n'aplica cap.</summary>
+    public double? NormalizationDb { get; private set; }
+
+    /// <summary>Activa o desactiva la normalització i en fixa l'objectiu. No canvia la pista que ja sona.</summary>
+    public void SetNormalization(bool enabled, double targetLufs)
+    {
+        lock (_sync)
+        {
+            Normalize = enabled;
+            NormalizationTargetLufs = targetLufs;
+            _changed = true;
+        }
+        RaiseStateChanged();
+    }
+
+    /// <summary>Guany per a una pista amb la configuració d'ara (dB), o null si no se n'hi aplica cap.</summary>
+    private double? NormalizationFor(PlaylistItem item) =>
+        Normalize && item.LoudnessLufs is { } lufs
+            ? Math.Round(Math.Min(MaxNormalizationBoostDb, NormalizationTargetLufs - lufs), 1)
+            : null;
 
     /// <summary>Abaixada màxima del compressor/limitador des de l'última crida (dB, ≥ 0), per a l'indicador.</summary>
     public float TakeGainReductionDb()
@@ -397,6 +429,7 @@ public sealed class Player : IDisposable
 
                     LastPlayedId = CurrentItemId;
                     SetCurrent(next.Item, next.Duration);
+                    NormalizationDb = next.NormalizationDb;
                     _startOffset = TimeSpan.Zero;
                     _trackStartFrame = next.StartFrame;
                     Playlist.ClearCueIf(next.Item.Id);
@@ -533,7 +566,9 @@ public sealed class Player : IDisposable
         var stream = _stream;
         int sampleRate = _output.SampleRate;
         string currentId = item.Id;
-        _readerThread = new Thread(() => ReaderLoop(source, ring, stream, sampleRate, currentId))
+        NormalizationDb = NormalizationFor(item);
+        float gain = GainFor(NormalizationDb ?? 0);
+        _readerThread = new Thread(() => ReaderLoop(source, ring, stream, sampleRate, currentId, gain))
         {
             IsBackground = true,
             Name = $"Reproductor {Id}: lectura",
@@ -575,7 +610,8 @@ public sealed class Player : IDisposable
     /// en queda <see cref="DecideBeforeEnd"/> per sonar i, si n'ha de venir una altra, l'obre i hi
     /// continua escrivint: així no hi ha silenci entre pistes.
     /// </summary>
-    private void ReaderLoop(AudioFileSource source, SampleRingBuffer ring, PlayerStream stream, int sampleRate, string itemId)
+    /// <param name="gain">Guany de normalització de la pista (lineal; 1 = cap). Cada pista encadenada porta el seu.</param>
+    private void ReaderLoop(AudioFileSource source, SampleRingBuffer ring, PlayerStream stream, int sampleRate, string itemId, float gain)
     {
         var chunk = new float[ReadChunkSamples];
         long framesWritten = 0;
@@ -609,8 +645,18 @@ public sealed class Player : IDisposable
                     source.Dispose();
                     source = nextSource;
                     itemId = next.Id;
-                    _transitions.Enqueue(new Transition(framesWritten, next, nextSource.Duration));
+                    // Sense bloqueig: mentre s'atura, el reproductor pot estar esperant aquest fil amb el bloqueig agafat.
+                    // Normalize i l'objectiu són valors simples (es llegeixen sencers).
+                    double? normalization = NormalizationFor(next);
+                    gain = GainFor(normalization ?? 0);
+                    _transitions.Enqueue(new Transition(framesWritten, next, nextSource.Duration, normalization));
                     continue;
+                }
+
+                // Normalització: el guany de la pista, abans que arribi al fil d'àudio.
+                if (gain != 1f)
+                {
+                    for (int i = 0; i < read; i++) chunk[i] *= gain;
                 }
 
                 // Hi ha lloc per a tot el tros (ho hem comprovat abans), però per si de cas:

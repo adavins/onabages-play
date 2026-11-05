@@ -12,6 +12,7 @@ import { showContextMenu } from './context-menu.js';
 import { togglePreview, previewButton } from './cue-actions.js';
 import { PATHS_DRAG_TYPE } from './drag-types.js';
 import { editExplorerFolders } from './explorer-folders-dialog.js';
+import { choose } from './dialogs.js';
 
 /** @typedef {import('../store.js').Store} Store */
 /** @typedef {(cmd: string, params?: object) => Promise<any>} Request */
@@ -162,6 +163,24 @@ export class ExplorerTab {
     this.#open(index >= 0 ? this.#path : this.#roots[0]?.path ?? null);
   }
 
+  /** Pestanya Llistes buida: afegeix la carpeta on es desen les llistes per defecte. */
+  async #addDefaultListsFolder() {
+    try {
+      const path = await bridge?.defaultPlaylistsFolder();
+      if (!path) return;
+      const result = await this.#request('explorer.setFolders', {
+        kind: this.#kind,
+        folders: [...this.#roots.map((r) => ({ name: r.name, path: r.path })), { name: 'Llistes', path }],
+      });
+      this.#roots = result[this.#kind];
+      this.#rootIndex = this.#roots.length - 1;
+      this.#renderRoots();
+      this.#open(this.#roots[this.#rootIndex].path);
+    } catch (err) {
+      this.#el.status.textContent = /** @type {Error} */ (err).message;
+    }
+  }
+
   // -------------------------------------------------------------------------
   // Pintar
   // -------------------------------------------------------------------------
@@ -206,9 +225,14 @@ export class ExplorerTab {
       rows.innerHTML = `
         <div class="ex-empty">
           <p>Encara no hi ha cap carpeta de ${k.what} en aquest perfil.</p>
-          <button type="button" class="btn btn-sm btn-primary js-add-first"><i class="bi bi-plus-lg"></i> Afegir una carpeta…</button>
+          ${this.#kind === 'lists' ? `<button type="button" class="btn btn-sm btn-primary js-add-default">
+            <i class="bi bi-plus-lg"></i> Afegir la carpeta «Llistes»</button>
+            <p class="ex-hint">És on es desen les llistes si no se'n tria una altra.</p>` : ''}
+          <button type="button" class="btn btn-sm ${this.#kind === 'lists' ? 'btn-outline-primary' : 'btn-primary'} js-add-first">
+            <i class="bi bi-plus-lg"></i> Afegir una carpeta…</button>
         </div>`;
       rows.querySelector('.js-add-first')?.addEventListener('click', () => this.#manageFolders());
+      rows.querySelector('.js-add-default')?.addEventListener('click', () => this.#addDefaultListsFolder());
       this.#el.status.textContent = '';
       return;
     }
@@ -294,7 +318,10 @@ export class ExplorerTab {
       const target = /** @type {HTMLElement} */ (e.target);
       const row = /** @type {HTMLElement | null} */ (target.closest('.ex-file'));
       if (!row || target.closest('[data-action]')) return;
-      if (this.#kind === 'audios') this.#preview(/** @type {string} */ (row.dataset.path));
+      const path = /** @type {string} */ (row.dataset.path);
+      // Àudio: s'escolta a la preescolta. Llista: se'n veu el contingut.
+      if (this.#kind === 'audios') this.#preview(path);
+      else this.#showListContents(path);
     });
 
     rows.addEventListener('contextmenu', (e) => {
@@ -368,12 +395,27 @@ export class ExplorerTab {
       });
       items.push({ separator: true });
     }
+    if (single && this.#kind === 'lists') {
+      items.push({ label: 'Veure el contingut', icon: 'bi-eye', action: () => this.#showListContents(single) });
+      items.push({ separator: true });
+    }
     for (const id of players) {
       items.push({
         label: `Afegir al reproductor ${id}${what}`,
         icon: 'bi-plus-lg',
         action: () => this.#addTo(id, paths),
       });
+    }
+    // Una llista també pot substituir la d'un reproductor (p. ex. la secció del dia de «La Central»).
+    if (single && this.#kind === 'lists') {
+      items.push({ separator: true });
+      for (const id of players) {
+        items.push({
+          label: `Substituir la llista del reproductor ${id}…`,
+          icon: 'bi-arrow-left-right',
+          action: () => this.#replaceList(id, single),
+        });
+      }
     }
     if (single) {
       items.push({ separator: true });
@@ -385,6 +427,43 @@ export class ExplorerTab {
     showContextMenu(e, items);
   }
 
+  /** Substitueix la llista d'un reproductor per una llista desada (amb confirmació). @param {string} playerId @param {string} path */
+  async #replaceList(playerId, path) {
+    const name = fileNameOf(path);
+    const current = this.#store.playlists.get(playerId)?.items?.length ?? 0;
+    const playing = this.#store.players.get(playerId)?.state === 'playing';
+    const choice = await choose({
+      title: `Substituir la llista del reproductor ${playerId}`,
+      icon: 'bi-arrow-left-right',
+      message: `La llista del reproductor ${playerId}${current ? ` (${current} elements)` : ''} es canviarà per «${name}».`
+        + (playing ? '\nLa pista que sona continua sonant fins que s\'acabi o l\'aturis.' : ''),
+      buttons: [
+        { label: 'Cancel·lar', value: 'cancel' },
+        { label: 'Substituir', value: 'replace', style: 'primary' },
+      ],
+    });
+    if (choice !== 'replace') return;
+    try {
+      const result = await this.#request('playlist.load', { player: playerId, path, replace: true });
+      this.#el.status.textContent = `Reproductor ${playerId}: «${name}»`
+        + (result.missing ? ` (${result.missing} fitxers no hi són)` : '');
+    } catch (err) {
+      this.#el.status.textContent = /** @type {Error} */ (err).message;
+    }
+  }
+
+  /** Finestra amb el contingut d'una llista desada (sense carregar-la). @param {string} path */
+  async #showListContents(path) {
+    let result;
+    try {
+      result = await this.#request('playlist.peek', { path });
+    } catch (err) {
+      this.#el.status.textContent = /** @type {Error} */ (err).message;
+      return;
+    }
+    showListContents(fileNameOf(path), result);
+  }
+
   /** @param {string} playerId @param {string[]} paths */
   async #addTo(playerId, paths) {
     try {
@@ -394,6 +473,41 @@ export class ExplorerTab {
       this.#el.status.textContent = /** @type {Error} */ (err).message;
     }
   }
+}
+
+/**
+ * Finestra amb el contingut d'una llista: les seccions i les pistes, i les que no hi són en vermell.
+ * @param {string} name
+ * @param {{ items: any[], tracks: number, missing: number }} contents
+ */
+function showListContents(name, contents) {
+  const dialog = document.createElement('dialog');
+  dialog.className = 'obp-dialog ex-contents-dialog';
+  const summary = `${contents.tracks} pistes` + (contents.missing ? ` · ${contents.missing} no hi són` : '');
+  const rows = contents.items.map((item) => item.section !== undefined
+    ? `<div class="ex-contents-section"><i class="bi bi-chevron-down"></i> ${escapeHtml(item.section)}</div>`
+    : `<div class="ex-contents-track${item.exists ? '' : ' missing'}" title="${escapeHtml(item.path)}">
+         <i class="bi ${item.exists ? 'bi-music-note-beamed' : 'bi-exclamation-triangle-fill'}"></i>
+         <span class="ex-name">${escapeHtml(fileNameOf(item.path))}</span>
+         ${item.exists ? '' : '<span class="ex-missing-label">no hi és</span>'}
+       </div>`).join('');
+  dialog.innerHTML = `
+    <form method="dialog">
+      <h2 class="obp-dialog-title"><i class="bi bi-collection-play"></i> ${escapeHtml(name)}</h2>
+      <div class="ex-contents-summary">${escapeHtml(summary)}</div>
+      <div class="ex-contents-list">${rows || '<div class="ex-folders-empty">La llista és buida.</div>'}</div>
+      <div class="obp-dialog-buttons">
+        <button class="btn btn-primary" value="ok">Tancar</button>
+      </div>
+    </form>`;
+  document.body.appendChild(dialog);
+  dialog.showModal();
+  dialog.addEventListener('close', () => dialog.remove());
+}
+
+/** Nom del fitxer sense la carpeta. @param {string} path */
+function fileNameOf(path) {
+  return trimSlash(path).split(/[\\/]/).pop() ?? path;
 }
 
 // ---------------------------------------------------------------------------

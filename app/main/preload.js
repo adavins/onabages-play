@@ -38,6 +38,9 @@ contextBridge.exposeInMainWorld('onabages', {
   /** Diàleg per triar un perfil exportat (.zip) per importar-lo. Retorna la ruta, o null. */
   openProfileFile: () => ipcRenderer.invoke('dialog:open-profile'),
 
+  /** Carpeta on es desen les llistes per defecte («Llistes»). */
+  defaultPlaylistsFolder: () => ipcRenderer.invoke('app:default-playlists-folder'),
+
   /** Diàleg per triar una carpeta. Retorna la ruta, o null. */
   chooseFolder: (currentFolder) => ipcRenderer.invoke('dialog:choose-folder', currentFolder),
 

@@ -288,6 +288,8 @@ function buildPanels() {
   // Explorador del panell lateral (pas 2c): les carpetes són del perfil, i es tornen a llegir en cada connexió.
   const audios = new ExplorerTab('audios', store, request);
   /** @type {HTMLElement} */ (document.querySelector('.side-tab[data-tab="audios"]')).replaceChildren(audios.element);
+  const lists = new ExplorerTab('lists', store, request);
+  /** @type {HTMLElement} */ (document.querySelector('.side-tab[data-tab="lists"]')).replaceChildren(lists.element);
 }
 
 function renderAll() {

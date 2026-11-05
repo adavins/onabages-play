@@ -148,4 +148,32 @@ public class PlaylistFilesTests : IDisposable
         r = router.Handle($$"""{ "v": 1, "id": 5, "cmd": "playlist.load", "player": "2", "path": "C:\\no\\hi\\es.obpl" }""");
         Assert.Equal("file_error", r["error"]!["code"]!.GetValue<string>());
     }
+
+    [Fact]
+    public void Veure_el_contingut_duna_llista_sense_carregar_la()
+    {
+        var state = new EngineState([new Player("1", _ => new FakeOutput())]);
+        var router = new CommandRouter(state, () => { }, () => []);
+        string a = Audio("A.mp3");
+        string missing = Path.Combine(_folder, "No hi és.mp3");
+        string list = Path.Combine(_folder, "Dilluns.m3u");
+        File.WriteAllLines(list, ["#EXTM3U", a, "______.mp3", missing]);
+
+        var r = router.Handle($$"""{ "v": 1, "id": 1, "cmd": "playlist.peek", "path": "{{list.Replace("\\", "\\\\")}}" }""");
+
+        var result = r["result"]!;
+        Assert.Equal(2, result["tracks"]!.GetValue<int>());
+        Assert.Equal(1, result["missing"]!.GetValue<int>());
+        var items = result["items"]!.AsArray();
+        Assert.Equal(a, items[0]!["path"]!.GetValue<string>());
+        Assert.True(items[0]!["exists"]!.GetValue<bool>());
+        Assert.NotNull(items[1]!["section"]); // el separador del Winamp
+        Assert.False(items[2]!["exists"]!.GetValue<bool>());
+        Assert.Empty(state.FindPlayer("1")!.Playlist.Items); // no s'ha carregat enlloc
+
+        r = router.Handle("""{ "v": 1, "id": 2, "cmd": "playlist.peek", "path": "relativa.obpl" }""");
+        Assert.Equal("bad_params", r["error"]!["code"]!.GetValue<string>());
+        r = router.Handle("""{ "v": 1, "id": 3, "cmd": "playlist.peek", "path": "C:\\no\\hi\\es.obpl" }""");
+        Assert.Equal("file_error", r["error"]!["code"]!.GetValue<string>());
+    }
 }

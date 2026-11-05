@@ -102,6 +102,7 @@ public sealed partial class CommandRouter
                 "playlist.addSection" => PlaylistAddSection(msg),
                 "playlist.updateSection" => PlaylistUpdateSection(msg),
                 "playlist.load" => PlaylistLoad(msg),
+                "playlist.peek" => PlaylistPeek(msg),
                 "playlist.save" => PlaylistSave(msg),
                 "track.info" => TrackInfoGet(msg),
                 "recorder.setDevice" => RecorderSetDevice(msg),
@@ -551,6 +552,34 @@ public sealed partial class CommandRouter
             ["ids"] = new JsonArray(ids.Select(id => (JsonNode)id).ToArray()),
             ["missing"] = entries.Count(e => !e.IsSection && !File.Exists(e.Path)),
         };
+    }
+
+    /// <summary>
+    /// Contingut d'una llista desada, sense carregar-la enlloc (pestanya Llistes del panell lateral, pas 2d):
+    /// "path" (ruta completa d'un .obpl, .m3u o .m3u8). { items: [{ section } | { path, exists }], tracks, missing }
+    /// </summary>
+    private static JsonObject PlaylistPeek(JsonObject msg)
+    {
+        string path = RequireString(msg, "path");
+        if (!Path.IsPathFullyQualified(path))
+            throw new BadParamsException("'path' ha de ser una ruta completa.");
+
+        var entries = PlaylistFiles.Read(path);
+        var items = new JsonArray();
+        int tracks = 0, missing = 0;
+        foreach (var entry in entries)
+        {
+            if (entry.IsSection)
+            {
+                items.Add(new JsonObject { ["section"] = entry.SectionTitle, ["color"] = entry.Color });
+                continue;
+            }
+            bool exists = File.Exists(entry.Path);
+            tracks++;
+            if (!exists) missing++;
+            items.Add(new JsonObject { ["path"] = entry.Path, ["exists"] = exists });
+        }
+        return new JsonObject { ["items"] = items, ["tracks"] = tracks, ["missing"] = missing };
     }
 
     /// <summary>Desa la llista d'un reproductor en format .obpl: "path" (ruta completa; s'hi afegeix .obpl si no en té).</summary>

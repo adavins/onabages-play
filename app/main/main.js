@@ -713,6 +713,9 @@ ipcMain.handle('dialog:open-profile', async () => {
   return result.filePaths[0];
 });
 
+/** Carpeta on es desen les llistes per defecte (per proposar-la a la pestanya Llistes del panell lateral). */
+ipcMain.handle('app:default-playlists-folder', () => playlistsFolder());
+
 ipcMain.handle('dialog:save-playlist', async (_event, suggestedName) => {
   if (!mainWindow) return null;
   const name = typeof suggestedName === 'string' && suggestedName ? suggestedName : 'Llista';

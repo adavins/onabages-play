@@ -700,6 +700,17 @@ body.engine-offline .side-content {
 
 .proc-dialog { width: min(40rem, 94vw); }
 
+.proc-crossfade {
+  display: grid;
+  grid-template-columns: 9rem 5.5rem 2rem 1fr;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+/* Els valors habituals, en una fila pròpia sota el camp (no hi caben al costat). */
+.proc-crossfade .btn-group { grid-column: 2 / -1; justify-self: start; }
+.proc-crossfade .btn-group .btn { white-space: nowrap; }
+
 .proc-top {
   display: flex;
   align-items: center;

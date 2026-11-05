@@ -83,6 +83,9 @@ public sealed class EngineConfig
     /// <summary>Ajustos del compressor/limitador de cada reproductor (clau: identificador). Sense, desactivat.</summary>
     public Dictionary<string, DynamicsSettings> PlayerDynamics { get; } = [];
 
+    /// <summary>Fos entre pistes encadenades de cada reproductor, en ms (fase 5; D-077). Sense, 0 (cap fos).</summary>
+    public Dictionary<string, int> PlayerCrossfadeMs { get; } = [];
+
     /// <summary>Presets propis del compressor/limitador, en l'ordre en què es van desar (D-069).</summary>
     public List<ProcessingPreset> ProcessingPresets { get; set; } = [];
 

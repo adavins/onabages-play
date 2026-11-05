@@ -87,6 +87,25 @@ public sealed partial class CommandRouter
     }
 
     /// <summary>
+    /// Fos entre pistes que s'encadenen soles (fase 5; D-077): player, ms (de 0 a 10.000; 0 = cap fos).
+    /// S'aplica a partir de la pista següent. Es desa al perfil.
+    /// </summary>
+    private JsonObject PlayerSetCrossfade(JsonObject msg)
+    {
+        var player = GetPlayer(msg);
+        if (msg["ms"] is not JsonValue v || !v.TryGetValue(out double ms) || !double.IsFinite(ms) || ms < 0 || ms > Player.MaxCrossfadeMs)
+            throw new BadParamsException($"'ms' ha de ser un nombre de 0 a {Player.MaxCrossfadeMs}.");
+
+        player.SetCrossfade((int)Math.Round(ms));
+        _config?.Update(c =>
+        {
+            if (player.CrossfadeMs > 0) c.PlayerCrossfadeMs[player.Id] = player.CrossfadeMs;
+            else c.PlayerCrossfadeMs.Remove(player.Id);
+        });
+        return new JsonObject { ["player"] = PlayerJson.Player(player) };
+    }
+
+    /// <summary>
     /// Desa un preset propi: name, i els ajustos (processing) o els del reproductor (player).
     /// Si ja n'hi ha un de propi amb aquest nom, se substitueix (la interfície ho confirma abans).
     /// { preset: { id, name }, processingPresets }

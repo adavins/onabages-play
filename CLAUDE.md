@@ -10,8 +10,9 @@ L'especificació completa és a `docs/especificacio.md`. Llegeix-ne la secció c
 
 ## Fase actual
 
-**Fase 4 — Processament, perfils i distribució flexible** (vegeu `docs/especificacio.md`, seccions 10, 11.2, 12.2 i 14.3).
+**Fase 5 — Ampliacions segons l'ús real** (vegeu `docs/especificacio.md`, secció 14.3). Les prioritats les tria el desenvolupador, una a una.
 Pendent de les fases 1, 2 i 3 (D-026, D-048, D-056): la prova de 3 hores, la desconnexió d'un USB real, un programa complet en paral·lel amb el Winamp i la prova de l'editor amb el maquinari real.
+Ajornat de la fase 4 (D-069, D-073): els panells configurables i l'equalitzador.
 Ordinador de proves i repartiment de dispositius: `docs/inventari/`.
 Quan una fase s'acabi, actualitza aquesta línia i afegeix una entrada a `docs/decisions.md`.
 

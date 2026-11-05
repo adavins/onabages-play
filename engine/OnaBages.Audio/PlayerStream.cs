@@ -14,9 +14,18 @@ namespace OnaBages.Audio;
 /// </summary>
 public sealed class PlayerStream : IWaveProvider
 {
-    private readonly SampleRingBuffer _ring;
+    private SampleRingBuffer _ring;
     private readonly int _outChannels;
     private readonly float[] _stereo; // només per a sortides de més de 2 canals
+
+    // --- Canvi de pista a mà amb fos (fase 5; D-078) ---
+    // El reproductor deixa preparada la memòria de la pista nova (_pendingRing); el fil d'àudio hi passa
+    // en el bloc següent i, durant el fos, també llegeix de la de la pista que s'acaba (_outgoing).
+    private SampleRingBuffer? _pendingRing;
+    private int _pendingFadeFrames;
+    private SampleRingBuffer? _outgoing; // només el fa servir el fil d'àudio
+    private int _fadeTotal, _fadeDone;    // idem
+    private readonly float[] _scratch;    // idem: la pista que s'acaba, abans de barrejar-la
 
     private long _framesPlayed;
     private int _underruns;
@@ -57,7 +66,79 @@ public sealed class PlayerStream : IWaveProvider
         _gain = gain;
         _currentGain = gain; // sense rampa al principi
         _stereo = outChannels > 2 ? new float[sampleRate * 2] : [];
+        _scratch = new float[sampleRate / 10 * 2]; // 100 ms; si un bloc és més llarg, es barreja a trossos
         WaveFormat = WaveFormat.CreateIeeeFloatWaveFormat(sampleRate, outChannels);
+    }
+
+    /// <summary>
+    /// Pista nova a mà (fase 5; D-078), abans d'arrencar el seu fil de lectura: es tornen a zero els avisos de final
+    /// (el fil de lectura nou els tornarà a marcar quan toqui). Fil de les ordres.
+    /// </summary>
+    public void PrepareForNewTrack()
+    {
+        _sourceFinished = false;
+        _endReached = false;
+        Interlocked.Exchange(ref _framesAfterEnd, 0);
+    }
+
+    /// <summary>
+    /// Passa a la memòria de la pista nova en el bloc següent, amb un fos de <paramref name="fadeFrames"/>
+    /// mostres per canal: la pista que sonava baixa i la nova puja (corbes d'igual potència). La memòria
+    /// de la que sonava ja no rep més dades (el seu fil de lectura s'ha aturat): se'n fan servir les que hi ha.
+    /// <see cref="FramesPlayed"/> torna a començar de zero. Fil de les ordres.
+    /// </summary>
+    public void SwitchTo(SampleRingBuffer ring, int fadeFrames)
+    {
+        _pendingFadeFrames = Math.Max(1, fadeFrames);
+        Volatile.Write(ref _pendingRing, ring);
+    }
+
+    /// <summary>Hi ha un canvi de pista preparat que el fil d'àudio encara no ha fet.</summary>
+    public bool SwitchPending => Volatile.Read(ref _pendingRing) is not null;
+
+    /// <summary>
+    /// Fil d'àudio: si hi ha una pista nova preparada, hi passa. Sense crear objectes: només canvia referències.
+    /// </summary>
+    private void TakePendingSwitch()
+    {
+        var pending = Interlocked.Exchange(ref _pendingRing, null);
+        if (pending is null) return;
+        _outgoing = _ring;
+        _ring = pending;
+        _fadeTotal = _pendingFadeFrames;
+        _fadeDone = 0;
+        Interlocked.Exchange(ref _framesPlayed, 0);
+    }
+
+    /// <summary>
+    /// Fil d'àudio: barreja la pista que s'acaba amb la nova (que ja és a <paramref name="stereo"/>).
+    /// Quan s'acaba el fos, la memòria de la que s'acaba es deixa anar.
+    /// </summary>
+    private void MixOutgoing(Span<float> stereo, int frames)
+    {
+        var outgoing = _outgoing;
+        if (outgoing is null) return;
+
+        for (int done = 0; done < frames;)
+        {
+            int piece = Math.Min(frames - done, _scratch.Length / 2);
+            int got = outgoing.Read(_scratch.AsSpan(0, piece * 2)) / 2;
+            for (int f = 0; f < piece; f++)
+            {
+                double t = (_fadeDone + done + f + 0.5) / _fadeTotal;
+                float fadeIn = t >= 1 ? 1f : (float)Math.Sin(t * Math.PI / 2);
+                float fadeOut = t >= 1 ? 0f : (float)Math.Cos(t * Math.PI / 2);
+                int i = (done + f) * 2;
+                float oldLeft = f < got ? _scratch[f * 2] : 0f;
+                float oldRight = f < got ? _scratch[f * 2 + 1] : 0f;
+                stereo[i] = stereo[i] * fadeIn + oldLeft * fadeOut;
+                stereo[i + 1] = stereo[i + 1] * fadeIn + oldRight * fadeOut;
+            }
+            done += piece;
+        }
+
+        _fadeDone += frames;
+        if (_fadeDone >= _fadeTotal) _outgoing = null;
     }
 
     public WaveFormat WaveFormat { get; }
@@ -95,6 +176,7 @@ public sealed class PlayerStream : IWaveProvider
     {
         Span<float> output = MemoryMarshal.Cast<byte, float>(buffer);
         int frames = output.Length / _outChannels;
+        TakePendingSwitch();
 
         int framesRead = _outChannels == 2
             ? _ring.Read(output[..(frames * 2)]) / 2
@@ -114,6 +196,11 @@ public sealed class PlayerStream : IWaveProvider
             if (_endReached)
                 Interlocked.Add(ref _framesAfterEnd, frames - framesRead);
         }
+
+        // Canvi de pista a mà amb fos: la pista que s'acaba, a sobre de la nova (a les sortides de més
+        // de 2 canals es barreja abans d'eixamplar-ho, a ReadIntoWiderOutput).
+        if (_outChannels == 2)
+            MixOutgoing(output[..(frames * 2)], frames);
 
         // Tot el bloc (també el silenci del final): el compressor retarda el so uns 1,5 ms i així no se'n perd la cua.
         if (_outChannels == 2)
@@ -153,6 +240,7 @@ public sealed class PlayerStream : IWaveProvider
         {
             int chunk = Math.Min(frames - framesRead, _stereo.Length / 2);
             int got = _ring.Read(_stereo.AsSpan(0, chunk * 2)) / 2;
+            MixOutgoing(_stereo.AsSpan(0, got * 2), got);
             Dynamics.Process(_stereo.AsSpan(0, got * 2));
             for (int i = 0; i < got; i++)
             {

@@ -649,6 +649,7 @@ No calen Visual Studio Build Tools, MSVC ni CMake.
 - Fet amb la prova automàtica (D-053). Pendent (D-056): la mateixa prova amb el maquinari real i a l'ordinador modest, i comparar un tall amb el mp3DirectCut.
 
 ### Fase 4 — Processament, perfils i distribució flexible
+**Tancada (D-076)**: tot fet i provat pel desenvolupador, excepte el que s'indica com a ajornat.
 - Normalització de sonoritat, limitador, compressor i presets. (L'EQ queda ajornat: D-073.)
 - Perfils amb exportació i importació.
 - Panells configurables: **ajornat** (D-069; els elements de la pantalla ja s'ajusten prou bé).
@@ -657,7 +658,9 @@ No calen Visual Studio Build Tools, MSVC ni CMake.
 - **Panell de llistes desades:** les llistes `.obpl` d'un programa (p. ex. les seccions de cada dia de «La Central») a punt per arrossegar-les senceres a un reproductor. Fet (pas 2d, D-065): pestanya Llistes del panell lateral (arrossegar, veure el contingut, afegir o substituir la llista d'un reproductor).
 
 ### Fase 5 — Ampliacions segons l'ús real
-Candidates: equalitzador per reproductor (ajornat de la fase 4, D-073), botonera de talls (cartwall), detector de silenci, punts cue d'inici i final, encadenament amb fos entre pistes, retall automàtic de silencis inicials i finals, biblioteca musical amb cerca, inicis programats, control MIDI o per *fader start*, usuaris.
+Fet: **encadenament amb fos entre pistes** (D-077, D-078): per reproductor, de 0 (per defecte) a 10 s, també molt curt (10–100 ms); en l'avanç automàtic i també quan es fa sonar una pista a mà mentre en sona una altra.
+
+Candidates: equalitzador per reproductor (ajornat de la fase 4, D-073), botonera de talls (cartwall), detector de silenci, punts cue d'inici i final, retall automàtic de silencis inicials i finals, biblioteca musical amb cerca, inicis programats, control MIDI o per *fader start*, usuaris.
 
 # 15. Proves i criteris de qualitat
 

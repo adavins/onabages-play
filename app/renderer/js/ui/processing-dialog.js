@@ -54,8 +54,24 @@ export function openProcessingDialog(store, request, playerId) {
   dialog.className = 'obp-dialog proc-dialog';
   dialog.innerHTML = `
     <form method="dialog">
-      <h2 class="obp-dialog-title"><i class="bi bi-sliders"></i> Compressor/limitador · Reproductor ${escapeHtml(playerId)}</h2>
+      <h2 class="obp-dialog-title"><i class="bi bi-sliders"></i> Processament · Reproductor ${escapeHtml(playerId)}</h2>
 
+      <!-- Encadenament amb fos (fase 5; D-077). -->
+      <h3 class="obp-settings-section">Encadenament entre pistes</h3>
+      <div class="proc-crossfade">
+        <label class="proc-label" for="proc-crossfade">Fos</label>
+        <input class="form-control form-control-sm proc-number js-crossfade" type="number" id="proc-crossfade"
+               min="0" max="10000" step="10" aria-label="Fos entre pistes, en mil·lisegons">
+        <span class="proc-unit">ms</span>
+        <div class="btn-group btn-group-sm js-crossfade-quick" role="group" aria-label="Valors habituals">
+          ${[0, 10, 100, 500, 1000, 3000].map((ms) => `<button type="button" class="btn btn-outline-secondary" data-ms="${ms}">${ms === 0 ? 'Cap' : ms < 1000 ? `${ms} ms` : `${ms / 1000} s`}</button>`).join('')}
+        </div>
+      </div>
+      <p class="proc-help">Quan una pista s'encadena sola amb la següent (avanç automàtic) o se'n fa sonar una altra a mà
+        mentre sona, se sobreposen aquest temps: l'una baixa i l'altra puja. 0 = sense fos. No s'aplica als bucles.
+        En l'avanç automàtic, s'aplica a partir de la pista següent.</p>
+
+      <h3 class="obp-settings-section">Compressor/limitador</h3>
       <div class="proc-top">
         <div class="form-check form-switch">
           <input class="form-check-input js-enabled" type="checkbox" role="switch" id="proc-enabled">
@@ -92,7 +108,7 @@ export function openProcessingDialog(store, request, playerId) {
         <div class="gr-bar"><div class="gr-fill js-gr-fill"></div></div>
         <span class="gr-value js-gr-value">0,0 dB</span>
       </div>
-      <p class="proc-help">Ordre: pista → compressor → sostre → fader. Els canvis s'apliquen de seguida i es desen al perfil.</p>
+      <p class="proc-help js-help">Ordre: pista → compressor → sostre → fader. Els canvis s'apliquen de seguida i es desen al perfil.</p>
 
       <div class="obp-dialog-buttons">
         <button class="btn btn-primary" value="close">Tancar</button>
@@ -104,6 +120,40 @@ export function openProcessingDialog(store, request, playerId) {
   const enabled = $('.js-enabled');
   const preset = /** @type {HTMLSelectElement} */ (dialog.querySelector('.js-preset'));
   const link = $('.js-link');
+
+  // --- Encadenament amb fos ---
+  const crossfade = $('.js-crossfade');
+  const quick = /** @type {HTMLElement} */ (dialog.querySelector('.js-crossfade-quick'));
+  /** Marca el botó del valor habitual que coincideix (si n'hi ha). @param {number} ms */
+  const showCrossfade = (ms) => {
+    crossfade.value = String(ms);
+    for (const b of quick.querySelectorAll('button')) {
+      b.classList.toggle('active', Number(/** @type {HTMLElement} */ (b).dataset.ms) === ms);
+    }
+  };
+  showCrossfade(Number(store.players.get(playerId)?.crossfadeMs ?? 0));
+  /** @type {number | undefined} */
+  let crossfadeTimer;
+  const sendCrossfade = (/** @type {number} */ ms) => {
+    showCrossfade(ms);
+    clearTimeout(crossfadeTimer);
+    crossfadeTimer = window.setTimeout(async () => {
+      try {
+        const result = await request('player.setCrossfade', { player: playerId, ms });
+        showCrossfade(result.player.crossfadeMs);
+      } catch (err) {
+        $('.js-help').textContent = /** @type {Error} */ (err).message;
+      }
+    }, 300);
+  };
+  crossfade.addEventListener('input', () => {
+    const ms = Math.round(Number(crossfade.value));
+    if (Number.isFinite(ms) && ms >= 0 && ms <= 10000) sendCrossfade(ms);
+  });
+  quick.addEventListener('click', (e) => {
+    const button = /** @type {HTMLElement | null} */ (/** @type {HTMLElement} */ (e.target).closest('[data-ms]'));
+    if (button) sendCrossfade(Number(button.dataset.ms));
+  });
 
   const saveButton = /** @type {HTMLButtonElement} */ (dialog.querySelector('.js-save-preset'));
   const deleteButton = /** @type {HTMLButtonElement} */ (dialog.querySelector('.js-delete-preset'));
@@ -171,7 +221,7 @@ export function openProcessingDialog(store, request, playerId) {
       setPresets(result.processingPresets);
       show();
     } catch (err) {
-      $('.proc-help').textContent = /** @type {Error} */ (err).message;
+      $('.js-help').textContent = /** @type {Error} */ (err).message;
     }
   });
 
@@ -193,7 +243,7 @@ export function openProcessingDialog(store, request, playerId) {
       setPresets(result.processingPresets);
       show();
     } catch (err) {
-      $('.proc-help').textContent = /** @type {Error} */ (err).message;
+      $('.js-help').textContent = /** @type {Error} */ (err).message;
     }
   });
 
@@ -221,7 +271,7 @@ export function openProcessingDialog(store, request, playerId) {
         show();
       }
     } catch (err) {
-      $('.proc-help').textContent = /** @type {Error} */ (err).message;
+      $('.js-help').textContent = /** @type {Error} */ (err).message;
     }
   }
 
@@ -244,7 +294,7 @@ export function openProcessingDialog(store, request, playerId) {
       current = { ...result.player.processing };
       show();
     } catch (err) {
-      $('.proc-help').textContent = /** @type {Error} */ (err).message;
+      $('.js-help').textContent = /** @type {Error} */ (err).message;
     }
   });
   // Retorn en un número no ha de tancar la finestra.

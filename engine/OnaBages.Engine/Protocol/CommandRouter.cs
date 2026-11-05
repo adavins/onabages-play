@@ -93,6 +93,7 @@ public sealed partial class CommandRouter
                 "player.setVolume" => PlayerSetVolume(msg),
                 "player.setProcessing" => PlayerSetProcessing(msg),
                 "player.setNormalization" => PlayerSetNormalization(msg),
+                "player.setCrossfade" => PlayerSetCrossfade(msg),
                 "processing.savePreset" => ProcessingSavePreset(msg),
                 "processing.deletePreset" => ProcessingDeletePreset(msg),
                 "player.playItem" => PlayerCommand(msg, p => p.PlayItem(RequireString(msg, "itemId"))),

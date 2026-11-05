@@ -649,6 +649,15 @@ public sealed class ConfigRepository
             }
         }
 
+        // Fos entre pistes encadenades (fase 5; camp opcional, sense canvi de versió): { "1": 2000, ... }.
+        if (root["playerCrossfade"] is JsonObject crossfade)
+        {
+            foreach (var (playerId, value) in crossfade)
+            {
+                if (Int(value) is { } ms && ms > 0) config.PlayerCrossfadeMs[playerId] = Math.Min(ms, 10_000);
+            }
+        }
+
         // Normalització de sonoritat (pas 5b; camp opcional, sense canvi de versió).
         if (root["normalization"] is JsonObject normalization)
         {
@@ -793,6 +802,10 @@ public sealed class ConfigRepository
         ["playerProcessing"] = new JsonArray(config.PlayerDynamics
             .OrderBy(p => p.Key, StringComparer.Ordinal)
             .Select(p => (JsonNode)WriteDynamics(p.Key, p.Value)).ToArray()),
+        ["playerCrossfade"] = new JsonObject(config.PlayerCrossfadeMs
+            .Where(p => p.Value > 0)
+            .OrderBy(p => p.Key, StringComparer.Ordinal)
+            .Select(p => KeyValuePair.Create(p.Key, (JsonNode?)p.Value))),
         ["normalization"] = new JsonObject
         {
             ["targetLufs"] = config.LoudnessTargetLufs,

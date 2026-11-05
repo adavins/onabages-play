@@ -337,6 +337,8 @@ foreach (var player in state.Players)
     // Normalització de sonoritat (fase 4, pas 5b): quins reproductors i amb quin objectiu.
     var (normalize, target) = config.Read(c => (c.NormalizedPlayers.Contains(player.Id), c.LoudnessTargetLufs));
     player.SetNormalization(normalize, target);
+    // Fos entre pistes encadenades (fase 5).
+    player.SetCrossfade(config.Read(c => c.PlayerCrossfadeMs.GetValueOrDefault(player.Id)));
 }
 
 // Enregistraments interromputs (el motor o l'ordinador van caure): es recuperen abans de res

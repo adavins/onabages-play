@@ -25,6 +25,8 @@ public static class PlayerJson
         ["format"] = player.Format,
         // Compressor/limitador (fase 4, pas 4b; protocol 4.13).
         ["processing"] = Data.ConfigRepository.WriteDynamics(null, player.Dynamics),
+        // Fos entre pistes encadenades (fase 5): 0 = cap.
+        ["crossfadeMs"] = player.CrossfadeMs,
         // Normalització de sonoritat (fase 4, pas 5b): gainDb és el guany de la pista que sona (null = cap).
         ["normalization"] = new JsonObject
         {

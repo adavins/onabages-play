@@ -171,6 +171,33 @@ public sealed class Player : IDisposable
         RaiseStateChanged();
     }
 
+    // --- Encadenament amb fos (fase 5; D-077) ---
+
+    /// <summary>Durada màxima del fos entre pistes encadenades.</summary>
+    public const int MaxCrossfadeMs = 10_000;
+
+    private volatile int _crossfadeMs;
+
+    /// <summary>
+    /// Fos entre pistes que s'encadenen soles (avanç automàtic), en mil·lisegons. 0 (per defecte) = sense fos.
+    /// No s'aplica als bucles ni quan es fa sonar una pista a mà. Es llegeix en començar cada pista.
+    /// </summary>
+    public int CrossfadeMs => _crossfadeMs;
+
+    /// <summary>Canvia la durada del fos (fora de marge, al límit). S'aplica a partir de la pista següent.</summary>
+    public void SetCrossfade(int ms)
+    {
+        lock (_sync)
+        {
+            _crossfadeMs = Math.Clamp(ms, 0, MaxCrossfadeMs);
+            _changed = true;
+        }
+        RaiseStateChanged();
+    }
+
+    /// <summary>Mostres (estèreo intercalades) que dura el fos a aquesta freqüència.</summary>
+    private int CrossfadeSamples(int sampleRate) => (int)((long)_crossfadeMs * sampleRate / 1000) * 2;
+
     // --- Normalització de sonoritat (fase 4, pas 5b; D-071) ---
 
     /// <summary>Guany màxim de la normalització: que no pugi massa el soroll de les pistes molt fluixes.</summary>
@@ -282,7 +309,11 @@ public sealed class Player : IDisposable
 
             if (CurrentItemId is not null && State is PlayerState.Playing or PlayerState.Paused)
                 LastPlayedId = CurrentItemId;
-            StartItem(itemId, startAt);
+            // Amb fos configurat i una pista sonant: la nova entra amb fos (D-078). Si no, com sempre.
+            if (State == PlayerState.Playing && _crossfadeMs > 0 && _stream is not null && _output is not null)
+                CrossfadeTo(target, startAt < TimeSpan.Zero ? TimeSpan.Zero : startAt);
+            else
+                StartItem(itemId, startAt);
         }
         RaiseStateChanged();
     }
@@ -460,6 +491,8 @@ public sealed class Player : IDisposable
     private TimeSpan CurrentPosition()
     {
         if (_stream is null || _output is null) return _keptPosition;
+        // Canvi de pista amb fos que el fil d'àudio encara no ha fet: la pista nova comença ara.
+        if (_stream.SwitchPending) return _startOffset;
         var position = _startOffset + TimeSpan.FromSeconds((double)(_stream.FramesPlayed - _trackStartFrame) / _output.SampleRate);
         if (position < TimeSpan.Zero) return TimeSpan.Zero;
         return position > Duration ? Duration : position;
@@ -579,6 +612,62 @@ public sealed class Player : IDisposable
     }
 
     /// <summary>
+    /// Fa sonar una altra pista a mà amb fos (fase 5; D-078), sense aturar la sortida: la pista que sona baixa
+    /// mentre la nova puja, durant <see cref="CrossfadeMs"/>. Si la pista nova no es pot obrir, la que sona
+    /// continua com si res (i es diu per què). Dins de _sync, amb la pista sonant.
+    /// </summary>
+    private void CrossfadeTo(PlaylistItem item, TimeSpan startAt)
+    {
+        var output = _output!;
+        var stream = _stream!;
+        int sampleRate = output.SampleRate;
+
+        // 1. La pista nova s'obre abans de tocar res: si no es pot, la que sona no s'interromp.
+        AudioFileSource source;
+        try
+        {
+            source = AudioFileSource.Open(item.Path, sampleRate, startAt);
+        }
+        catch (AudioFileException ex)
+        {
+            Playlist.MarkError(item.Id, ex.Message);
+            throw new PlayerCommandException(ex.Message);
+        }
+
+        // 2. S'atura el fil de lectura de la que sona. La seva memòria conserva el que ja hi ha (uns segons):
+        //    és el que sonarà, baixant, durant el fos.
+        _stopReader = true;
+        _readerThread?.Join(TimeSpan.FromSeconds(2));
+        _readerThread = null;
+        _transitions.Clear();
+
+        // 3. Memòria i fil de lectura nous per a la pista nova.
+        var ring = new SampleRingBuffer(sampleRate * 2 * BufferSeconds);
+        _ring = ring;
+        stream.PrepareForNewTrack();
+        _stopReader = false;
+        _readerError = null;
+        string currentId = item.Id;
+        NormalizationDb = NormalizationFor(item);
+        float gain = GainFor(NormalizationDb ?? 0);
+        _readerThread = new Thread(() => ReaderLoop(source, ring, stream, sampleRate, currentId, gain))
+        {
+            IsBackground = true,
+            Name = $"Reproductor {Id}: lectura",
+        };
+        _readerThread.Start();
+
+        // 4. Quan hi ha so preparat, el fil d'àudio hi passa amb el fos.
+        WaitForPrefill();
+        SetCurrent(item, source.Duration);
+        _startOffset = startAt;
+        _keptPosition = startAt;
+        _trackStartFrame = 0;
+        Playlist.ClearCueIf(item.Id);
+        stream.SwitchTo(ring, (int)((long)_crossfadeMs * sampleRate / 1000));
+    }
+
+    /// <summary>
     /// Abans de començar a sonar, espera (com a màxim 1 s) que hi hagi mig segon de so preparat,
     /// o tot el fitxer si és més curt. Així no s'envia silenci a la targeta en prémer Play
     /// just després de carregar. S'executa al fil de les ordres, mai al d'àudio.
@@ -614,8 +703,36 @@ public sealed class Player : IDisposable
     private void ReaderLoop(AudioFileSource source, SampleRingBuffer ring, PlayerStream stream, int sampleRate, string itemId, float gain)
     {
         var chunk = new float[ReadChunkSamples];
+        var overflow = new float[ReadChunkSamples];
         long framesWritten = 0;
         long decideBelow = (long)(sampleRate * 2 * DecideBeforeEnd.TotalSeconds);
+
+        // Encadenament amb fos (fase 5; D-077): els últims mil·lisegons de la pista es guarden a la cua
+        // fins que se sap si n'ha de venir una altra sola. Amb 0 ms, tot passa de llarg (com sempre).
+        var tail = new CrossfadeTail();
+        float[] mix = [];   // la cua de la pista que s'acaba (i, després, la barreja)
+        float[] head = [];  // el principi de la pista següent
+        void ResetTail()
+        {
+            int samples = CrossfadeSamples(sampleRate);
+            tail.Reset(samples);
+            if (mix.Length < samples) mix = new float[samples];
+            if (head.Length < samples) head = new float[samples];
+        }
+        ResetTail();
+
+        // Escriu a la memòria (esperant si és plena) i compta els fotogrames.
+        void Write(ReadOnlySpan<float> samples)
+        {
+            int written = 0;
+            while (written < samples.Length && !_stopReader)
+            {
+                written += ring.Write(samples[written..]);
+                if (written < samples.Length) Thread.Sleep(5);
+            }
+            framesWritten += written / 2;
+        }
+
         try
         {
             while (!_stopReader)
@@ -638,18 +755,46 @@ public sealed class Player : IDisposable
                     var nextSource = next is null ? null : TryOpen(next, sampleRate);
                     if (next is null || nextSource is null)
                     {
+                        // No ve res més: la cua s'escriu tal qual (la pista acaba sencera).
+                        Write(mix.AsSpan(0, tail.Drain(mix)));
                         stream.MarkSourceFinished();
                         return;
+                    }
+
+                    // Sense bloqueig: mentre s'atura, el reproductor pot estar esperant aquest fil amb el bloqueig agafat.
+                    // Normalize i l'objectiu són valors simples (es llegeixen sencers).
+                    double? normalization = NormalizationFor(next);
+                    float nextGain = GainFor(normalization ?? 0);
+
+                    // La cua: amb fos si la pista que ve és una altra (avanç automàtic); en un bucle, tal qual.
+                    int held = tail.Drain(mix);
+                    int overlap = 0;
+                    if (held > 0 && next.Id != itemId)
+                    {
+                        // El principi de la pista següent, tan llarg com la cua (o menys, si és més curta).
+                        int got = 0, r;
+                        while (got < held && (r = nextSource.Read(head.AsSpan(got, held - got))) > 0) got += r;
+                        for (int i = 0; i < got; i++) head[i] *= nextGain;
+                        overlap = got & ~1; // mostres estèreo senceres
+                    }
+
+                    // El que no se sobreposa (si la pista següent és més curta que el fos, o en un bucle) va tal qual.
+                    // Si el fos és més curt que la cua, la part que se sobreposa és el final de la cua.
+                    Write(mix.AsSpan(0, held - overlap));
+                    long startFrame = framesWritten; // la pista següent comença a sonar on comença el fos
+                    if (overlap > 0)
+                    {
+                        var ending = mix.AsSpan(held - overlap, overlap);
+                        CrossfadeTail.Mix(ending, head.AsSpan(0, overlap), overlap);
+                        Write(ending);
                     }
 
                     source.Dispose();
                     source = nextSource;
                     itemId = next.Id;
-                    // Sense bloqueig: mentre s'atura, el reproductor pot estar esperant aquest fil amb el bloqueig agafat.
-                    // Normalize i l'objectiu són valors simples (es llegeixen sencers).
-                    double? normalization = NormalizationFor(next);
-                    gain = GainFor(normalization ?? 0);
-                    _transitions.Enqueue(new Transition(framesWritten, next, nextSource.Duration, normalization));
+                    gain = nextGain;
+                    _transitions.Enqueue(new Transition(startFrame, next, nextSource.Duration, normalization));
+                    ResetTail(); // la durada del fos es torna a llegir per a cada pista
                     continue;
                 }
 
@@ -659,14 +804,16 @@ public sealed class Player : IDisposable
                     for (int i = 0; i < read; i++) chunk[i] *= gain;
                 }
 
-                // Hi ha lloc per a tot el tros (ho hem comprovat abans), però per si de cas:
-                int written = 0;
-                while (written < read && !_stopReader)
+                // Amb fos, només s'escriu el que sobra de la cua (les mostres més antigues).
+                if (tail.Capacity > 0)
                 {
-                    written += ring.Write(chunk.AsSpan(written, read - written));
-                    if (written < read) Thread.Sleep(5);
+                    if (overflow.Length < read) overflow = new float[read];
+                    Write(overflow.AsSpan(0, tail.Push(chunk.AsSpan(0, read), overflow)));
                 }
-                framesWritten += written / 2;
+                else
+                {
+                    Write(chunk.AsSpan(0, read));
+                }
             }
         }
         catch (Exception ex)

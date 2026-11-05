@@ -202,6 +202,73 @@ public class PlayerProcessingTests : IDisposable
         Assert.True(saved.StereoLink);
     }
 
+    // --- Presets propis (D-069) ---
+
+    private static List<(string Id, string Name, bool BuiltIn)> Presets(JsonNode list) =>
+        list.AsArray().Select(p => (p!["id"]!.GetValue<string>(), p["name"]!.GetValue<string>(), p["builtIn"]!.GetValue<bool>())).ToList();
+
+    [Fact]
+    public void Desar_un_preset_propi_amb_els_ajustos_dun_reproductor_i_aplicar_lo_a_un_altre()
+    {
+        Directory.CreateDirectory(_folder);
+        var repository = new ConfigRepository(Path.Combine(_folder, "config.json"));
+        var store = new ConfigStore(repository);
+        store.Load();
+        var one = new Player("1", _ => new FakeOutput());
+        var two = new Player("2", _ => new FakeOutput());
+        var router = new CommandRouter(new EngineState([one, two], []), () => { }, () => [], config: store);
+        Ok(router, """{ "v": 1, "id": 1, "cmd": "player.setProcessing", "player": "1", "processing": { "enabled": true, "inputGainDb": 6, "thresholdDb": -8 } }""");
+
+        var saved = Ok(router, """{ "v": 1, "id": 2, "cmd": "processing.savePreset", "name": "Veu", "player": "1" }""");
+        string id = saved["preset"]!["id"]!.GetValue<string>();
+        Ok(router, $$"""{ "v": 1, "id": 3, "cmd": "player.setProcessing", "player": "2", "preset": "{{id}}" }""");
+
+        Assert.Contains((id, "Veu", false), Presets(saved["processingPresets"]!));
+        Assert.Equal(one.Dynamics, two.Dynamics);
+        Assert.Equal(-8, two.Dynamics.ThresholdDb);
+        // Es desa al perfil i torna en arrencar.
+        Assert.Equal("Veu", repository.Load().Config.ProcessingPresets.Single().Name);
+    }
+
+    [Fact]
+    public void Desar_amb_el_mateix_nom_substitueix_el_preset()
+    {
+        var (router, repository, _) = NewRouter();
+        var first = Ok(router, """{ "v": 1, "id": 1, "cmd": "processing.savePreset", "name": "Música", "processing": { "enabled": true, "ratio": 4 } }""");
+
+        var second = Ok(router, """{ "v": 1, "id": 2, "cmd": "processing.savePreset", "name": "música", "processing": { "enabled": true, "ratio": 8 } }""");
+
+        Assert.Equal(first["preset"]!["id"]!.GetValue<string>(), second["preset"]!["id"]!.GetValue<string>());
+        var preset = repository.Load().Config.ProcessingPresets.Single();
+        Assert.Equal(8, preset.Settings.Ratio);
+        Assert.Equal("música", preset.Name);
+    }
+
+    [Fact]
+    public void Esborrar_un_preset_propi()
+    {
+        var (router, repository, _) = NewRouter();
+        string id = Ok(router, """{ "v": 1, "id": 1, "cmd": "processing.savePreset", "name": "Prova", "processing": {} }""")["preset"]!["id"]!.GetValue<string>();
+
+        var r = Ok(router, $$"""{ "v": 1, "id": 2, "cmd": "processing.deletePreset", "preset": "{{id}}" }""");
+
+        Assert.DoesNotContain(Presets(r["processingPresets"]!), p => p.Id == id);
+        Assert.Empty(repository.Load().Config.ProcessingPresets);
+    }
+
+    [Theory]
+    [InlineData("""{ "v": 1, "id": 1, "cmd": "processing.savePreset", "name": "", "processing": {} }""")]
+    [InlineData("""{ "v": 1, "id": 1, "cmd": "processing.savePreset", "name": "sqrsoft la central", "processing": {} }""")]
+    [InlineData("""{ "v": 1, "id": 1, "cmd": "processing.savePreset", "name": "Sense ajustos" }""")]
+    [InlineData("""{ "v": 1, "id": 1, "cmd": "processing.deletePreset", "preset": "sqrsoft-la-central" }""")]
+    [InlineData("""{ "v": 1, "id": 1, "cmd": "processing.deletePreset", "preset": "no-existeix" }""")]
+    public void Presets_no_valids_donen_bad_params(string json)
+    {
+        var (router, _, _) = NewRouter();
+
+        Assert.Equal("bad_params", router.Handle(json)["error"]!["code"]!.GetValue<string>());
+    }
+
     [Fact]
     public void Els_ajustos_diuen_els_presets()
     {

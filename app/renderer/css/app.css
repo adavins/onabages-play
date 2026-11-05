@@ -695,7 +695,15 @@ body.engine-offline .side-content {
   margin-bottom: 0.8rem;
 }
 
-.proc-top .form-select { max-width: 16rem; }
+.proc-presets {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.proc-presets .form-select { max-width: 15rem; }
+.proc-presets .btn { white-space: nowrap; }
 
 .proc-fields {
   display: grid;

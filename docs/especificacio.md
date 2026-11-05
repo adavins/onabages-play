@@ -651,7 +651,7 @@ No calen Visual Studio Build Tools, MSVC ni CMake.
 ### Fase 4 — Processament, perfils i distribució flexible
 - Normalització de sonoritat, EQ, limitador, compressor i presets.
 - Perfils amb exportació i importació.
-- Panells configurables.
+- Panells configurables: **ajornat** (D-069; els elements de la pantalla ja s'ajusten prou bé).
 - Fosos a l'editor.
 - **Explorador d'àudios:** panell lateral, minimitzat per defecte, amb diverses carpetes per perfil (p. ex. «Sintonies», «Talls», «Entrevistes»); les pistes s'arrosseguen als reproductors. El contingut de les carpetes el llegeix el motor. Fet al motor (pas 2a, D-063): carpetes de cada perfil per a les pestanyes Àudios i Llistes, i `explorer.list`, que només llegeix dins d'aquestes carpetes. Fet a la interfície (pas 2c, D-064): pestanya Àudios del panell lateral (navegar, filtrar, arrossegar als reproductors, doble clic = preescolta, botó dret).
 - **Panell de llistes desades:** les llistes `.obpl` d'un programa (p. ex. les seccions de cada dia de «La Central») a punt per arrossegar-les senceres a un reproductor. Fet (pas 2d, D-065): pestanya Llistes del panell lateral (arrossegar, veure el contingut, afegir o substituir la llista d'un reproductor).

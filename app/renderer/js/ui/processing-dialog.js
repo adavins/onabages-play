@@ -4,6 +4,7 @@
 // mentre sona) i es desa al perfil: no hi ha «Desar» ni «Cancel·lar», només «Tancar».
 
 import { escapeHtml } from './format.js';
+import { askText, choose } from './dialogs.js';
 
 /** @typedef {import('../store.js').Store} Store */
 /** @typedef {(cmd: string, params?: object) => Promise<any>} Request */
@@ -44,7 +45,8 @@ function fromSlider(field, position) {
  * @param {string} playerId
  */
 export function openProcessingDialog(store, request, playerId) {
-  const presets = /** @type {any[]} */ (store.settings?.processingPresets ?? []);
+  /** Presets de l'aplicació (builtIn) i propis del perfil. Canvien en desar-ne o esborrar-ne un. */
+  let presets = /** @type {any[]} */ (store.settings?.processingPresets ?? []);
   /** @type {any} */
   let current = { ...(store.players.get(playerId)?.processing ?? {}) };
 
@@ -59,10 +61,15 @@ export function openProcessingDialog(store, request, playerId) {
           <input class="form-check-input js-enabled" type="checkbox" role="switch" id="proc-enabled">
           <label class="form-check-label" for="proc-enabled">Activat</label>
         </div>
-        <select class="form-select form-select-sm js-preset" aria-label="Preset">
-          <option value="">— Personalitzat —</option>
-          ${presets.map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`).join('')}
-        </select>
+        <div class="proc-presets">
+          <select class="form-select form-select-sm js-preset" aria-label="Preset"></select>
+          <button type="button" class="btn btn-sm btn-outline-secondary js-save-preset" title="Desar aquests ajustos com a preset propi…">
+            <i class="bi bi-bookmark-plus"></i> Desar…
+          </button>
+          <button type="button" class="btn btn-sm btn-outline-danger js-delete-preset" title="Esborrar aquest preset propi">
+            <i class="bi bi-trash"></i>
+          </button>
+        </div>
       </div>
 
       <div class="proc-fields">
@@ -98,6 +105,26 @@ export function openProcessingDialog(store, request, playerId) {
   const preset = /** @type {HTMLSelectElement} */ (dialog.querySelector('.js-preset'));
   const link = $('.js-link');
 
+  const saveButton = /** @type {HTMLButtonElement} */ (dialog.querySelector('.js-save-preset'));
+  const deleteButton = /** @type {HTMLButtonElement} */ (dialog.querySelector('.js-delete-preset'));
+
+  /** Opcions del desplegable: els de l'aplicació i, a part, els propis. */
+  function renderPresets() {
+    const option = (/** @type {any} */ p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`;
+    const builtIn = presets.filter((p) => p.builtIn);
+    const own = presets.filter((p) => !p.builtIn);
+    preset.innerHTML = '<option value="">— Personalitzat —</option>'
+      + `<optgroup label="De l'aplicació">${builtIn.map(option).join('')}</optgroup>`
+      + (own.length ? `<optgroup label="Els meus presets">${own.map(option).join('')}</optgroup>` : '');
+  }
+
+  /** Els presets han canviat (desat o esborrat): també per a les altres finestres. @param {any[]} list */
+  function setPresets(list) {
+    presets = list;
+    if (store.settings) store.settings.processingPresets = list;
+    renderPresets();
+  }
+
   /** Mostra els valors (p. ex. en obrir-lo o després d'aplicar un preset). */
   function show() {
     enabled.checked = !!current.enabled;
@@ -109,8 +136,66 @@ export function openProcessingDialog(store, request, playerId) {
     // El preset que coincideix amb tots els valors, si n'hi ha cap.
     const match = presets.find((p) => Object.keys(p.processing).every((k) => k === 'enabled' || p.processing[k] === current[k]));
     preset.value = match?.id ?? '';
+    deleteButton.disabled = !match || match.builtIn;
     dialog.classList.toggle('proc-off', !current.enabled);
   }
+
+  // Desar els ajustos actuals com a preset propi (si el nom ja hi és, es demana si se substitueix).
+  saveButton.addEventListener('click', async () => {
+    const selected = presets.find((p) => p.id === preset.value && !p.builtIn);
+    const name = await askText({
+      title: 'Desar com a preset',
+      icon: 'bi-bookmark-plus',
+      label: 'Nom del preset (p. ex. «Música forta» o «Veu»)',
+      value: selected?.name ?? '',
+      okLabel: 'Desar',
+      maxLength: 40,
+    });
+    if (name === null) return;
+    const existing = presets.find((p) => !p.builtIn && p.name.toLowerCase() === name.toLowerCase());
+    if (existing) {
+      const choice = await choose({
+        title: 'Substituir el preset',
+        icon: 'bi-exclamation-triangle-fill',
+        message: `Ja tens un preset que es diu «${existing.name}». Vols substituir-lo pels ajustos actuals?`,
+        buttons: [
+          { label: 'Cancel·lar', value: 'cancel' },
+          { label: 'Substituir', value: 'replace', style: 'primary' },
+        ],
+      });
+      if (choice !== 'replace') return;
+    }
+    try {
+      await flush();
+      const result = await request('processing.savePreset', { name, processing: current });
+      setPresets(result.processingPresets);
+      show();
+    } catch (err) {
+      $('.proc-help').textContent = /** @type {Error} */ (err).message;
+    }
+  });
+
+  deleteButton.addEventListener('click', async () => {
+    const selected = presets.find((p) => p.id === preset.value && !p.builtIn);
+    if (!selected) return;
+    const choice = await choose({
+      title: 'Esborrar el preset',
+      icon: 'bi-trash',
+      message: `Vols esborrar el preset «${selected.name}»? Els reproductors que el fan servir no canvien.`,
+      buttons: [
+        { label: 'Cancel·lar', value: 'cancel' },
+        { label: 'Esborrar', value: 'delete', style: 'danger' },
+      ],
+    });
+    if (choice !== 'delete') return;
+    try {
+      const result = await request('processing.deletePreset', { preset: selected.id });
+      setPresets(result.processingPresets);
+      show();
+    } catch (err) {
+      $('.proc-help').textContent = /** @type {Error} */ (err).message;
+    }
+  });
 
   // Els canvis s'envien al motor agrupats (com a molt cada 100 ms mentre s'arrossega un control).
   /** @type {Record<string, any>} */
@@ -179,6 +264,7 @@ export function openProcessingDialog(store, request, playerId) {
   };
   store.addEventListener('meters', onMeters);
 
+  renderPresets();
   show();
   dialog.showModal();
   dialog.addEventListener('close', () => {

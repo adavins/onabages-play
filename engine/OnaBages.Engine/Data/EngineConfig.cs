@@ -8,6 +8,9 @@ public sealed record DeviceRef(string Id, string Name);
 /// <summary>Ajustos d'un enregistrador. Null = el valor per defecte.</summary>
 public sealed record RecorderSettings(string? Name, string? Folder, double GainDb);
 
+/// <summary>Preset propi del compressor/limitador (fase 4, D-069): desat al perfil amb un nom.</summary>
+public sealed record ProcessingPreset(string Id, string Name, DynamicsSettings Settings);
+
 /// <summary>Una carpeta de l'explorador (fase 4, pas 2a): el nom que es mostra i la ruta completa.</summary>
 public sealed record ExplorerFolder(string Name, string Path);
 
@@ -79,6 +82,12 @@ public sealed class EngineConfig
 
     /// <summary>Ajustos del compressor/limitador de cada reproductor (clau: identificador). Sense, desactivat.</summary>
     public Dictionary<string, DynamicsSettings> PlayerDynamics { get; } = [];
+
+    /// <summary>Presets propis del compressor/limitador, en l'ordre en què es van desar (D-069).</summary>
+    public List<ProcessingPreset> ProcessingPresets { get; set; } = [];
+
+    public const int MaxProcessingPresets = 30;
+    public const int MaxProcessingPresetName = 40;
 
     // --- Explorador del panell lateral (fase 4, pas 2a; del perfil) ---
 

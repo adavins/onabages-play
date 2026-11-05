@@ -92,6 +92,8 @@ public sealed partial class CommandRouter
                 "player.seek" => PlayerSeek(msg),
                 "player.setVolume" => PlayerSetVolume(msg),
                 "player.setProcessing" => PlayerSetProcessing(msg),
+                "processing.savePreset" => ProcessingSavePreset(msg),
+                "processing.deletePreset" => ProcessingDeletePreset(msg),
                 "player.playItem" => PlayerCommand(msg, p => p.PlayItem(RequireString(msg, "itemId"))),
                 "playlist.get" => new JsonObject { ["playlist"] = PlaylistJson.Playlist(GetPlayer(msg)) },
                 "playlist.add" => PlaylistAdd(msg),

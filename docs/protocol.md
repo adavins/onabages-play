@@ -421,7 +421,12 @@ Objecte `processing` (al reproductor, a `player.setProcessing` i a cada preset):
 | `ceilingDb` | −6 a 0 | −0,3 | Sostre: la sortida no el passa mai (limitador amb 1,5 ms d'anticipació) |
 
 - Ordre: pista → compressor → sostre → **volum (fader)** → sortida. El fader no canvia com comprimeix.
-- `settings.get` porta `processingPresets: [{ id, name, processing }]`: `sqrsoft-la-central` (la configuració del Winamp de La Central), `suau` i `nomes-sostre`.
+- `settings.get` porta `processingPresets: [{ id, name, builtIn, processing }]`: primer els de l'aplicació (`builtIn: true`: `sqrsoft-la-central`, la configuració del Winamp de La Central, `suau` i `nomes-sostre`) i després els propis del perfil (D-069).
+
+| Ordre | Paràmetres | Resposta |
+|---|---|---|
+| `processing.savePreset` | `name` (1 a 40 caràcters); `processing` (els ajustos) **o** `player` (els d'aquest reproductor) | `{ preset: { id, name }, processingPresets }`. Es desa al perfil. Si ja hi ha un preset propi amb aquest nom (sense distingir majúscules), se substitueix (la interfície ho confirma abans). El nom d'un preset de l'aplicació o més de 30 presets propis: `bad_params` |
+| `processing.deletePreset` | `preset` (id d'un preset propi) | `{ processingPresets }`. Els reproductors que el feien servir no canvien. Un preset de l'aplicació o que no existeix: `bad_params` |
 
 ## 5. Esdeveniments
 

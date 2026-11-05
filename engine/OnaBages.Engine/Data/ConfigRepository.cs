@@ -649,6 +649,20 @@ public sealed class ConfigRepository
             }
         }
 
+        // Presets propis del compressor/limitador (D-069; camp opcional, sense canvi de versió).
+        if (root["processingPresets"] is JsonArray presets)
+        {
+            foreach (var item in presets)
+            {
+                if (item is not JsonObject obj || Text(obj["id"]) is not { Length: > 0 } presetId
+                    || Text(obj["name"]) is not { } presetName || CleanProgramName(presetName) is not { Length: > 0 } cleanPresetName
+                    || obj["processing"] is not JsonObject settings)
+                    continue;
+                config.ProcessingPresets.Add(new ProcessingPreset(presetId, cleanPresetName, ReadDynamics(settings)));
+                if (config.ProcessingPresets.Count == EngineConfig.MaxProcessingPresets) break;
+            }
+        }
+
         config.AudioFolders = ReadExplorerFolders(root["explorer"]?["audios"]);
         config.ListFolders = ReadExplorerFolders(root["explorer"]?["lists"]);
     }
@@ -765,6 +779,13 @@ public sealed class ConfigRepository
         ["playerProcessing"] = new JsonArray(config.PlayerDynamics
             .OrderBy(p => p.Key, StringComparer.Ordinal)
             .Select(p => (JsonNode)WriteDynamics(p.Key, p.Value)).ToArray()),
+        ["processingPresets"] = new JsonArray(config.ProcessingPresets
+            .Select(p => (JsonNode)new JsonObject
+            {
+                ["id"] = p.Id,
+                ["name"] = p.Name,
+                ["processing"] = WriteDynamics(null, p.Settings),
+            }).ToArray()),
         // Explorador del panell lateral (pas 2a; camp opcional, sense canvi de versió).
         ["explorer"] = new JsonObject
         {

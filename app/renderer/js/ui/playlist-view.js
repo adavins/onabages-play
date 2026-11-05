@@ -17,6 +17,7 @@
 
 import { escapeHtml, formatDuration } from './format.js';
 import { showContextMenu } from './context-menu.js';
+import { PATHS_DRAG_TYPE, draggedPaths } from './drag-types.js';
 import { choose, showInfo } from './dialogs.js';
 import { togglePreview, previewButton } from './cue-actions.js';
 import { editSection } from './section-dialog.js';
@@ -591,7 +592,7 @@ export class PlaylistView {
     rows.addEventListener('dragover', (e) => {
       if (!e.dataTransfer) return;
       const types = e.dataTransfer.types;
-      if (!types.includes(DRAG_TYPE) && !types.includes('Files')) return;
+      if (!types.includes(DRAG_TYPE) && !types.includes('Files') && !types.includes(PATHS_DRAG_TYPE)) return;
       e.preventDefault();
       e.stopPropagation(); // el panell no ha de mostrar el seu avís d'arrossegar
       // El cursor diu si es mourà o es copiarà (amb Ctrl).
@@ -620,7 +621,11 @@ export class PlaylistView {
         return;
       }
 
-      const paths = [...e.dataTransfer.files].map((f) => bridge?.pathForFile(f)).filter(Boolean);
+      // Fitxers de l'explorador del panell lateral (pas 2c) o de l'Explorador de Windows: s'afegeixen.
+      const fromExplorer = draggedPaths(e.dataTransfer);
+      const paths = fromExplorer.length > 0
+        ? fromExplorer
+        : [...e.dataTransfer.files].map((f) => bridge?.pathForFile(f)).filter(Boolean);
       if (paths.length > 0) this.#send('playlist.add', { player: this.#playerId, paths, beforeId });
     });
 

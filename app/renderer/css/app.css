@@ -390,6 +390,159 @@ body.engine-offline .side-content {
   height: 0;
 }
 
+/* Explorador del panell lateral (js/ui/explorer-tab.js; D-064) ------------- */
+
+.explorer {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.ex-tool {
+  padding: 0.1rem 0.4rem;
+  line-height: 1.2;
+}
+
+.ex-nav {
+  display: flex;
+  gap: 0.3rem;
+  padding: 0.4rem 0.4rem 0;
+}
+
+.ex-nav .form-select { min-width: 0; }
+
+.ex-crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.1rem;
+  padding: 0.25rem 0.4rem 0;
+  font-size: 0.8rem;
+  min-height: 1.2rem;
+}
+
+.ex-crumb {
+  border: 0;
+  background: none;
+  padding: 0 0.15rem;
+  color: var(--obp-info);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ex-crumb:last-of-type { color: var(--bs-emphasis-color); font-weight: 600; }
+.ex-crumb:hover { text-decoration: underline; }
+.ex-crumb-sep { font-size: 0.65rem; color: var(--bs-secondary-color); }
+
+.ex-filter {
+  margin: 0.3rem 0.4rem;
+  width: auto;
+}
+
+.ex-rows {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  outline: none;
+  font-size: 0.85rem;
+  border-top: 1px solid var(--bs-border-color);
+}
+
+.ex-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  height: var(--obp-pl-row-h);
+  padding: 0 0.4rem;
+  border-bottom: 1px solid rgb(255 255 255 / 0.04);
+  cursor: default;
+}
+
+.ex-row:hover { background: rgb(255 255 255 / 0.04); }
+.ex-row.ex-selected { background: var(--obp-pl-selected-bg); }
+.ex-row.ex-previewing { background: var(--obp-pl-preview-bg); }
+.ex-folder { cursor: pointer; }
+.ex-folder .bi-folder-fill { color: #e8b84a; }
+.ex-file > .bi { color: var(--bs-secondary-color); }
+
+.ex-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ex-btn {
+  border: 0;
+  background: none;
+  padding: 0 0.2rem;
+  color: var(--bs-secondary-color);
+}
+
+.ex-btn:hover { color: var(--bs-emphasis-color); }
+.ex-btn.preview-btn.on { color: var(--obp-cue); }
+
+.ex-empty {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 1rem;
+  text-align: center;
+  color: var(--bs-secondary-color);
+  font-style: italic;
+}
+
+.ex-empty p { margin: 0; }
+.ex-error { color: var(--obp-error); font-style: normal; }
+
+.ex-status {
+  padding: 0.2rem 0.4rem;
+  font-size: 0.75rem;
+  color: var(--bs-secondary-color);
+  border-top: 1px solid var(--bs-border-color);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Diàleg de les carpetes d'una pestanya */
+.ex-folders-dialog { width: min(44rem, 92vw); }
+.ex-folders-help { font-size: 0.85rem; color: var(--bs-secondary-color); }
+
+.ex-folders-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 0.6rem;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.ex-folders-row {
+  display: grid;
+  grid-template-columns: 11rem minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.ex-folders-path {
+  font-size: 0.8rem;
+  color: var(--bs-secondary-color);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ex-folders-empty { color: var(--bs-secondary-color); font-style: italic; }
+.ex-folders-error { color: var(--obp-error); min-height: 1.3rem; margin-top: 0.4rem; font-size: 0.85rem; }
+
 /* Finestra estreta (p. ex. mitja pantalla en vertical): es pot desplaçar amunt i avall. */
 @media (max-width: 48rem) {
   .layout {

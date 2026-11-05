@@ -9,6 +9,7 @@ import { PlayerPanel } from './ui/player-panel.js';
 import { RecorderPanel } from './ui/recorder-panel.js';
 import { RecentsPanel } from './ui/recents-panel.js';
 import { CuePanel } from './ui/cue-panel.js';
+import { ExplorerTab } from './ui/explorer-tab.js';
 import { editSettings } from './ui/settings-dialog.js';
 import { setupShortcuts } from './ui/shortcuts.js';
 import { choose } from './ui/dialogs.js';
@@ -283,6 +284,10 @@ function buildPanels() {
   els.recents = recentsPanel.element;
   els.cue.replaceWith(cuePanel.element);
   els.cue = cuePanel.element;
+
+  // Explorador del panell lateral (pas 2c): les carpetes són del perfil, i es tornen a llegir en cada connexió.
+  const audios = new ExplorerTab('audios', store, request);
+  /** @type {HTMLElement} */ (document.querySelector('.side-tab[data-tab="audios"]')).replaceChildren(audios.element);
 }
 
 function renderAll() {

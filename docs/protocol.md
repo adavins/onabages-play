@@ -389,7 +389,7 @@ Cada perfil té les seves carpetes per a dues pestanyes: `kind` = `"audios"` (fi
 
 | Ordre | Paràmetres | Resposta |
 |---|---|---|
-| `explorer.get` | — | `{ audios: [{ name, path, exists }], lists: [...] }`. `exists`: la carpeta hi és ara (una unitat de xarxa o un USB poden no ser-hi) |
+| `explorer.get` | — | `{ audios: [{ name, path, exists }], lists: [...] }`. `exists`: la carpeta hi és ara (una unitat de xarxa o un USB poden no ser-hi). `path` es dona normalitzada com a `explorer.list` (p. ex. els noms curts com `ALBERT~1` desplegats) |
 | `explorer.setFolders` | `kind`, `folders: [{ name?, path }]` (en l'ordre que es mostren; substitueixen les d'abans) | El mateix que `explorer.get`. `path`: ruta completa; no cal que existeixi. Sense `name`, el de la carpeta. Com a molt 20 carpetes i 40 caràcters per nom; una carpeta repetida dona `bad_params`. Es desa al perfil actiu (`explorer` a `perfil.json`) |
 | `explorer.list` | `kind`, `path` | `{ path, folders: [{ name, path }], files: [{ name, path, size, modified }], truncated }`: subcarpetes i fitxers de la pestanya (sense baixar a les subcarpetes), en l'ordre de l'Explorador de Windows («2» abans de «10»). Se salten els fitxers ocults i de sistema. Com a molt 5.000 de cada; si n'hi ha més, `truncated: true`. `modified`: data i hora local |
 

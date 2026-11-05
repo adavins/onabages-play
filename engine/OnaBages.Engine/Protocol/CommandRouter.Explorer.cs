@@ -18,9 +18,19 @@ public sealed partial class CommandRouter
         return new JsonObject { ["audios"] = FoldersJson(audios), ["lists"] = FoldersJson(lists) };
     }
 
+    /// <summary>
+    /// La ruta es dona normalitzada, igual que les d'explorer.list (p. ex. «C:\Users\ALBERT~1» es desplega):
+    /// així la interfície pot saber on és cada carpeta dins de la seva carpeta del perfil.
+    /// </summary>
     private static JsonArray FoldersJson(List<ExplorerFolder> folders) => new(folders
-        .Select(f => (JsonNode)new JsonObject { ["name"] = f.Name, ["path"] = f.Path, ["exists"] = Directory.Exists(f.Path) })
+        .Select(f => (JsonNode)new JsonObject { ["name"] = f.Name, ["path"] = NormalizedPath(f.Path), ["exists"] = Directory.Exists(f.Path) })
         .ToArray());
+
+    private static string NormalizedPath(string path)
+    {
+        try { return Path.GetFullPath(path); }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException) { return path; }
+    }
 
     /// <summary>
     /// kind ("audios" o "lists"), folders: [{ name?, path }] en l'ordre que es mostren. Substitueix les d'abans.

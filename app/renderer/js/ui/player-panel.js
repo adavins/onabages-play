@@ -3,6 +3,7 @@
 // La interfície només envia ordres i mostra l'estat que rep del motor.
 
 import { PLAYER_STATES, stateBadge } from './states.js';
+import { PATHS_DRAG_TYPE, draggedPaths } from './drag-types.js';
 import { deviceWarning } from './device-line.js';
 import { DeviceSelect } from './device-select.js';
 import { LevelMeter } from './meter.js';
@@ -329,7 +330,8 @@ export class PlayerPanel {
     panel.addEventListener('dragover', hideHint, true);
     panel.addEventListener('drop', hideHint, true);
     panel.addEventListener('dragover', (e) => {
-      if (!e.dataTransfer?.types.includes('Files')) return;
+      const types = e.dataTransfer?.types ?? [];
+      if (!types.includes('Files') && !types.includes(PATHS_DRAG_TYPE)) return;
       e.preventDefault();
       panel.classList.add('drop-target');
     });
@@ -339,7 +341,10 @@ export class PlayerPanel {
     panel.addEventListener('drop', (e) => {
       e.preventDefault();
       panel.classList.remove('drop-target');
-      const paths = [...(e.dataTransfer?.files ?? [])].map((f) => bridge?.pathForFile(f)).filter(Boolean);
+      const fromExplorer = e.dataTransfer ? draggedPaths(e.dataTransfer) : [];
+      const paths = fromExplorer.length > 0
+        ? fromExplorer
+        : [...(e.dataTransfer?.files ?? [])].map((f) => bridge?.pathForFile(f)).filter(Boolean);
       this.#playlist.addFiles(paths);
     });
   }

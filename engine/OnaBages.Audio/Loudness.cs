@@ -46,6 +46,8 @@ public sealed record TrackLoudness(double? Lufs, float Peak, IReadOnlyList<Sound
         var thresholds = SilenceThresholdsDb.Select(db => (float)Math.Pow(10, db / 20.0)).ToArray();
         var first = Enumerable.Repeat(-1L, thresholds.Length).ToArray();
         var last = new long[thresholds.Length];
+        var edges = new SoundEdges[thresholds.Length];
+        for (int k = 0; k < edges.Length; k++) edges[k] = new SoundEdges(rate);
         long frame = 0;
 
         var buffer = new float[rate / 2 * 2]; // 0,5 s
@@ -63,18 +65,68 @@ public sealed record TrackLoudness(double? Lufs, float Peak, IReadOnlyList<Sound
                     if (peak <= thresholds[k]) break;
                     if (first[k] < 0) first[k] = frame;
                     last[k] = frame;
+                    edges[k].Add(frame);
                 }
             }
         }
 
-        // Els llindars que no tenen cap mostra per sobre (silenci) no es posen.
+        // Els llindars que no tenen cap mostra per sobre (silenci) no es posen. Si només hi ha espetecs
+        // aïllats, es fan servir tal com són (no es retalla tota la pista).
         var sound = new List<SoundBounds>();
         for (int k = 0; k < thresholds.Length; k++)
         {
-            if (first[k] >= 0)
-                sound.Add(new SoundBounds(SilenceThresholdsDb[k], (double)first[k] / rate, (double)(last[k] + 1) / rate));
+            if (first[k] < 0) continue;
+            var (start, end) = edges[k].Finish() ?? (first[k], last[k]);
+            sound.Add(new SoundBounds(SilenceThresholdsDb[k], (double)start / rate, (double)(end + 1) / rate));
         }
         return new TrackLoudness(meter.IntegratedLufs is { } lufs ? Math.Round(lufs, 2) : null, meter.SamplePeak, sound);
+    }
+
+    /// <summary>Un tros de so més curt que això, sol entre silencis, és un espetec i no compta (ms).</summary>
+    public const int ClickMaxMs = 20;
+
+    /// <summary>Silenci mínim abans i després d'un espetec perquè es consideri aïllat (ms).</summary>
+    public const int ClickGapMs = 500;
+
+    /// <summary>
+    /// On comença i on acaba el so d'un llindar sense comptar els espetecs aïllats (D-082): p. ex. un
+    /// fitxer amb la veu fins als 203 s, 14 s de silenci digital i un espetec de 4 ms al final (un
+    /// defecte de la codificació). Es reben, en ordre, les mostres que passen el llindar; es van agrupant
+    /// en trossos (separats per <see cref="ClickGapMs"/> de silenci com a mínim) i els trossos de menys
+    /// de <see cref="ClickMaxMs"/> no compten. Un so de debò (fins i tot un cop de percussió) dura molt
+    /// més per sobre del llindar, de manera que no es pot perdre so.
+    /// </summary>
+    private sealed class SoundEdges(int rate)
+    {
+        private readonly long _gap = (long)ClickGapMs * rate / 1000;
+        private readonly long _minLength = (long)ClickMaxMs * rate / 1000;
+        private long _pieceStart = -1, _pieceEnd = -1; // el tros d'ara
+        private long _start = -1, _end = -1;           // del primer al darrer tros que compta
+
+        public void Add(long frame)
+        {
+            if (_pieceStart >= 0 && frame - _pieceEnd > _gap) Close();
+            if (_pieceStart < 0) _pieceStart = frame;
+            _pieceEnd = frame;
+        }
+
+        /// <summary>On comença i on acaba el so (mostres), o null si només hi ha espetecs.</summary>
+        public (long Start, long End)? Finish()
+        {
+            Close();
+            return _start >= 0 ? (_start, _end) : null;
+        }
+
+        private void Close()
+        {
+            if (_pieceStart < 0) return;
+            if (_pieceEnd - _pieceStart + 1 >= _minLength)
+            {
+                if (_start < 0) _start = _pieceStart;
+                _end = _pieceEnd;
+            }
+            _pieceStart = _pieceEnd = -1;
+        }
     }
 }
 

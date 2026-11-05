@@ -112,7 +112,9 @@ export class PlaylistView {
 
     const cue = this.#store.cue;
     const previewing = cue?.state === 'playing' ? cue.file : null;
-    const key = JSON.stringify([this.#playlist, this.#player.currentItemId, this.#player.lastPlayedId, this.#player.state, previewing]);
+    // El retall de silencis (del reproductor i del perfil) canvia la descripció de les pistes.
+    const key = JSON.stringify([this.#playlist, this.#player.currentItemId, this.#player.lastPlayedId, this.#player.state, previewing,
+      this.#player.trim, this.#store.settings?.trim]);
     if (key !== this.#renderKey) {
       // Mentre s'arrossega no es redibuixa (el navegador cancel·laria l'arrossegament): es fa en acabar.
       if (this.#dragging) {
@@ -209,10 +211,14 @@ export class PlaylistView {
         ? '<span class="pl-wait" title="Comprovant el fitxer…"><i class="bi bi-hourglass-split"></i></span>'
         : '';
 
-    // Descripció: la ruta i, si ja s'ha mesurat, la sonoritat (fase 4, normalització).
-    const tooltip = typeof item.loudness === 'number'
-      ? `${item.path}\nSonoritat: ${item.loudness.toFixed(1).replace('.', ',').replace('-', '−')} LUFS`
-      : item.path;
+    // Descripció: la ruta i, si ja s'ha analitzat, la sonoritat (normalització) i el silenci (retall).
+    const lines = [item.path];
+    if (typeof item.loudness === 'number') {
+      lines.push(`Sonoritat: ${item.loudness.toFixed(1).replace('.', ',').replace('-', '−')} LUFS`);
+    }
+    const silence = this.#silenceText(item);
+    if (silence) lines.push(silence);
+    const tooltip = lines.join('\n');
 
     return `
       <div class="${classes.join(' ')}" data-id="${escapeHtml(item.id)}" draggable="true" title="${escapeHtml(tooltip)}">
@@ -635,6 +641,26 @@ export class PlaylistView {
     });
 
     rows.addEventListener('dragend', () => this.#endDrag());
+  }
+
+  /**
+   * Silenci de la pista al principi i al final, segons el llindar del perfil (retall de silencis, fase 5).
+   * Si el reproductor el retalla, diu quant se'n retalla (el silenci menys els marges).
+   * @param {any} item
+   * @returns {string | null}
+   */
+  #silenceText(item) {
+    if (!Array.isArray(item.sound) || typeof item.duration !== 'number') return null;
+    const trim = this.#store.players.get(this.#playerId)?.trim;
+    const settings = this.#store.settings?.trim ?? trim ?? { thresholdDb: -60, leadMs: 10, tailMs: 50 };
+    const bounds = item.sound.find((/** @type {number[]} */ b) => b[0] === settings.thresholdDb);
+    if (!bounds) return null;
+    const [, start, end] = bounds;
+    const s = (/** @type {number} */ seconds) => `${Math.max(0, seconds).toFixed(2).replace('.', ',')} s`;
+    if (trim?.enabled) {
+      return `Es retalla: ${s(start - settings.leadMs / 1000)} al principi i ${s(item.duration - end - settings.tailMs / 1000)} al final`;
+    }
+    return `Silenci: ${s(start)} al principi i ${s(item.duration - end)} al final`;
   }
 
   /**

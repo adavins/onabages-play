@@ -186,6 +186,7 @@ export class PlayerPanel {
       : 'Compressor/limitador desactivat. Clica per configurar-lo.';
     // El fos entre pistes es configura a la mateixa finestra (fase 5).
     if (p.crossfadeMs > 0) el.dsp.title += ` Fos entre pistes encadenades: ${p.crossfadeMs} ms.`;
+    if (p.trim?.enabled) el.dsp.title += ' Retall de silencis activat.';
     // Activat: ple de color i amb una marca ✓ (el text no canvia, perquè la capçalera és estreta).
     /** @type {HTMLElement} */ (el.dsp.querySelector('i')).className = dsp.enabled ? 'bi bi-check-lg' : 'd-none';
     el.gr.classList.toggle('d-none', !dsp.enabled);

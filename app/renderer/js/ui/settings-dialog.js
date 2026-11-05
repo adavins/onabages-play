@@ -13,12 +13,14 @@ import { escapeHtml } from './format.js';
 const MAX_PLAYERS = 6;
 const MAX_RECORDERS = 4;
 const MAX_END_WARNING = 60;
+/** Marge màxim del retall de silencis (ms), com accepta el motor. */
+const MAX_TRIM_MARGIN = 2000;
 const MAX_PROGRAM_NAME = 60;
 
 /**
  * @param {any} settings  objecte settings del motor
  * @param {{ players: number, recorders: number }} running  quants n'hi ha ara al motor
- * @returns {Promise<{ ui: object, layout: object, program: object, loudness: object } | null>}
+ * @returns {Promise<{ ui: object, layout: object, program: object, loudness: object, trim: object } | null>}
  */
 export function editSettings(settings, running) {
   const options = (/** @type {number} */ max, /** @type {number} */ selected) =>
@@ -30,6 +32,11 @@ export function editSettings(settings, running) {
   // Objectius de la normalització (LUFS). Si el desat no hi és, s'hi afegeix.
   const target = Number(settings.loudness?.targetLufs ?? -12);
   const targets = [...new Set([-9, -10, -11, -12, -13, -14, -16, -18, -20, -23, target])].sort((a, b) => b - a);
+  // Retall de silencis (fase 5): llindars que mesura el motor i els marges.
+  const trim = settings.trim ?? { thresholdDb: -60, leadMs: 10, tailMs: 50, thresholds: [-40, -50, -60, -70, -80] };
+  const trimOptions = (trim.thresholds ?? [-40, -50, -60, -70, -80])
+    .map((/** @type {number} */ t) => `<option value="${t}"${t === trim.thresholdDb ? ' selected' : ''}>${String(t).replace('-', '−')} dBFS${t === -60 ? ' (recomanat)' : ''}</option>`)
+    .join('');
   const loudnessOptions = targets
     .map((t) => `<option value="${t}"${t === target ? ' selected' : ''}>${String(t).replace('-', '−').replace('.', ',')} LUFS${t === -12 ? ' (recomanat)' : ''}</option>`)
     .join('');
@@ -84,6 +91,28 @@ export function editSettings(settings, running) {
         Als reproductors amb el botó NORM encès, cada pista s'apuja o s'abaixa fins a aquest nivell
         (com a molt +${escapeHtml(settings.loudness?.maxBoostDb ?? 10)} dB), abans del DSP. S'aplica a partir de la pista següent.
         Amb el compressor SqrSoft, −12 LUFS deixa la música forta gairebé igual i apuja les pistes fluixes.
+      </div>
+
+      <div class="obp-settings-grid">
+        <label for="st-trim-threshold">Silencis: llindar</label>
+        <select id="st-trim-threshold" class="form-select form-select-sm">${trimOptions}</select>
+        <label for="st-trim-lead">Marge abans del so</label>
+        <div class="input-group input-group-sm">
+          <input id="st-trim-lead" class="form-control" type="number" min="0" max="${MAX_TRIM_MARGIN}" step="5"
+                 value="${escapeHtml(trim.leadMs)}">
+          <span class="input-group-text">ms</span>
+        </div>
+        <label for="st-trim-tail">Marge després del so</label>
+        <div class="input-group input-group-sm">
+          <input id="st-trim-tail" class="form-control" type="number" min="0" max="${MAX_TRIM_MARGIN}" step="10"
+                 value="${escapeHtml(trim.tailMs)}">
+          <span class="input-group-text">ms</span>
+        </div>
+      </div>
+      <div class="form-text mb-3">
+        Als reproductors amb el retall de silencis activat (finestra Processament), cada pista comença al primer so
+        menys el marge i s'acaba a l'últim més el marge. Compta com a so qualsevol mostra per sobre del llindar.
+        Si hi ha soroll de fons per sobre del llindar, no es retalla res. S'aplica a partir de la pista següent.
       </div>
 
       <h3 class="obp-settings-section">Fitxers</h3>
@@ -143,6 +172,17 @@ export function editSettings(settings, running) {
       e.preventDefault();
       error.textContent = `L'avís de final ha de ser un nombre de segons entre 0 i ${MAX_END_WARNING}.`;
       warning.focus();
+      return;
+    }
+    // Els marges del retall de silencis també s'escriuen a mà.
+    for (const id of ['#st-trim-lead', '#st-trim-tail']) {
+      const ms = Number($(id).value);
+      if (!Number.isInteger(ms) || ms < 0 || ms > MAX_TRIM_MARGIN) {
+        e.preventDefault();
+        error.textContent = `Els marges del retall han de ser un nombre de mil·lisegons entre 0 i ${MAX_TRIM_MARGIN}.`;
+        $(id).focus();
+        return;
+      }
     }
   });
 
@@ -161,6 +201,11 @@ export function editSettings(settings, running) {
           layout: { players: Number(players.value), recorders: Number(recorders.value) },
           program: { name: $('#st-program').value.trim() },
           loudness: { targetLufs: Number($('#st-loudness').value) },
+          trim: {
+            thresholdDb: Number($('#st-trim-threshold').value),
+            leadMs: Number($('#st-trim-lead').value),
+            tailMs: Number($('#st-trim-tail').value),
+          },
         }
         : null);
       dialog.remove();

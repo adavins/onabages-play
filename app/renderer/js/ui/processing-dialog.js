@@ -71,6 +71,14 @@ export function openProcessingDialog(store, request, playerId) {
         mentre sona, se sobreposen aquest temps: l'una baixa i l'altra puja. 0 = sense fos. No s'aplica als bucles.
         En l'avanç automàtic, s'aplica a partir de la pista següent.</p>
 
+      <!-- Retall de silencis (fase 5; D-081). El llindar i els marges són de ⚙ Configuració (comuns al perfil). -->
+      <h3 class="obp-settings-section">Silencis</h3>
+      <div class="form-check form-switch">
+        <input class="form-check-input js-trim" type="checkbox" role="switch" id="proc-trim">
+        <label class="form-check-label" for="proc-trim">Retallar el silenci del principi i del final de cada pista</label>
+      </div>
+      <p class="proc-help js-trim-help"></p>
+
       <h3 class="obp-settings-section">Compressor/limitador</h3>
       <div class="proc-top">
         <div class="form-check form-switch">
@@ -120,6 +128,24 @@ export function openProcessingDialog(store, request, playerId) {
   const enabled = $('.js-enabled');
   const preset = /** @type {HTMLSelectElement} */ (dialog.querySelector('.js-preset'));
   const link = $('.js-link');
+
+  // --- Retall de silencis ---
+  const trimSwitch = $('.js-trim');
+  const trimHelp = /** @type {HTMLElement} */ (dialog.querySelector('.js-trim-help'));
+  const trimSettings = store.settings?.trim ?? { thresholdDb: -60, leadMs: 10, tailMs: 50 };
+  trimSwitch.checked = !!store.players.get(playerId)?.trim?.enabled;
+  trimHelp.textContent = `Cada pista comença ${trimSettings.leadMs} ms abans del primer so i s'acaba ${trimSettings.tailMs} ms després `
+    + `de l'últim (silenci: per sota de ${String(trimSettings.thresholdDb).replace('-', '−')} dBFS). El fitxer no es toca. `
+    + 'El llindar i els marges es canvien a ⚙ Configuració. S\'aplica a partir de la pista següent.';
+  trimSwitch.addEventListener('change', async () => {
+    try {
+      const result = await request('player.setTrim', { player: playerId, enabled: trimSwitch.checked });
+      trimSwitch.checked = !!result.player.trim.enabled;
+    } catch (err) {
+      trimSwitch.checked = !trimSwitch.checked;
+      $('.js-help').textContent = /** @type {Error} */ (err).message;
+    }
+  });
 
   // --- Encadenament amb fos ---
   const crossfade = $('.js-crossfade');

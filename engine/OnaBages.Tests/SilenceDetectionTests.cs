@@ -155,4 +155,62 @@ public class SilenceDetectionTests : IDisposable
         Assert.InRange(b.Start, 0.48, 0.56);
         Assert.InRange(b.End, 1.5, 1.58);
     }
+
+    // --- Espetecs aïllats (D-082) ---
+
+    [Fact]
+    public void Un_espetec_al_final_despres_dun_silenci_llarg_no_compta()
+    {
+        // Com «entrevista.mp3»: so fins als 2 s, silenci i un espetec de 4 ms a −36 dBFS als 3,9 s.
+        string path = Wav(48000, 4, t => t is >= 1 and < 2 ? 0.5f : t is >= 3.9 and < 3.904 ? Db(-36) : 0f);
+
+        var b = Bounds(path);
+
+        Assert.Equal(1.0, b.Start, 1.0 / 48000);
+        Assert.Equal(2.0, b.End, 1.0 / 48000);
+    }
+
+    [Fact]
+    public void Un_espetec_al_principi_tampoc()
+    {
+        string path = Wav(48000, 3, t => t is >= 0.05 and < 0.052 ? 0.3f : t is >= 1 and < 2 ? 0.5f : 0f);
+
+        var b = Bounds(path);
+
+        Assert.Equal(1.0, b.Start, 1.0 / 48000);
+        Assert.Equal(2.0, b.End, 1.0 / 48000);
+    }
+
+    [Fact]
+    public void Un_so_curt_a_prop_del_so_es_conserva()
+    {
+        // 4 ms de so a 300 ms del final del so (menys de 500 ms de silenci): pot ser part de la pista.
+        string path = Wav(48000, 3, t => t is >= 1 and < 2 ? 0.5f : t is >= 2.3 and < 2.304 ? 0.3f : 0f);
+
+        var b = Bounds(path);
+
+        Assert.Equal(2.304, b.End, 1.0 / 48000);
+    }
+
+    [Fact]
+    public void Un_cop_curt_pero_de_debo_es_conserva()
+    {
+        // Un cop de 30 ms (més llarg que un espetec) un segon després del so.
+        string path = Wav(48000, 4, t => t is >= 1 and < 2 ? 0.5f : t is >= 3 and < 3.03 ? 0.3f : 0f);
+
+        var b = Bounds(path);
+
+        Assert.Equal(3.03, b.End, 1.0 / 48000);
+    }
+
+    [Fact]
+    public void Si_nomes_hi_ha_espetecs_es_queden_tal_com_son()
+    {
+        string path = Wav(48000, 3, t => t is >= 0.5 and < 0.502 || t is >= 2.5 and < 2.502 ? 0.3f : 0f);
+
+        var b = Bounds(path);
+
+        Assert.Equal(0.5, b.Start, 1.0 / 48000);
+        Assert.Equal(2.502, b.End, 1.0 / 48000);
+    }
 }

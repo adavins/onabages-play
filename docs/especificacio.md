@@ -660,7 +660,9 @@ No calen Visual Studio Build Tools, MSVC ni CMake.
 ### Fase 5 — Ampliacions segons l'ús real
 Fet: **encadenament amb fos entre pistes** (D-077, D-078): per reproductor, de 0 (per defecte) a 10 s, també molt curt (10–100 ms); en l'avanç automàtic i també quan es fa sonar una pista a mà mentre en sona una altra.
 
-Candidates: equalitzador per reproductor (ajornat de la fase 4, D-073), botonera de talls (cartwall), detector de silenci, punts cue d'inici i final, retall automàtic de silencis inicials i finals, biblioteca musical amb cerca, inicis programats, control MIDI o per *fader start*, usuaris.
+Fet: **retall automàtic de silencis inicials i finals** (D-079, D-080, D-081): per reproductor, desactivat per defecte; llindar i marges configurables al perfil (per defecte −60 dBFS, 10 ms abans del so i 50 ms després). El fitxer no es toca i no es perd cap mostra de so.
+
+Candidates: equalitzador per reproductor (ajornat de la fase 4, D-073), botonera de talls (cartwall), detector de silenci, punts cue d'inici i final, biblioteca musical amb cerca, inicis programats, control MIDI o per *fader start*, usuaris.
 
 # 15. Proves i criteris de qualitat
 

@@ -12,14 +12,14 @@ namespace OnaBages.Engine.Data;
 ///
 /// El nom surt de la ruta, la mida i la data del fitxer d'àudio: si el fitxer canvia, ja no es troba i
 /// es torna a mesurar. Els que fa més de <see cref="KeepDays"/> dies que no es fan servir s'esborren.
-/// Contingut (text): «OBLU2;lufs;pic;so» (lufs buit si la pista és silenci). «so» (retall de silencis,
+/// Contingut (text): «OBLU3;lufs;pic;so» (lufs buit si la pista és silenci). «so» (retall de silencis,
 /// fase 5) és una llista «llindar:inici:final» separada per «|», amb els segons amb 6 decimals.
-/// Les mesures de la versió 1 (sense «so») no es fan servir: es tornen a mesurar. Mai no llança excepcions.
+/// Les mesures de versions anteriors (sense «so», o amb els espetecs comptats) no es fan servir: es tornen a mesurar. Mai no llança excepcions.
 /// </summary>
 public sealed class LoudnessCacheFile(string? folder = null) : ILoudnessCache
 {
     public const int KeepDays = 60;
-    private const string Header = "OBLU2";
+    private const string Header = "OBLU3"; // 3: sense els espetecs aïllats (D-082)
 
     public static string DefaultFolder => Path.Combine(RuntimeFile.DirectoryPath, "cache", "sonoritat");
 

@@ -33,7 +33,8 @@ public sealed class AudioFileSource : IDisposable
             reader.CurrentTime = startAt < Duration ? startAt : Duration;
 
         ISampleProvider samples = ToStereo(reader.ToSampleProvider());
-        if (samples.WaveFormat.SampleRate != targetSampleRate)
+        // 0 = la freqüència del fitxer, sense remostrejar (p. ex. per analitzar-lo amb precisió de mostra).
+        if (targetSampleRate > 0 && samples.WaveFormat.SampleRate != targetSampleRate)
             samples = new WdlResamplingSampleProvider(samples, targetSampleRate);
 
         _output = samples;
@@ -55,6 +56,7 @@ public sealed class AudioFileSource : IDisposable
     /// Obre un fitxer. Els WAV es llegeixen directament; la resta de formats (MP3, AAC/M4A,
     /// FLAC, WMA...) amb Media Foundation de Windows.
     /// </summary>
+    /// <param name="targetSampleRate">Freqüència de sortida (es remostreja si cal). 0 = la del fitxer.</param>
     /// <param name="startAt">Punt on comença la lectura (per defecte, l'inici).</param>
     /// <exception cref="AudioFileException">Si el fitxer no existeix o no es pot llegir.</exception>
     public static AudioFileSource Open(string path, int targetSampleRate, TimeSpan startAt = default)

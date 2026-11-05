@@ -1,26 +1,80 @@
 namespace OnaBages.Audio;
 
-/// <summary>Sonoritat d'una pista: LUFS integrats (null si és silenci) i pic de mostra (0..1 o més).</summary>
-public sealed record TrackLoudness(double? Lufs, float Peak)
+/// <summary>
+/// On hi ha so en una pista per a un llindar (fase 5; D-079): de la primera mostra que el passa
+/// (<paramref name="Start"/>, en segons) fins al final de l'última (<paramref name="End"/>).
+/// </summary>
+public readonly record struct SoundBounds(int ThresholdDb, double Start, double End);
+
+/// <summary>
+/// Anàlisi d'una pista: sonoritat (LUFS integrats, null si és silenci), pic de mostra (0..1 o més) i
+/// on comença i on acaba el so per a cada llindar de <see cref="TrackLoudness.SilenceThresholdsDb"/>
+/// (per al retall de silencis; un llindar sense cap mostra per sobre no hi és).
+/// </summary>
+public sealed record TrackLoudness(double? Lufs, float Peak, IReadOnlyList<SoundBounds>? Sound = null)
 {
     /// <summary>
-    /// Mesura un fitxer sencer (el descodifica, fora del fil d'àudio). Les pistes mono es mesuren com
-    /// sonen: el mateix senyal pels dos canals.
+    /// Llindars de silenci que es poden triar (dBFS de pic). Es mesuren tots alhora: si es canvia el
+    /// llindar, no cal tornar a analitzar les pistes.
+    /// </summary>
+    public static readonly int[] SilenceThresholdsDb = [-40, -50, -60, -70, -80];
+
+    /// <summary>On hi ha so per a un llindar, o null (silenci, o no s'ha analitzat).</summary>
+    public SoundBounds? SoundFor(int thresholdDb)
+    {
+        if (Sound is null) return null;
+        foreach (var b in Sound)
+        {
+            if (b.ThresholdDb == thresholdDb) return b;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Analitza un fitxer sencer (el descodifica una vegada, fora del fil d'àudio). Les pistes mono es
+    /// mesuren com sonen: el mateix senyal pels dos canals. El so es busca a la freqüència del fitxer
+    /// (sense remostrejar), amb precisió d'una mostra: compta com a so qualsevol mostra, de qualsevol
+    /// canal, amb un pic per sobre del llindar.
     /// </summary>
     /// <exception cref="AudioFileException">Si no es pot llegir.</exception>
     public static TrackLoudness Measure(string path, CancellationToken cancel = default)
     {
-        const int rate = 48000;
-        using var source = AudioFileSource.Open(path, rate);
+        using var source = AudioFileSource.Open(path, 0); // la freqüència del fitxer
+        int rate = source.SampleRate;
         var meter = new LoudnessMeter(rate);
+
+        var thresholds = SilenceThresholdsDb.Select(db => (float)Math.Pow(10, db / 20.0)).ToArray();
+        var first = Enumerable.Repeat(-1L, thresholds.Length).ToArray();
+        var last = new long[thresholds.Length];
+        long frame = 0;
+
         var buffer = new float[rate / 2 * 2]; // 0,5 s
         int read;
         while ((read = source.Read(buffer)) > 0)
         {
             cancel.ThrowIfCancellationRequested();
             meter.Add(buffer.AsSpan(0, read));
+            for (int i = 0; i + 1 < read; i += 2, frame++)
+            {
+                float peak = Math.Max(Math.Abs(buffer[i]), Math.Abs(buffer[i + 1]));
+                // Del llindar més baix (−80) al més alt (−40): si no passa d'un, tampoc dels de més amunt.
+                for (int k = thresholds.Length - 1; k >= 0; k--)
+                {
+                    if (peak <= thresholds[k]) break;
+                    if (first[k] < 0) first[k] = frame;
+                    last[k] = frame;
+                }
+            }
         }
-        return new TrackLoudness(meter.IntegratedLufs is { } lufs ? Math.Round(lufs, 2) : null, meter.SamplePeak);
+
+        // Els llindars que no tenen cap mostra per sobre (silenci) no es posen.
+        var sound = new List<SoundBounds>();
+        for (int k = 0; k < thresholds.Length; k++)
+        {
+            if (first[k] >= 0)
+                sound.Add(new SoundBounds(SilenceThresholdsDb[k], (double)first[k] / rate, (double)(last[k] + 1) / rate));
+        }
+        return new TrackLoudness(meter.IntegratedLufs is { } lufs ? Math.Round(lufs, 2) : null, meter.SamplePeak, sound);
     }
 }
 

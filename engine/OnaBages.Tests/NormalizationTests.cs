@@ -108,8 +108,12 @@ public class NormalizationTests : IDisposable
         cache.Write(tone, new TrackLoudness(-10.04, 0.316f));
         cache.Write(silence, new TrackLoudness(null, 0f));
 
-        Assert.Equal(new TrackLoudness(-10.04, 0.316f), cache.Read(tone));
-        Assert.Equal(new TrackLoudness(null, 0f), cache.Read(silence));
+        var read = cache.Read(tone)!;
+        Assert.Equal((-10.04, 0.316f), (read.Lufs!.Value, read.Peak));
+        Assert.Empty(read.Sound!);
+        var silentRead = cache.Read(silence)!;
+        Assert.Null(silentRead.Lufs);
+        Assert.Equal(0f, silentRead.Peak);
         File.SetLastWriteTimeUtc(tone, DateTime.UtcNow.AddMinutes(5)); // el fitxer ha canviat
         Assert.Null(cache.Read(tone));
     }

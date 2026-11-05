@@ -105,7 +105,7 @@ public sealed class TrackAnalyzer : IDisposable
                 loudness = TrackLoudness.Measure(path, _stopping.Token);
                 _cache?.Write(path, loudness);
             }
-            playlist.SetLoudness(id, loudness.Lufs);
+            playlist.SetAnalysis(id, loudness);
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception)

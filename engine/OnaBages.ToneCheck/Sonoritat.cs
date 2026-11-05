@@ -34,20 +34,17 @@ public static class Sonoritat
                 continue;
             }
 
-            var meter = new LoudnessMeter(rate);
-            var buffer = new float[rate * 2];
-            using (source)
-            {
-                int read;
-                while ((read = source.Read(buffer)) > 0)
-                    meter.Add(buffer.AsSpan(0, read));
-            }
-
-            double? lufs = meter.IntegratedLufs;
-            double peakDb = meter.SamplePeak > 0 ? 20 * Math.Log10(meter.SamplePeak) : double.NegativeInfinity;
+            var duration = source.Duration;
+            source.Dispose();
+            var analysis = TrackLoudness.Measure(path);
+            double? lufs = analysis.Lufs;
+            double peakDb = analysis.Peak > 0 ? 20 * Math.Log10(analysis.Peak) : double.NegativeInfinity;
             string gain = lufs is { } l ? $"{Math.Min(MaxBoostDb, TargetLufs - l):+0.0;-0.0} dB" : "—";
             Console.WriteLine($"{Path.GetFileName(path)}");
             Console.WriteLine($"  Sonoritat: {(lufs is { } v ? $"{v:0.0} LUFS" : "silenci")}   Pic: {peakDb:0.0} dBFS   Guany: {gain}   ({sw.Elapsed.TotalSeconds:0.0} s)");
+            // Retall de silencis (fase 5): quant silenci hi ha al principi i al final, per a cada llindar.
+            foreach (var b in analysis.Sound ?? [])
+                Console.WriteLine($"  Silenci a {b.ThresholdDb} dBFS: {b.Start * 1000,7:0.0} ms al principi, {(duration.TotalSeconds - b.End) * 1000,7:0.0} ms al final");
         }
         return result;
     }

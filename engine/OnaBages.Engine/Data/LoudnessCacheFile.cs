@@ -12,12 +12,14 @@ namespace OnaBages.Engine.Data;
 ///
 /// El nom surt de la ruta, la mida i la data del fitxer d'àudio: si el fitxer canvia, ja no es troba i
 /// es torna a mesurar. Els que fa més de <see cref="KeepDays"/> dies que no es fan servir s'esborren.
-/// Contingut (text): «OBLU1;lufs;pic» (lufs buit si la pista és silenci). Mai no llança excepcions.
+/// Contingut (text): «OBLU2;lufs;pic;so» (lufs buit si la pista és silenci). «so» (retall de silencis,
+/// fase 5) és una llista «llindar:inici:final» separada per «|», amb els segons amb 6 decimals.
+/// Les mesures de la versió 1 (sense «so») no es fan servir: es tornen a mesurar. Mai no llança excepcions.
 /// </summary>
 public sealed class LoudnessCacheFile(string? folder = null) : ILoudnessCache
 {
     public const int KeepDays = 60;
-    private const string Header = "OBLU1";
+    private const string Header = "OBLU2";
 
     public static string DefaultFolder => Path.Combine(RuntimeFile.DirectoryPath, "cache", "sonoritat");
 
@@ -46,11 +48,20 @@ public sealed class LoudnessCacheFile(string? folder = null) : ILoudnessCache
             string? path = PathFor(audioPath);
             if (path is null || !File.Exists(path)) return null;
             string[] parts = File.ReadAllText(path).Trim().Split(';');
-            if (parts.Length != 3 || parts[0] != Header) return null;
+            if (parts.Length != 4 || parts[0] != Header) return null;
             double? lufs = parts[1].Length == 0 ? null : double.Parse(parts[1], CultureInfo.InvariantCulture);
             float peak = float.Parse(parts[2], CultureInfo.InvariantCulture);
+            var sound = new List<SoundBounds>();
+            foreach (string item in parts[3].Split('|', StringSplitOptions.RemoveEmptyEntries))
+            {
+                string[] b = item.Split(':');
+                sound.Add(new SoundBounds(
+                    int.Parse(b[0], CultureInfo.InvariantCulture),
+                    double.Parse(b[1], CultureInfo.InvariantCulture),
+                    double.Parse(b[2], CultureInfo.InvariantCulture)));
+            }
             File.SetLastWriteTimeUtc(path, DateTime.UtcNow); // s'ha fet servir: no s'esborrarà aviat
-            return new TrackLoudness(lufs, peak);
+            return new TrackLoudness(lufs, peak, sound);
         }
         catch (Exception)
         {
@@ -65,7 +76,9 @@ public sealed class LoudnessCacheFile(string? folder = null) : ILoudnessCache
             string? path = PathFor(audioPath);
             if (path is null) return;
             Directory.CreateDirectory(Folder);
-            string text = string.Create(CultureInfo.InvariantCulture, $"{Header};{loudness.Lufs};{loudness.Peak}");
+            string sound = string.Join('|', (loudness.Sound ?? []).Select(b =>
+                string.Create(CultureInfo.InvariantCulture, $"{b.ThresholdDb}:{b.Start:0.000000}:{b.End:0.000000}")));
+            string text = string.Create(CultureInfo.InvariantCulture, $"{Header};{loudness.Lufs};{loudness.Peak};{sound}");
             string temp = path + ".tmp";
             File.WriteAllText(temp, text);
             File.Move(temp, path, overwrite: true);

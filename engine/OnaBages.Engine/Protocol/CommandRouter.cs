@@ -127,6 +127,8 @@ public sealed partial class CommandRouter
                 "editor.close" => EditorDo(e => e.Close()),
                 "editor.delete" => EditorChange(msg, (edit, start, end) => edit.Delete(start, end)),
                 "editor.keep" => EditorChange(msg, (edit, start, end) => edit.Keep(start, end)),
+                "editor.fadeIn" => EditorChange(msg, (edit, start, end) => edit.FadeIn(start, end)),
+                "editor.fadeOut" => EditorChange(msg, (edit, start, end) => edit.FadeOut(start, end)),
                 "editor.undo" => EditorDo(e => e.Change(edit => edit.Undo())),
                 "editor.redo" => EditorDo(e => e.Change(edit => edit.Redo())),
                 "editor.save" => EditorSave(msg),

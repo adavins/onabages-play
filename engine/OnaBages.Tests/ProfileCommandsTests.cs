@@ -267,7 +267,8 @@ public class ProfileCommandsTests : IDisposable
 
     private static bool WaitFor(Func<bool> condition)
     {
-        for (int i = 0; i < 50 && !condition(); i++) Thread.Sleep(100);
+        // Fins a 10 s: amb l'ordinador carregat (altres proves descodificant MP3), l'aturada pot trigar.
+        for (int i = 0; i < 100 && !condition(); i++) Thread.Sleep(100);
         return condition();
     }
 }

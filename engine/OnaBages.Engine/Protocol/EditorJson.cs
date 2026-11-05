@@ -52,6 +52,12 @@ public static class EditorJson
             ["canUndo"] = edit?.CanUndo ?? false,
             ["canRedo"] = edit?.CanRedo ?? false,
             ["modified"] = edit?.IsModified ?? false,
+            // Fosos (fase 4, pas 6b): [fotograma de l'original, passos del grànul 1, passos del grànul 2], en ordre.
+            // Cada pas és de 1,5 dB (negatiu = més fluix); silenceSteps o menys = silenci.
+            ["gains"] = edit is null ? null : new JsonArray(edit.Gains.OrderBy(g => g.Key)
+                .Select(g => (JsonNode)new JsonArray(g.Key, g.Value.Granule0, g.Value.Granule1)).ToArray()),
+            ["silenceSteps"] = Mp3Edit.SilenceSteps,
+            ["granulesPerFrame"] = edit?.GranulesPerFrame,
         };
     }
 

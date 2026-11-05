@@ -1,3 +1,5 @@
+using System.Collections.Immutable;
+
 namespace OnaBages.Audio;
 
 /// <summary>Tros del fitxer original que es queda: <paramref name="Count"/> fotogrames a partir de <paramref name="Start"/>.</summary>
@@ -5,6 +7,13 @@ public readonly record struct FrameRange(int Start, int Count)
 {
     public int End => Start + Count;
 }
+
+/// <summary>
+/// Canvi de volum d'un fotograma de l'original (fosos, fase 4, pas 6b; D-074), en passos de
+/// <see cref="Mp3Gain.StepDb"/> per a cada grànul (≤ 0; <see cref="Mp3Edit.SilenceSteps"/> = silenci).
+/// A MPEG-2 només hi ha un grànul (<paramref name="Granule1"/> no es fa servir).
+/// </summary>
+public readonly record struct FrameGain(int Granule0, int Granule1);
 
 /// <summary>
 /// Edició d'un MP3 sense pèrdua (especificació 9.3): no toca mai l'original mentre s'edita.
@@ -19,19 +28,38 @@ public sealed class Mp3Edit
     /// <summary>Quants passos es poden desfer.</summary>
     public const int MaxUndo = 200;
 
-    private readonly List<IReadOnlyList<FrameRange>> _undo = [];
-    private readonly List<IReadOnlyList<FrameRange>> _redo = [];
+    /// <summary>Passos que deixen un grànul en silenci (el volum global, de 0 a 255, queda a 0).</summary>
+    public const int SilenceSteps = -Mp3Gain.MaxGlobalGain;
+
+    /// <summary>Un fos arriba al silenci quan l'amplitud és més petita que això (−60 dB).</summary>
+    private const double SilenceAmplitude = 0.001;
+
+    /// <summary>Estat que es pot desfer: els trossos que es queden i els canvis de volum (fosos).</summary>
+    private sealed record EditState(IReadOnlyList<FrameRange> Segments, ImmutableDictionary<int, FrameGain> Gains);
+
+    private readonly List<EditState> _undo = [];
+    private readonly List<EditState> _redo = [];
 
     public Mp3Edit(Mp3FrameIndex index)
     {
         Index = index;
         Segments = [new FrameRange(0, index.FrameCount)];
+        Gains = ImmutableDictionary<int, FrameGain>.Empty;
     }
 
     public Mp3FrameIndex Index { get; }
 
     /// <summary>Trossos de l'original que es queden, en ordre.</summary>
     public IReadOnlyList<FrameRange> Segments { get; private set; }
+
+    /// <summary>
+    /// Canvis de volum dels fosos, per fotograma de l'<b>original</b>: si després es talla, el fos es mou
+    /// amb el seu tros de so. Buit si no hi ha cap fos.
+    /// </summary>
+    public ImmutableDictionary<int, FrameGain> Gains { get; private set; }
+
+    /// <summary>Grànuls per fotograma: 2 a MPEG-1 (1.152 mostres), 1 a MPEG-2 (576).</summary>
+    public int GranulesPerFrame => Index.SamplesPerFrame >= 1152 ? 2 : 1;
 
     /// <summary>Fotogrames de la versió editada.</summary>
     public int FrameCount => Segments.Sum(s => s.Count);
@@ -42,7 +70,7 @@ public sealed class Mp3Edit
     public bool CanRedo => _redo.Count > 0;
 
     /// <summary>Hi ha canvis respecte del fitxer original.</summary>
-    public bool IsModified => Segments.Count != 1 || Segments[0] != new FrameRange(0, Index.FrameCount);
+    public bool IsModified => Segments.Count != 1 || Segments[0] != new FrameRange(0, Index.FrameCount) || !Gains.IsEmpty;
 
     /// <summary>Fotograma més proper a un temps de la versió editada (dins de 0..FrameCount).</summary>
     public int FrameAt(double seconds) =>
@@ -93,7 +121,7 @@ public sealed class Mp3Edit
                 result.Add(new FrameRange(s.Start + skip, s.Count - skip));
             }
         }
-        Apply(Merge(result));
+        Apply(Merge(result), Gains);
         return true;
     }
 
@@ -106,15 +134,82 @@ public sealed class Mp3Edit
         if (start == 0 && end == FrameCount) return false;
 
         // Com retallar l'inici i el final, però en un sol pas de desfer.
-        Apply(Merge(Slice(Segments, start, end)));
+        Apply(Merge(Slice(Segments, start, end)), Gains);
         return true;
     }
+
+    /// <summary>
+    /// Fos d'entrada a [start, end) de la versió editada: del silenci al volum que tenia (amplitud lineal).
+    /// Sense tornar a codificar: es canvia el volum global de cada grànul (D-073).
+    /// </summary>
+    /// <exception cref="Mp3EditException">Si no hi ha cap fragment seleccionat.</exception>
+    public bool FadeIn(int start, int end) => Fade(start, end, fadeIn: true);
+
+    /// <summary>Fos de sortida a [start, end) de la versió editada: del volum que tenia al silenci.</summary>
+    /// <exception cref="Mp3EditException">Si no hi ha cap fragment seleccionat.</exception>
+    public bool FadeOut(int start, int end) => Fade(start, end, fadeIn: false);
+
+    private bool Fade(int start, int end, bool fadeIn)
+    {
+        (start, end) = Clamp(start, end);
+        if (end <= start)
+            throw new Mp3EditException("Cal seleccionar el fragment on es vol fer el fos.");
+
+        int granules = GranulesPerFrame;
+        int total = (end - start) * granules;
+        var gains = Gains.ToBuilder();
+        for (int i = start; i < end; i++)
+        {
+            int original = ToOriginal(i);
+            var current = gains.GetValueOrDefault(original);
+            int k = (i - start) * granules;
+            int g0 = Combine(current.Granule0, StepsFor(k, total, fadeIn));
+            int g1 = granules > 1 ? Combine(current.Granule1, StepsFor(k + 1, total, fadeIn)) : 0;
+            if (g0 == 0 && g1 == 0) gains.Remove(original);
+            else gains[original] = new FrameGain(g0, g1);
+        }
+        Apply(Segments, gains.ToImmutable());
+        return true;
+    }
+
+    /// <summary>
+    /// Passos del grànul <paramref name="k"/> de <paramref name="total"/> en un fos (amplitud lineal).
+    /// El fos d'entrada comença en silenci (primer grànul) i el de sortida hi acaba (últim grànul).
+    /// </summary>
+    private static int StepsFor(int k, int total, bool fadeIn)
+    {
+        double amplitude = fadeIn ? (double)k / total : 1 - (double)(k + 1) / total;
+        if (amplitude <= SilenceAmplitude) return SilenceSteps;
+        return (int)Math.Round(20 * Math.Log10(amplitude) / Mp3Gain.StepDb);
+    }
+
+    /// <summary>Un fos a sobre d'un altre: se sumen (sense passar del silenci).</summary>
+    private static int Combine(int current, int steps) => Math.Max(SilenceSteps, current + steps);
+
+    /// <summary>
+    /// Guany lineal d'un punt de l'original (en segons), segons els fosos: per a la previsualització.
+    /// 1 = sense canvi; 0 = silenci.
+    /// </summary>
+    public float GainAt(double originalSeconds)
+    {
+        var gains = Gains;
+        if (gains.IsEmpty || originalSeconds < 0) return 1f;
+        int frame = (int)(originalSeconds / Index.FrameSeconds);
+        if (!gains.TryGetValue(frame, out var gain)) return 1f;
+        double within = originalSeconds - frame * Index.FrameSeconds;
+        bool second = GranulesPerFrame > 1 && within >= Index.FrameSeconds / 2;
+        return GainOfSteps(second ? gain.Granule1 : gain.Granule0);
+    }
+
+    /// <summary>Guany lineal d'uns quants passos (<see cref="SilenceSteps"/> o menys = 0).</summary>
+    public static float GainOfSteps(int steps) =>
+        steps <= SilenceSteps ? 0f : (float)Math.Pow(10, steps * Mp3Gain.StepDb / 20);
 
     public bool Undo()
     {
         if (_undo.Count == 0) return false;
-        _redo.Add(Segments);
-        Segments = _undo[^1];
+        _redo.Add(new EditState(Segments, Gains));
+        (Segments, Gains) = (_undo[^1].Segments, _undo[^1].Gains);
         _undo.RemoveAt(_undo.Count - 1);
         return true;
     }
@@ -122,8 +217,8 @@ public sealed class Mp3Edit
     public bool Redo()
     {
         if (_redo.Count == 0) return false;
-        _undo.Add(Segments);
-        Segments = _redo[^1];
+        _undo.Add(new EditState(Segments, Gains));
+        (Segments, Gains) = (_redo[^1].Segments, _redo[^1].Gains);
         _redo.RemoveAt(_redo.Count - 1);
         return true;
     }
@@ -146,6 +241,7 @@ public sealed class Mp3Edit
         string folder = System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(target))!;
         string temp = System.IO.Path.Combine(folder, $".{System.IO.Path.GetFileName(target)}.{Guid.NewGuid():N}.tmp");
         var segments = Segments;
+        var gains = Gains;
         long totalFrames = segments.Sum(s => (long)s.Count), done = 0;
 
         try
@@ -165,9 +261,18 @@ public sealed class Mp3Edit
                     {
                         cancel.ThrowIfCancellationRequested();
                         int last = Math.Min(s.End, f + 4096) - 1;
-                        long from = Index.Offset(f);
-                        long to = Index.Offset(last) + Index.Length(last);
-                        Copy(input, output, from, to - from, buffer);
+                        if (HasGains(gains, f, last))
+                        {
+                            // Hi ha algun fos: fotograma a fotograma, canviant-ne el volum global (D-073).
+                            for (int frame = f; frame <= last; frame++)
+                                CopyFrame(input, output, frame, gains, buffer);
+                        }
+                        else
+                        {
+                            long from = Index.Offset(f);
+                            long to = Index.Offset(last) + Index.Length(last);
+                            Copy(input, output, from, to - from, buffer);
+                        }
                         done += last - f + 1;
                         progress?.Invoke((double)done / totalFrames);
                     }
@@ -192,12 +297,13 @@ public sealed class Mp3Edit
 
     // -----------------------------------------------------------------------
 
-    private void Apply(IReadOnlyList<FrameRange> segments)
+    private void Apply(IReadOnlyList<FrameRange> segments, ImmutableDictionary<int, FrameGain> gains)
     {
-        _undo.Add(Segments);
+        _undo.Add(new EditState(Segments, Gains));
         if (_undo.Count > MaxUndo) _undo.RemoveAt(0);
         _redo.Clear();
         Segments = segments;
+        Gains = gains;
     }
 
     private (int, int) Clamp(int start, int end)
@@ -237,6 +343,31 @@ public sealed class Mp3Edit
                 result.Add(s);
         }
         return result;
+    }
+
+    private static bool HasGains(ImmutableDictionary<int, FrameGain> gains, int first, int last)
+    {
+        if (gains.IsEmpty) return false;
+        for (int frame = first; frame <= last; frame++)
+        {
+            if (gains.ContainsKey(frame)) return true;
+        }
+        return false;
+    }
+
+    /// <summary>Copia un fotograma; si té fos, amb el volum global de cada grànul canviat.</summary>
+    private void CopyFrame(Stream input, Stream output, int frame, ImmutableDictionary<int, FrameGain> gains, byte[] buffer)
+    {
+        int length = Index.Length(frame);
+        input.Position = Index.Offset(frame);
+        input.ReadExactly(buffer, 0, length);
+        if (gains.TryGetValue(frame, out var gain))
+        {
+            var bytes = buffer.AsSpan(0, length);
+            Mp3Gain.Adjust(bytes, 0, gain.Granule0);
+            if (GranulesPerFrame > 1) Mp3Gain.Adjust(bytes, 1, gain.Granule1);
+        }
+        output.Write(buffer, 0, length);
     }
 
     private static void Copy(Stream input, Stream output, long from, long count, byte[] buffer)

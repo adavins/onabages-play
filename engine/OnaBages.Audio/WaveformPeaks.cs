@@ -69,13 +69,25 @@ public static class WaveformPeaks
     /// Forma d'ona d'una versió editada a partir de la de l'original: els trossos que es queden,
     /// un darrere l'altre. Serveix per no haver de tornar a descodificar un fitxer acabat de desar.
     /// </summary>
-    public static byte[] Splice(byte[] original, IReadOnlyList<FrameRange> segments)
+    /// <param name="gains">Fosos (fase 4, pas 6b): els pics d'aquests fotogrames es multipliquen pel guany més alt dels seus grànuls.</param>
+    public static byte[] Splice(byte[] original, IReadOnlyList<FrameRange> segments, IReadOnlyDictionary<int, FrameGain>? gains = null)
     {
         var result = new byte[segments.Sum(s => s.Count) * BytesPerFrame];
         int pos = 0;
         foreach (var s in segments)
         {
             Array.Copy(original, s.Start * BytesPerFrame, result, pos, s.Count * BytesPerFrame);
+            if (gains is { Count: > 0 })
+            {
+                for (int f = 0; f < s.Count; f++)
+                {
+                    if (!gains.TryGetValue(s.Start + f, out var gain)) continue;
+                    float factor = Mp3Edit.GainOfSteps(Math.Max(gain.Granule0, gain.Granule1));
+                    int at = pos + f * BytesPerFrame;
+                    result[at] = (byte)MathF.Round(result[at] * factor);
+                    result[at + 1] = (byte)MathF.Round(result[at + 1] * factor);
+                }
+            }
             pos += s.Count * BytesPerFrame;
         }
         return result;

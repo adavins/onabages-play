@@ -83,7 +83,8 @@ public sealed class EditorPlayer : IDisposable
     /// <paramref name="editedStart"/> és la posició de la versió editada on comença el primer tros.
     /// Si ja sonava, primer s'atura.
     /// </summary>
-    public void Play(string deviceId, string path, IReadOnlyList<PlayPiece> pieces, double editedStart)
+    /// <param name="gainAt">Guany dels fosos en cada punt de l'original (segons → lineal), o null si no n'hi ha (fase 4, pas 6b).</param>
+    public void Play(string deviceId, string path, IReadOnlyList<PlayPiece> pieces, double editedStart, Func<double, float>? gainAt = null)
     {
         lock (_sync)
         {
@@ -95,13 +96,13 @@ public sealed class EditorPlayer : IDisposable
             _lastPosition = editedStart;
             _endPosition = editedStart + pieces.Sum(p => p.Length);
             State = EditorPlayState.Stopped;
-            Start(deviceId, path, pieces);
+            Start(deviceId, path, pieces, gainAt);
         }
         StateChanged?.Invoke(this);
     }
 
     /// <summary>Obre la sortida i el fitxer i comença a sonar. Si alguna cosa falla, queda en Error (dins de _sync).</summary>
-    private void Start(string deviceId, string path, IReadOnlyList<PlayPiece> pieces)
+    private void Start(string deviceId, string path, IReadOnlyList<PlayPiece> pieces, Func<double, float>? gainAt)
     {
         if (pieces.Count == 0) return; // res a sonar
 
@@ -134,7 +135,7 @@ public sealed class EditorPlayer : IDisposable
         _stopReader = false;
         _readerError = null;
         _outputError = null;
-        _reader = new Thread(() => ReaderLoop(path, pieces, first, ring, stream, rate))
+        _reader = new Thread(() => ReaderLoop(path, pieces, first, ring, stream, rate, gainAt))
         {
             IsBackground = true,
             Name = "Editor: lectura",
@@ -221,7 +222,7 @@ public sealed class EditorPlayer : IDisposable
     }
 
     /// <summary>Fil de lectura: cada tros, del principi a la llargada que toca, un darrere l'altre.</summary>
-    private void ReaderLoop(string path, IReadOnlyList<PlayPiece> pieces, AudioFileSource first, SampleRingBuffer ring, PlayerStream stream, int rate)
+    private void ReaderLoop(string path, IReadOnlyList<PlayPiece> pieces, AudioFileSource first, SampleRingBuffer ring, PlayerStream stream, int rate, Func<double, float>? gainAt)
     {
         var chunk = new float[rate / 10 * 2]; // 100 ms
         try
@@ -232,6 +233,7 @@ public sealed class EditorPlayer : IDisposable
                     ? first
                     : AudioFileSource.Open(path, rate, TimeSpan.FromSeconds(pieces[i].Start));
                 long remaining = (long)Math.Round(pieces[i].Length * rate) * 2;
+                long framesRead = 0; // mostres per canal llegides d'aquest tros (per saber on som de l'original)
 
                 while (remaining > 0 && !_stopReader)
                 {
@@ -242,6 +244,17 @@ public sealed class EditorPlayer : IDisposable
                     }
                     int read = source.Read(chunk.AsSpan(0, (int)Math.Min(chunk.Length, remaining)));
                     if (read == 0) break; // el fitxer s'acaba abans del que es pensava
+                    // Fosos (fase 4, pas 6b): el guany del punt de l'original on és cada mostra.
+                    if (gainAt is not null)
+                    {
+                        for (int s = 0; s + 1 < read; s += 2)
+                        {
+                            float gain = gainAt(pieces[i].Start + (double)(framesRead + s / 2) / rate);
+                            chunk[s] *= gain;
+                            chunk[s + 1] *= gain;
+                        }
+                    }
+                    framesRead += read / 2;
                     ring.Write(chunk.AsSpan(0, read));
                     remaining -= read;
                 }

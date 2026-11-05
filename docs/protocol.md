@@ -343,6 +343,7 @@ Un sol fitxer MP3 obert alhora. Les edicions no toquen l'original fins que es de
 | `editor.open` | `path` (ruta completa d'un `.mp3`) | `{ editor }` amb `busy: "opening"`: s'indexa en segon pla i, en acabar, arriba `editor.changed` (obert, o `error` si no s'ha pogut). El que hi hagués obert es tanca **sense desar**. `bad_state` si el fitxer s'està enregistrant o té el marcador `.rec` |
 | `editor.delete` | `start`, `end` | `{ editor, changed }`. Elimina el fragment. `bad_state` si s'eliminaria tot. Retallar l'inici = `start: 0`; retallar el final = `end`: la durada |
 | `editor.keep` | `start`, `end` | `{ editor, changed }`. Es queda només amb el fragment (retalla l'inici i el final en un sol pas) |
+| `editor.fadeIn` / `editor.fadeOut` | `start`, `end` | `{ editor, changed }`. Fos d'entrada (del silenci al volum que tenia) o de sortida (fins al silenci) al fragment, amb amplitud lineal. Sense recodificar (D-073, D-074): es canvia el volum global de cada grànul, en passos de 1,5 dB. Es pot desfer. Sense fragment: `bad_state` |
 | `editor.undo`, `editor.redo` | — | `{ editor }`. Fins a 200 passos |
 | `editor.save` | opcionals: `path` (fitxer nou; sense `path`, a sobre de l'original) i `overwrite: true` | `{ editor }` amb `busy: "saving"`. Si la destinació ja existeix i no s'envia `overwrite: true`: **`file_exists`** i no es desa res (la interfície ho ha de confirmar i tornar a enviar). En acabar arriba `editor.changed`: `savedPath` (desat; l'editor continua amb aquest fitxer, sense desfer) o `error`. Escriptura segura: fitxer temporal a la mateixa carpeta + substitució |
 | `editor.close` | — | `{ editor }`. Tanca sense desar; si s'estava obrint o desant, s'atura (la destinació queda intacta) |
@@ -361,11 +362,13 @@ Mentre `busy` no és `null`, `delete`, `keep`, `undo`, `redo` i `save` donen `ba
   "originalFrames": 150000, "originalDuration": 3600.0, "duration": 3412.536, "frames": 142189,
   "segments": [[125, 90000], [97810, 52189]],
   "peaksDone": 150000, "peaksError": null,
-  "canUndo": true, "canRedo": false, "modified": true }
+  "canUndo": true, "canRedo": false, "modified": true,
+  "gains": [[97810, -2, -3], [97811, -3, -4]], "silenceSteps": -255, "granulesPerFrame": 2 }
 ```
 
 - `playback`: reproducció de l'editor. `state`: `stopped`, `playing` o `error` (amb el motiu a `error`). `position`: segons de la versió editada (on sona o on s'ha aturat). `output`: la sortida triada (`{ id, name }`) o `null` si fa servir la de la preescolta.
 - `segments`: trossos de l'original que es queden, `[primer fotograma, quants]`, en ordre.
+- `gains`: fosos, per fotograma de l'**original** (si després es talla, el fos es mou amb el seu so): `[fotograma, passos del grànul 1, passos del grànul 2]`, en ordre. Cada pas és de 1,5 dB (negatiu = més fluix); `silenceSteps` o menys = silenci. A MPEG-2 hi ha un sol grànul per fotograma (`granulesPerFrame`: 1) i el segon valor no es fa servir. Els fosos se senten a la previsualització (`editor.play`).
 - `peaksDone`: fotogrames de l'original que ja tenen forma d'ona. Es calcula en segon pla després d'obrir (uns 25 s per hora en un ordinador normal) i es pot editar mentrestant; quan és igual a `originalFrames` (fotogrames de l'original), és completa. La segona vegada que s'obre un fitxer surt de la memòria cau i és completa de seguida. `peaksError`: no s'ha pogut calcular (el fitxer es pot editar igualment).
 - `error`: motiu de l'última feina que ha fallat (obrir o desar). Es neteja amb l'ordre següent.
 - Es desen els fotogrames **tal qual** (sense recodificar). Les etiquetes ID3v2 i ID3v1 es conserven; el fotograma Xing/Info de LAME es treu (diria una durada falsa).

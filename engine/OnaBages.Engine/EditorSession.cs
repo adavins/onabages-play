@@ -50,6 +50,7 @@ public sealed class EditorSession : IDisposable
         string path;
         List<PlayPiece> pieces;
         double start;
+        Func<double, float>? gainAt;
         lock (_sync)
         {
             var edit = RequireReady();
@@ -65,8 +66,11 @@ public sealed class EditorSession : IDisposable
                 .ToList();
             path = edit.Index.Path;
             start = edit.SecondsAt(startFrame);
+            // Fosos (fase 4, pas 6b): se senten a la previsualització. Els d'aquest moment (qualsevol canvi atura la reproducció).
+            var gains = edit.Gains;
+            gainAt = gains.IsEmpty ? null : edit.GainAt;
         }
-        Player.Play(deviceId, path, pieces, start); // fora del bloqueig: obre la sortida i espera el so preparat
+        Player.Play(deviceId, path, pieces, start, gainAt); // fora del bloqueig: obre la sortida i espera el so preparat
     }
 
     /// <summary>Atura la reproducció de l'editor.</summary>
@@ -173,6 +177,7 @@ public sealed class EditorSession : IDisposable
             Error = null;
             string saved = target;
             var segments = edit.Segments;
+            var gains = edit.Gains;
             StartJob("saving", token =>
             {
                 edit.Save(saved, p => ReportProgress(p), token);
@@ -182,7 +187,7 @@ public sealed class EditorSession : IDisposable
                 // Forma d'ona del fitxer desat: si la de l'original ja era completa, es munta amb els
                 // trossos que s'han quedat (sense tornar a descodificar). Si no, es calcula de nou.
                 byte[]? derived = _peaks is { } peaks && _peaksDone == edit.Index.FrameCount
-                    ? WaveformPeaks.Splice(peaks, segments)
+                    ? WaveformPeaks.Splice(peaks, segments, gains)
                     : null;
                 CancelPeaks();
                 Path = saved;

@@ -30,7 +30,7 @@ public sealed class EngineConfig
     public string ProfileName { get; set; } = ConfigRepository.DefaultProfileName;
 
     // --- Del perfil: dispositius, enregistradors, distribució i programa. Del perfil, també les últimes llistes. ---
-    // --- De l'ordinador (config.json): KnownDevices, UiZoom i EditorDevice. ---
+    // --- De l'ordinador (config.json): KnownDevices, UiZoom, EditorDevice i l'historial d'enregistraments. ---
 
     /// <summary>Sortida que vol cada reproductor (clau: identificador del reproductor).</summary>
     public Dictionary<string, DeviceRef> Players { get; } = [];
@@ -52,6 +52,21 @@ public sealed class EngineConfig
 
     /// <summary>Dispositius que hi havia l'última vegada: serveix per detectar els nous i els formats canviats.</summary>
     public List<AudioDevice> KnownDevices { get; set; } = [];
+
+    // --- Historial d'enregistraments (fase 5, pas 10a; de l'ordinador: depèn dels discos) ---
+
+    /// <summary>Es fa una còpia de cada enregistrament original (per defecte, sí).</summary>
+    public bool RecordingArchiveEnabled { get; set; } = true;
+
+    /// <summary>Carpeta de l'historial; null = la de per defecte (<see cref="RecordingArchive.DefaultFolder"/>).</summary>
+    public string? RecordingArchiveFolder { get; set; }
+
+    /// <summary>Dies que es guarden (0 = no esborrar mai).</summary>
+    public int RecordingArchiveKeepDays { get; set; } = RecordingArchive.DefaultKeepDays;
+
+    /// <summary>On es fan les còpies ara, o null si no se'n fan.</summary>
+    public string? EffectiveRecordingArchiveFolder =>
+        RecordingArchiveEnabled ? RecordingArchiveFolder ?? RecordingArchive.DefaultFolder : null;
 
     /// <summary>Escala de la interfície (1 = 100 %). Entre <see cref="MinZoom"/> i <see cref="MaxZoom"/>.</summary>
     public double UiZoom { get; set; } = 1.0;

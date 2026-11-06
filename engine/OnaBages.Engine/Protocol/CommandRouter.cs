@@ -376,8 +376,9 @@ public sealed partial class CommandRouter
         var loudness = msg["loudness"] as JsonObject;
         var trim = msg["trim"] as JsonObject;
         var limiter = msg["recorderLimiter"] as JsonObject;
-        if (ui is null && layout is null && program is null && loudness is null && trim is null && limiter is null)
-            throw new BadParamsException("Falta el camp 'ui', 'layout', 'program', 'loudness', 'trim' o 'recorderLimiter' amb els ajustos a canviar.");
+        var archive = msg["recordingArchive"] as JsonObject;
+        if (ui is null && layout is null && program is null && loudness is null && trim is null && limiter is null && archive is null)
+            throw new BadParamsException("Falta el camp 'ui', 'layout', 'program', 'loudness', 'trim', 'recorderLimiter' o 'recordingArchive' amb els ajustos a canviar.");
 
         double? zoom = OptionalNumber(ui?["zoom"], "ui.zoom", EngineConfig.MinZoom, EngineConfig.MaxZoom);
         int? perRow = OptionalInt(ui?["recordersPerRow"], "ui.recordersPerRow", 1, EngineConfig.MaxRecorders);
@@ -392,6 +393,16 @@ public sealed partial class CommandRouter
         int? trimLead = OptionalInt(trim?["leadMs"], "trim.leadMs", 0, Player.MaxTrimMarginMs);
         int? trimTail = OptionalInt(trim?["tailMs"], "trim.tailMs", 0, Player.MaxTrimMarginMs);
         double? ceiling = OptionalNumber(limiter?["ceilingDb"], "recorderLimiter.ceilingDb", Recorder.MinLimiterCeilingDb, Recorder.MaxLimiterCeilingDb);
+        bool? archiveEnabled = null;
+        if (archive?["enabled"] is { } enabledNode)
+            archiveEnabled = enabledNode is JsonValue ev && ev.TryGetValue(out bool b) ? b : throw new BadParamsException("'recordingArchive.enabled' ha de ser true o false.");
+        // Carpeta: "" = la de per defecte; si no, una ruta completa.
+        string? archiveFolder = archive?["folder"] is { } folderNode
+            ? ReadString(folderNode) ?? throw new BadParamsException("'recordingArchive.folder' ha de ser un text.")
+            : null;
+        if (archiveFolder is { Length: > 0 } && !Path.IsPathFullyQualified(archiveFolder))
+            throw new BadParamsException("'recordingArchive.folder' ha de ser una ruta completa (p. ex. E:\\Historial).");
+        int? keepDays = OptionalInt(archive?["keepDays"], "recordingArchive.keepDays", 0, RecordingArchive.MaxKeepDays);
 
         config.Update(c =>
         {
@@ -408,7 +419,19 @@ public sealed partial class CommandRouter
             if (trimLead is { } lead) c.TrimLeadMs = lead;
             if (trimTail is { } tail) c.TrimTailMs = tail;
             if (ceiling is { } ce) c.RecorderLimiterCeilingDb = Math.Round(ce, 1);
+            if (archiveEnabled is { } ae) c.RecordingArchiveEnabled = ae;
+            if (archiveFolder is not null) c.RecordingArchiveFolder = archiveFolder.Length == 0 ? null : archiveFolder;
+            if (keepDays is { } kd) c.RecordingArchiveKeepDays = kd;
         });
+
+        // L'historial s'aplica a partir del pròxim enregistrament (el que està en curs continua com era).
+        // Els dies antics s'esborren en arrencar el motor.
+        if (archive is not null)
+        {
+            string? folder = config.Read(c => c.EffectiveRecordingArchiveFolder);
+            foreach (var recorder in _state.Recorders)
+                recorder.SetArchive(folder);
+        }
 
         // El sostre nou s'aplica de seguida a tots els enregistradors (també als que enregistren).
         if (ceiling is not null)
@@ -456,6 +479,15 @@ public sealed partial class CommandRouter
                 ["tailMs"] = c.TrimTailMs,
                 ["thresholds"] = new JsonArray(TrackLoudness.SilenceThresholdsDb.Select(t => (JsonNode)t).ToArray()),
                 ["maxMarginMs"] = Player.MaxTrimMarginMs,
+            }),
+            // Historial d'enregistraments (fase 5, pas 10a; de l'ordinador): còpia de cada original.
+            ["recordingArchive"] = config.Read(c => new JsonObject
+            {
+                ["enabled"] = c.RecordingArchiveEnabled,
+                ["folder"] = c.RecordingArchiveFolder ?? RecordingArchive.DefaultFolder,
+                ["defaultFolder"] = RecordingArchive.DefaultFolder,
+                ["keepDays"] = c.RecordingArchiveKeepDays,
+                ["maxKeepDays"] = RecordingArchive.MaxKeepDays,
             }),
             // Limitador dels enregistradors (fase 5, pas 9a): sostre comú; cada un l'activa amb recorder.setLimiter.
             ["recorderLimiter"] = new JsonObject

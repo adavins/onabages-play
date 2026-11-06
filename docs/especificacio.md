@@ -664,6 +664,8 @@ Fet: **retall automàtic de silencis inicials i finals** (D-079, D-080, D-081): 
 
 Fet: **limitador opcional als enregistradors** (D-083, D-084): botó LIM a cada enregistrador, desactivat per defecte; sostre comú al perfil (per defecte −1 dB, es pot triar −0,1 dB); es pot activar mentre s'enregistra.
 
+En curs: **historial d'enregistraments** (D-086): còpia de cada enregistrament original en una carpeta per dia, escrita alhora que l'enregistrament; activat per defecte, 30 dies (configurable; 0 = no esborrar mai).
+
 Candidates: equalitzador per reproductor (ajornat de la fase 4, D-073), botonera de talls (cartwall), detector de silenci, punts cue d'inici i final, biblioteca musical amb cerca, inicis programats, control MIDI o per *fader start*, usuaris.
 
 # 15. Proves i criteris de qualitat

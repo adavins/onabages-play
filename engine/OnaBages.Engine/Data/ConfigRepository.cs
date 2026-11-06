@@ -591,6 +591,14 @@ public sealed class ConfigRepository
         if (Text(root["editor"]?["device"]?["id"]) is { Length: > 0 } editorId)
             config.EditorDevice = new DeviceRef(editorId, Text(root["editor"]?["device"]?["name"]) ?? "");
 
+        // Historial d'enregistraments (fase 5, pas 10a; camp opcional, sense canvi de versió).
+        if (root["recordingArchive"] is JsonObject archive)
+        {
+            if (archive["enabled"] is JsonValue e && e.TryGetValue(out bool enabled)) config.RecordingArchiveEnabled = enabled;
+            if (Text(archive["folder"]) is { Length: > 0 } folder && Path.IsPathFullyQualified(folder)) config.RecordingArchiveFolder = folder;
+            if (Int(archive["keepDays"]) is { } days) config.RecordingArchiveKeepDays = Math.Clamp(days, 0, RecordingArchive.MaxKeepDays);
+        }
+
         if (root["knownDevices"] is JsonArray devices)
         {
             foreach (var node in devices)
@@ -796,6 +804,12 @@ public sealed class ConfigRepository
         ["activeProfile"] = config.ProfileId,
         ["knownDevices"] = new JsonArray(config.KnownDevices.Select(d => (JsonNode)WriteDevice(d)).ToArray()),
         ["ui"] = new JsonObject { ["zoom"] = config.UiZoom },
+        ["recordingArchive"] = new JsonObject
+        {
+            ["enabled"] = config.RecordingArchiveEnabled,
+            ["folder"] = config.RecordingArchiveFolder,
+            ["keepDays"] = config.RecordingArchiveKeepDays,
+        },
         ["editor"] = new JsonObject
         {
             ["device"] = config.EditorDevice is { } editorDevice

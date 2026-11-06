@@ -327,6 +327,20 @@ foreach (var recorder in state.Recorders)
     }
 }
 
+// Historial d'enregistraments (fase 5, pas 10a): una còpia de cada original. Els dies antics s'esborren en segon pla.
+var (archiveFolder, archiveKeepDays) = config.Read(c => (c.EffectiveRecordingArchiveFolder, c.RecordingArchiveKeepDays));
+foreach (var recorder in state.Recorders)
+    recorder.SetArchive(archiveFolder);
+if (archiveFolder is not null && archiveKeepDays > 0)
+{
+    _ = Task.Run(() =>
+    {
+        int deleted = RecordingArchive.DeleteOld(archiveFolder, archiveKeepDays, DateTime.Today);
+        if (deleted > 0)
+            log.LogInformation("Historial d'enregistraments: s'han esborrat {Count} còpies de fa més de {Days} dies.", deleted, archiveKeepDays);
+    });
+}
+
 // Limitador de cada enregistrador (fase 5, pas 9a): el que hi ha al perfil.
 foreach (var recorder in state.Recorders)
     recorder.SetLimiter(config.Read(c => c.LimitedRecorders.Contains(recorder.Id)), config.Read(c => c.RecorderLimiterCeilingDb));

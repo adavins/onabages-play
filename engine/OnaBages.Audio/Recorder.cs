@@ -35,6 +35,10 @@ public sealed record FinishedRecording(
 /// Mentre s'enregistra hi ha un marcador <c>fitxer.mp3.rec</c> al costat; s'esborra quan
 /// l'enregistrament es tanca correctament. Si el procés cau, el marcador queda i el fitxer
 /// es pot recuperar (fase 2).
+///
+/// Còpia d'historial (fase 5, pas 10a; D-086): si hi ha <see cref="ArchiveFolder"/>, el fil de codificació
+/// escriu els mateixos bytes també a <c>carpetaAAAA-MM-DDitxer.mp3</c>. Ningú més no la toca (desar,
+/// descartar o l'editor treballen amb el fitxer de treball). Un error a la còpia no afecta mai l'enregistrament.
 /// </summary>
 public sealed class Recorder : IDisposable
 {
@@ -93,6 +97,8 @@ public sealed class Recorder : IDisposable
     private volatile DynamicsProcessor? _limiter;
     // Sostre del limitador per al mesurador (lineal; sense limitador, cap). El llegeix el fil de captura.
     private volatile float _meterCeiling = float.MaxValue;
+    // Còpia d'historial de l'enregistrament en curs (l'escriu el fil de codificació). Null si no n'hi ha.
+    private volatile ArchiveCopy? _archive;
 
     /// <param name="id">Identificador ("1", "2"...).</param>
     /// <param name="openInput">Obre una entrada per identificador de dispositiu. Per defecte, WASAPI.</param>
@@ -243,6 +249,33 @@ public sealed class Recorder : IDisposable
         RaiseStateChanged();
     }
 
+    /// <summary>Carpeta de l'historial d'enregistraments (còpia de cada original), o null si no se'n fa còpia.</summary>
+    public string? ArchiveFolder { get; private set; }
+
+    /// <summary>Còpia d'historial de l'enregistrament en curs o de l'últim (null si no n'hi ha).</summary>
+    public string? ArchivePath { get; private set; }
+
+    /// <summary>
+    /// Per què no hi ha (o s'ha interromput) la còpia d'historial de l'enregistrament en curs o de l'últim.
+    /// L'enregistrament principal continua igualment.
+    /// </summary>
+    public string? ArchiveError { get; private set; }
+
+    /// <summary>
+    /// Carpeta de l'historial d'enregistraments (null = sense còpia). S'aplica a partir del pròxim enregistrament.
+    /// </summary>
+    public void SetArchive(string? folder)
+    {
+        lock (_sync)
+        {
+            if (folder is not null && !Path.IsPathFullyQualified(folder))
+                throw new RecorderCommandException("La carpeta de l'historial ha de ser una ruta completa (p. ex. E:\\Historial).");
+            ArchiveFolder = folder;
+            _changed = true;
+        }
+        RaiseStateChanged();
+    }
+
     /// <summary>El limitador és activat (el so que va al fitxer no passa de <see cref="LimiterCeilingDb"/>).</summary>
     public bool LimiterEnabled { get; private set; }
 
@@ -348,6 +381,13 @@ public sealed class Recorder : IDisposable
         FinishedRecording? finished = null;
         lock (_sync)
         {
+            // La còpia d'historial ha fallat: es diu (l'enregistrament continua).
+            if (ArchiveError is null && _archive?.Error is { } archiveError)
+            {
+                ArchiveError = ArchiveFailedMessage(archiveError);
+                _changed = true;
+            }
+
             if (State != RecorderState.Recording)
             {
                 // Sense enregistrar, perdre l'entrada no és un error (no es perd res): el mesurador
@@ -410,6 +450,7 @@ public sealed class Recorder : IDisposable
         FileStream? file = null;
         LameEncoder? encoder = null;
         string? path = null;
+        ArchiveCopy? archive = null;
         try
         {
             // Normalment l'entrada ja és oberta (mesurador): l'enregistrament comença a l'instant.
@@ -434,6 +475,7 @@ public sealed class Recorder : IDisposable
             file = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.Read, bufferSize: 64 * 1024);
             encoder = new LameEncoder(input.SampleRate, BitrateKbps);
             WriteMarker(path, startedAt, input);
+            archive = OpenArchive(path, startedAt);
 
             var ring = new SampleRingBuffer(input.SampleRate * input.Channels * BufferSeconds);
             _zeros = new float[input.SampleRate * input.Channels / 10];
@@ -452,7 +494,9 @@ public sealed class Recorder : IDisposable
             var fileForThread = file;
             var limiter = new DynamicsProcessor(input.SampleRate, _limiterSettings);
             _limiter = limiter;
-            _encoderThread = new Thread(() => EncoderLoop(ring, encoderForThread, fileForThread, path, limiter))
+            _archive = archive;
+            var archiveForThread = archive;
+            _encoderThread = new Thread(() => EncoderLoop(ring, encoderForThread, fileForThread, path, limiter, archiveForThread))
             {
                 IsBackground = true, // el motor atura els enregistradors en tancar-se (Dispose)
                 Name = $"Enregistrador {Id}: codificació",
@@ -477,6 +521,10 @@ public sealed class Recorder : IDisposable
             _encoderThread = null;
             encoder?.Dispose();
             file?.Dispose();
+            _archive = null;
+            archive?.Close();
+            if (archive is not null && ArchivePath is not null) TryDelete(ArchivePath);
+            ArchivePath = null;
             if (path is not null)
             {
                 TryDelete(path);
@@ -530,7 +578,7 @@ public sealed class Recorder : IDisposable
     /// Fil de codificació: memòria → estèreo → volum → limitador → LAME → fitxer. Bolcat físic cada 2 s.
     /// En acabar (o si hi ha un error) tanca el fitxer; si tot ha anat bé, esborra el marcador.
     /// </summary>
-    private void EncoderLoop(SampleRingBuffer ring, LameEncoder encoder, FileStream file, string path, DynamicsProcessor limiter)
+    private void EncoderLoop(SampleRingBuffer ring, LameEncoder encoder, FileStream file, string path, DynamicsProcessor limiter, ArchiveCopy? archive)
     {
         int channels = _inputChannels;
         var input = new float[ChunkFrames * channels];
@@ -566,6 +614,7 @@ public sealed class Recorder : IDisposable
                     Process(frames);
                     var mp3 = encoder.Encode(stereo, frames * 2);
                     file.Write(mp3);
+                    archive?.Write(mp3);
                     Interlocked.Exchange(ref _fileSize, file.Position);
                 }
                 else if (_stopEncoder)
@@ -580,6 +629,7 @@ public sealed class Recorder : IDisposable
                 if (sinceFlush.Elapsed >= FlushInterval)
                 {
                     file.Flush(flushToDisk: true);
+                    archive?.Flush();
                     sinceFlush.Restart();
                 }
             }
@@ -590,11 +640,16 @@ public sealed class Recorder : IDisposable
             {
                 Array.Clear(stereo, 0, pending * 2);
                 Process(pending);
-                file.Write(encoder.Encode(stereo, pending * 2));
+                var tail = encoder.Encode(stereo, pending * 2);
+                file.Write(tail);
+                archive?.Write(tail);
             }
 
-            file.Write(encoder.Flush());
+            var last = encoder.Flush();
+            file.Write(last);
+            archive?.Write(last);
             file.Flush(flushToDisk: true);
+            archive?.Flush();
             Interlocked.Exchange(ref _fileSize, file.Position);
             ok = true;
         }
@@ -605,6 +660,7 @@ public sealed class Recorder : IDisposable
         finally
         {
             try { file.Dispose(); } catch { /* disc ple o perdut: el marcador queda per recuperar-lo */ }
+            archive?.Close();
             encoder.Dispose();
             if (ok) TryDelete(path + ".rec");
         }
@@ -662,6 +718,9 @@ public sealed class Recorder : IDisposable
         _encoderThread?.Join(TimeSpan.FromSeconds(60)); // buidar 10 s de memòria triga molt menys
         _encoderThread = null;
         _limiter = null;
+        if (ArchiveError is null && _archive?.Error is { } archiveError)
+            ArchiveError = ArchiveFailedMessage(archiveError);
+        _archive = null;
 
         if (_inputError is not null)
             CloseInput();
@@ -729,6 +788,76 @@ public sealed class Recorder : IDisposable
         using var stream = new FileStream(path + ".rec", FileMode.CreateNew, FileAccess.Write);
         stream.Write(System.Text.Encoding.UTF8.GetBytes(marker.ToJsonString(new() { WriteIndented = true })));
         stream.Flush(flushToDisk: true);
+    }
+
+    /// <summary>
+    /// Crea la còpia d'historial (carpeta del dia, el mateix nom que el fitxer de treball). Si no es pot,
+    /// l'enregistrament comença igualment i es diu per què (<see cref="ArchiveError"/>).
+    /// </summary>
+    private ArchiveCopy? OpenArchive(string path, DateTimeOffset startedAt)
+    {
+        ArchivePath = null;
+        ArchiveError = null;
+        if (ArchiveFolder is not { } root) return null;
+        try
+        {
+            string folder = Path.Combine(root, startedAt.ToString("yyyy-MM-dd"));
+            Directory.CreateDirectory(folder);
+            string copyPath = UniquePath(folder, Path.GetFileNameWithoutExtension(path));
+            var stream = new FileStream(copyPath, FileMode.CreateNew, FileAccess.Write, FileShare.Read, bufferSize: 64 * 1024);
+            ArchivePath = copyPath;
+            return new ArchiveCopy(stream);
+        }
+        catch (Exception ex)
+        {
+            ArchiveError = $"Còpia d'historial: no s'ha pogut crear a {root} ({ex.Message}). L'enregistrament continua sense còpia.";
+            return null;
+        }
+    }
+
+    private static string ArchiveFailedMessage(Exception ex) =>
+        $"Còpia d'historial: s'ha deixat d'escriure (disc ple o inaccessible: {ex.Message}). L'enregistrament continua; la còpia és vàlida fins aquí.";
+
+    /// <summary>
+    /// Segon fitxer de l'enregistrament (historial). Només l'escriu el fil de codificació. Si falla, apunta
+    /// l'error, es tanca i ja no fa res més: mai no llança cap excepció cap a l'enregistrament principal.
+    /// </summary>
+    private sealed class ArchiveCopy(FileStream file)
+    {
+        private FileStream? _file = file;
+        private volatile Exception? _error;
+
+        /// <summary>Per què s'ha deixat d'escriure, o null.</summary>
+        public Exception? Error => _error;
+
+        public void Write(ReadOnlySpan<byte> data)
+        {
+            if (_file is null) return;
+            try { _file.Write(data); }
+            catch (Exception ex) { Fail(ex); }
+        }
+
+        /// <summary>Bolcat físic al disc (com el del fitxer de treball).</summary>
+        public void Flush()
+        {
+            if (_file is null) return;
+            try { _file.Flush(flushToDisk: true); }
+            catch (Exception ex) { Fail(ex); }
+        }
+
+        public void Close()
+        {
+            var stream = _file;
+            _file = null;
+            try { stream?.Dispose(); }
+            catch (Exception ex) { _error ??= ex; }
+        }
+
+        private void Fail(Exception ex)
+        {
+            _error = ex;
+            Close();
+        }
     }
 
     private static string UniquePath(string folder, string baseName)

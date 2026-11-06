@@ -90,45 +90,332 @@
   <h1>Documentació tècnica</h1>
   <p class="meta">Ona Bages Play · versió 0.1.0 · novembre de 2026</p>
 
-  <p>Aquest document és per a qui manté l'aplicació: com està feta, com es compila i com s'hi afegeixen coses.
-    La referència detallada és als fitxers del repositori <code>docs/especificacio.md</code> (què s'ha de fer i per què),
-    <code>docs/protocol.md</code> (ordres i esdeveniments) i <code>docs/decisions.md</code> (registre de decisions).</p>
+  <p>Aquest document és per a qui instal·la i manté l'aplicació: com preparar l'ordinador, com està feta, com es compila
+    i com s'hi afegeixen coses. És un resum. La referència detallada és als fitxers del repositori:</p>
+  <ul>
+    <li><code>docs/especificacio.md</code>: què ha de fer l'aplicació i per què.</li>
+    <li><code>docs/protocol.md</code>: totes les ordres i els esdeveniments entre la interfície i el motor.</li>
+    <li><code>docs/decisions.md</code>: registre de decisions (D-001, D-002…), amb el motiu de cadascuna.</li>
+    <li><code>CLAUDE.md</code>: les regles del projecte (arquitectura, motor, enregistrament, interfície, dades).</li>
+  </ul>
+  <p class="note"><strong>Prioritat absoluta:</strong> l'àudio no es pot interrompre i els enregistraments no es poden
+    perdre. Qualsevol canvi s'ha de valorar primer amb aquesta regla.</p>
+
+  <h2 id="preparar-windows">Preparar Windows</h2>
+  <p>Molts talls d'àudio no els provoca l'aplicació sinó el sistema. A cada ordinador d'estudi (la llista completa, amb
+    caselles per marcar, és a <code>docs/installacio-windows.md</code>):</p>
+  <h3 id="windows-so">Dispositius de so</h3>
+  <p>Tauler de control &gt; So (<code>mmsys.cpl</code>), pestanyes Reproducció i Enregistrament, a cada dispositiu que farà
+    servir l'aplicació:</p>
+  <ul>
+    <li><strong>Millores</strong> i <strong>àudio espacial</strong>: desactivats.</li>
+    <li><strong>Format predeterminat</strong> (Opcions avançades): el mateix a tots, per exemple 24 bits, 48000 Hz.</li>
+    <li>Creative (Sound Blaster): desactivar SBX, Crystalizer, equalitzadors i altres efectes a les sortides d'antena.</li>
+    <li>Realtek: desactivar la <strong>detecció de connectors</strong> si la consola ho permet. Amb els connectors del
+      darrere, treure un cable fa desaparèixer el dispositiu: no s'han de tocar durant un programa.</li>
+    <li><strong>So dels monitors (HDMI / DisplayPort):</strong> si no es fa servir, desactivar-lo a l'<em>Administrador de
+      dispositius</em> (no n'hi ha prou amb el tauler de So). Si no, encendre o apagar el monitor fa perdre uns mil·lisegons
+      d'àudio a <strong>totes</strong> les targetes.</li>
+    <li>Posar un nom clar a cada dispositiu («Antena 1», «Auriculars preescolta», «Taula PGM»…).</li>
+  </ul>
+  <h3 id="windows-sistema">Sistema</h3>
+  <ul>
+    <li>Sons del sistema: esquema «Sense sons». El dispositiu predeterminat de Windows no ha d'anar a antena.</li>
+    <li>Pestanya Comunicacions: «No fer res» (si no, Windows abaixa el volum quan detecta una trucada).</li>
+    <li>Desactivar les entrades de bucle que no es facin servir («Mescla estèreo», «Lo que se oye»).</li>
+    <li>Pla d'energia d'alt rendiment; <strong>suspensió selectiva USB</strong> desactivada; als concentradors USB,
+      desmarcar «Permetre que l'ordinador apagui aquest dispositiu».</li>
+    <li>Windows Update: hores actives que cobreixin els programes. «No molestar» durant els programes.</li>
+    <li>Windows «N»: instal·lar el Media Feature Pack (sense ell no sonen els MP3).</li>
+  </ul>
+  <h3 id="inventari">Inventari del maquinari</h3>
+  <p><code>tools/inventari.ps1</code> llegeix del registre tots els dispositius d'àudio i escriu una taula en Markdown. Només
+    llegeix i no cal ser administrador:</p>
+  <pre><code>powershell -ExecutionPolicy Bypass -File tools\inventari.ps1 -Sortida docs\inventari</code></pre>
 
   <h2 id="arquitectura">Arquitectura</h2>
-  <p class="pending">Pendent (pas 12c).</p>
+  <pre><code>Electron (app/) ── WebSocket 127.0.0.1 + testimoni ── Motor .NET (engine/)
+  HTML + Bootstrap + JS pur                            NAudio (WASAPI) + LAME</code></pre>
+  <p>Dos processos separats:</p>
+  <ul>
+    <li><strong>Motor</strong> (<code>engine/</code>, C# / .NET 10): té <strong>tot</strong> l'àudio, tot l'estat i totes
+      les màquines d'estats. És la <strong>font de veritat</strong>.</li>
+    <li><strong>Interfície</strong> (<code>app/</code>, Electron): només mostra l'estat i envia ordres. <strong>Mai no
+      reprodueix ni processa àudio.</strong></li>
+  </ul>
+  <p>Per què separats: si la interfície es penja o es tanca, el motor continua sonant i enregistrant. En tornar a obrir-la,
+    llegeix <code>engine.json</code> (port i testimoni), s'hi connecta i demana <code>state.get</code> per reconstruir la
+    pantalla. Aquesta arquitectura no es canvia sense una decisió explícita.</p>
+
+  <h3 id="cicle-de-vida">Cicle de vida</h3>
+  <ol>
+    <li>Electron comprova si hi ha un motor viu (<code>GET /health</code> al port de <code>engine.json</code>). Si no, l'arrenca
+      amb <code>--port</code>, <code>--token</code> i <code>--data-dir</code>.</li>
+    <li>El motor: llegeix la configuració, crea els reproductors i enregistradors, compara el maquinari amb el desat,
+      <strong>recupera els enregistraments interromputs</strong> (marcadors <code>.rec</code>) i escolta a
+      <code>127.0.0.1</code>.</li>
+    <li>La interfície es connecta per WebSocket, demana <code>state.get</code> i a partir d'aquí s'actualitza amb els
+      esdeveniments.</li>
+    <li>En tancar: si no hi ha res actiu, <code>engine.shutdown</code>. Si n'hi ha, l'usuari tria tancar només la finestra
+      (el motor continua) o aturar-ho tot (<code>engine.shutdown</code> amb <code>force</code>). El motor tanca primer els
+      enregistradors, perquè els fitxers quedin bé.</li>
+    <li>Canviar de perfil reinicia el motor amb el mateix port i testimoni (uns 3 s), i només es permet sense res actiu.</li>
+  </ol>
 
   <h2 id="estructura">Estructura del repositori</h2>
-  <p class="pending">Pendent (pas 12c).</p>
+  <table>
+    <tr><th>Carpeta</th><th>Què hi ha</th></tr>
+    <tr><td><code>engine/OnaBages.Audio/</code></td><td>Tot l'àudio: dispositius, reproductors, preescolta, enregistradors,
+      DSP, edició MP3, recuperació. <strong>No depèn del motor</strong> (D-046): es pot reutilitzar en altres
+      projectes.</td></tr>
+    <tr><td><code>engine/OnaBages.Engine/</code></td><td>El procés del motor: <code>Program.cs</code> (arrencada i revisions
+      periòdiques), <code>Protocol/</code> (ordres i JSON), <code>Data/</code> (l'únic mòdul que llegeix i escriu fitxers de
+      dades).</td></tr>
+    <tr><td><code>engine/OnaBages.Recovery/</code></td><td>Eina independent per recuperar un enregistrament interromput.</td></tr>
+    <tr><td><code>engine/OnaBages.ToneCheck/</code></td><td>Eina de proves: to de prova, anàlisi de talls, prova de
+      convivència de l'editor, processament i sonoritat.</td></tr>
+    <tr><td><code>engine/OnaBages.Tests/</code></td><td>Proves automàtiques (xUnit).</td></tr>
+    <tr><td><code>app/main/</code></td><td><code>main.js</code> (procés principal d'Electron) i <code>preload.js</code> (el pont
+      segur cap a la pàgina).</td></tr>
+    <tr><td><code>app/renderer/</code></td><td>La interfície: <code>index.html</code>, <code>editor.html</code>,
+      <code>css/</code> i <code>js/</code>.</td></tr>
+    <tr><td><code>tools/</code></td><td><code>consola-proves.html</code>, <code>inventari.ps1</code>, la icona i els fitxers de la
+      versió portable.</td></tr>
+    <tr><td><code>docs/</code></td><td>Especificació, protocol, decisions, instal·lació, i aquests dos documents HTML.</td></tr>
+  </table>
 
   <h2 id="compilar">Compilar, provar i empaquetar</h2>
-  <p class="pending">Pendent (pas 12c).</p>
+  <p>Cal: .NET 10 SDK, Node.js LTS i Git. No calen Visual Studio, MSVC ni CMake.</p>
+  <pre><code># Motor
+dotnet build engine/OnaBages.slnx
+dotnet test engine/OnaBages.slnx
+dotnet run --project engine/OnaBages.Engine -- --port 47800
+
+# Interfície (des de app/)
+npm install
+npm start
+
+# Versió portable (des de l'arrel): build\OnaBagesPlay-&lt;versió&gt;.zip
+.\empaquetar.cmd</code></pre>
+  <ul>
+    <li><strong>Sense interfície:</strong> arrenca el motor i obre <code>tools/consola-proves.html</code> al navegador amb el port
+      i el testimoni que mostra la consola. Permet enviar qualsevol ordre a mà.</li>
+    <li><strong>Dades de proves:</strong> la variable d'entorn <code>ONABAGES_DATA_DIR</code> fa que Electron i el motor facin
+      servir una altra carpeta de dades. Així es pot provar sense tocar la configuració real.</li>
+    <li><strong>Proves automàtiques:</strong> més de 550, sobre la lògica (llistes, màquines d'estats, edició per fotogrames,
+      recuperació, configuració, ordres) i sobre l'àudio amb senyals generats.</li>
+    <li><strong>Proves d'àudio:</strong> <code>OnaBages.ToneCheck</code> genera un to de 1618 Hz, i un cop enregistrat
+      l'analitza per detectar talls, clics o mostres perdudes. <code>ToneCheck convivencia</code> comprova que editar un fitxer
+      d'una hora no afecta dos enregistraments simultanis.</li>
+    <li><strong>Empaquetar:</strong> <code>empaquetar.cmd</code> publica el motor amb el .NET inclòs, empaqueta Electron amb
+      <code>@electron/packager</code>, hi afegeix el motor (<code>resources\engine</code>), la carpeta <code>dades</code>,
+      el <code>LLEGEIX-ME.txt</code> i la documentació (<code>documentacio\</code>), i ho comprimeix.</li>
+  </ul>
 
   <h2 id="motor">El motor</h2>
-  <p class="pending">Pendent (pas 12c).</p>
+
   <h3 id="fils">Fils i regles de l'àudio</h3>
-  <p class="pending">Pendent (pas 12c).</p>
+  <p>Cada reproductor, la preescolta i cada enregistrador tenen el seu propi flux WASAPI en <strong>mode compartit</strong>
+    (100 ms, prioritat «Pro Audio»). Un error en un flux no afecta els altres.</p>
+  <p>El <strong>fil d'àudio</strong> (les crides de NAudio/WASAPI) té regles estrictes:</p>
+  <ul>
+    <li>no crea objectes, no bloqueja, no espera disc ni xarxa i no escriu registres;</li>
+    <li>només copia mostres d'una memòria intermèdia (<code>SampleRingBuffer</code>) preparada per un altre fil;</li>
+    <li>els mesuradors (<code>PeakMeter</code>) es guarden amb operacions atòmiques.</li>
+  </ul>
+  <p>La lectura dels fitxers i la codificació MP3 van en fils propis, amb segons de marge. Les excepcions es capturen per flux
+    i es converteixen en un estat <code>error</code> amb un esdeveniment: el procés no cau mai per un error d'un flux.</p>
+  <p>El motor fa una <strong>revisió cada 100 ms</strong> (final de pista, errors, posicions), envia els mesuradors 25 vegades
+    per segon i desa les llistes i els recents que han canviat cada 2 s.</p>
+  <p><strong>Dispositius:</strong> s'identifiquen per l'id de Windows i, com a alternativa, pel nom. Mai no es fa servir el
+    «dispositiu predeterminat» per a una sortida d'antena. Si en arrencar un dispositiu no hi és, l'element queda «Sense
+    dispositiu»; <strong>no es reassigna mai sol</strong> a un altre (només es reassocia un dispositiu amb el mateix nom, si
+    és únic).</p>
+
   <h3 id="reproductors">Reproductors i preescolta</h3>
-  <p class="pending">Pendent (pas 12c).</p>
+  <ul>
+    <li><strong>Lectura:</strong> Media Foundation (MP3, AAC/M4A, WMA, FLAC…); WAV sense Media Foundation. Sortida sempre
+      estèreo, remostrejada a la freqüència del dispositiu.</li>
+    <li><strong>Cadena:</strong> fitxer → descodificació → guany de normalització → compressor/limitador → volum → sortida.</li>
+    <li><strong>Llista</strong> (<code>Playlist</code>): identificadors propis per element; la «pista següent» es calcula per
+      identitat, no per posició, perquè la llista es pot editar mentre sona.</li>
+    <li><strong>Encadenament:</strong> el fil de lectura decideix què ve després 1 s abans del final i continua escrivint a la
+      mateixa memòria (sense silenci). El fos entre pistes es barreja al fil de lectura amb corbes d'igual potència.</li>
+    <li><strong>Comprovació de pistes:</strong> <code>TrackAnalyzer</code> obre cada pista que s'afegeix, en mesura la
+      sonoritat (EBU R128) i el silenci del principi i del final. Els resultats van a una memòria cau.</li>
+    <li><strong>Preescolta</strong> (<code>CuePlayer</code>): un <code>Player</code> propi amb una llista d'una pista. No toca
+      cap reproductor.</li>
+    <li><strong>Historial del que ha sonat</strong> (<code>PlayHistory</code>): un CSV per dia, per a l'Excel en català
+      (separador «;», UTF-8 amb BOM).</li>
+  </ul>
+
   <h3 id="enregistradors">Enregistradors</h3>
-  <p class="pending">Pendent (pas 12c).</p>
+  <ul>
+    <li>Captura WASAPI en float → memòria de 10 s → <strong>fil de codificació</strong>: volum → limitador opcional →
+      LAME.</li>
+    <li>MP3 <strong>320 kbps CBR</strong>, sense etiqueta Xing/Info i sense <em>bit reservoir</em>: cada fotograma és
+      independent, i el fitxer és vàlid en tot moment (també per tallar-lo a l'editor).</li>
+    <li>Un sol fitxer per enregistrament, amb <code>Flush(true)</code> (escriptura física) cada 2 s.</li>
+    <li>Marcador <code>&lt;fitxer&gt;.mp3.rec</code> mentre s'enregistra; s'esborra en aturar correctament.</li>
+    <li><strong>Historial d'enregistraments:</strong> el mateix fil escriu els mateixos bytes a una còpia
+      (<code>RecordingArchive</code>). Un error a la còpia no afecta mai l'enregistrament principal.</li>
+    <li>Es compten les mostres perdudes i els avisos de Windows, i s'escriuen al registre amb la posició.</li>
+  </ul>
+
   <h3 id="dsp">Processament (DSP)</h3>
-  <p class="pending">Pendent (pas 12c).</p>
+  <ul>
+    <li><strong>Compressor/limitador</strong> (<code>DynamicsProcessor</code>): com el SqrSoft del Winamp, amb anticipació
+      d'1,5 ms. El limitador dels enregistradors és el mateix amb ràtio 1 (només el sostre).</li>
+    <li><strong>Normalització</strong> (<code>Loudness</code>): mesura LUFS de cada pista; el guany s'aplica a partir de la
+      pista següent.</li>
+    <li><strong>Retall de silencis:</strong> la pista s'obre al primer so menys un marge i el lector no dona més mostres
+      que fins a l'últim so més un marge. El fitxer no es toca. Els espetecs aïllats (com a molt 20 ms) no compten com
+      a so.</li>
+    <li>Els canvis de paràmetres s'apliquen amb rampa, sense clics.</li>
+  </ul>
+
+  <h3 id="editor">Editor</h3>
+  <ul>
+    <li><strong>Sense recodificar:</strong> <code>Mp3FrameIndex</code> localitza cada fotograma; retallar o eliminar és copiar
+      fotogrames sencers (~24–26 ms).</li>
+    <li><strong>Fosos</strong> (<code>Mp3Gain</code>): es canvia el volum global de cada grànul en passos d'1,5 dB, com el
+      mp3DirectCut. No es perd qualitat ni canvia la mida.</li>
+    <li><strong>Forma d'ona</strong> (<code>WaveformPeaks</code>): un pic per fotograma, calculat en un fil de prioritat baixa i
+      desat a la memòria cau.</li>
+    <li>Desar escriu en un temporal i el substitueix. Mai no obre un fitxer que s'està enregistrant.</li>
+  </ul>
+
   <h3 id="recuperacio">Recuperació d'enregistraments</h3>
-  <p class="pending">Pendent (pas 12c).</p>
+  <p>Si el motor o l'ordinador cauen mentre s'enregistra, en arrencar el motor busca marcadors <code>.rec</code> a les
+    carpetes de treball i, per a cadascun (<code>RecordingRecovery</code>):</p>
+  <ol>
+    <li>retalla el fitxer fins a l'últim fotograma complet;</li>
+    <li>treu l'etiqueta Xing/Info, si n'hi ha;</li>
+    <li>esborra el marcador;</li>
+    <li>afegeix l'enregistrament a Recents amb l'etiqueta «Recuperat».</li>
+  </ol>
+  <p>No toca mai un fitxer que un altre procés té obert. <code>OnaBages.Recovery.exe</code> fa el mateix sobre un fitxer o una
+    carpeta, sense obrir l'aplicació. Cap programari protegeix d'un tall de corrent abans del bolcat: es recomana un SAI.</p>
 
   <h2 id="dades">Dades</h2>
-  <p class="pending">Pendent (pas 12c).</p>
+  <p>Regles:</p>
+  <ul>
+    <li>Tot l'accés a dades persistents passa per <strong>un sol mòdul del motor</strong> (<code>OnaBages.Engine/Data</code>,
+      sobretot <code>ConfigRepository</code>).</li>
+    <li>Cada fitxer JSON porta <code>schemaVersion</code>. En llegir-ne un d'antic, es converteix (migració).</li>
+    <li>Escriptura atòmica: fitxer temporal + substitució (<code>AtomicFile</code>).</li>
+    <li>Els àudios no es copien mai a la configuració: només se'n guarden les rutes.</li>
+  </ul>
+  <p>Excepció acceptada: la posició i la mida de les finestres (<code>finestres.json</code>) les desa Electron,
+    perquè s'ha de saber abans de connectar-se al motor.</p>
+  <table>
+    <tr><th>Fitxer o carpeta</th><th>Què hi ha</th></tr>
+    <tr><td><code>config.json</code></td><td>Ajustos de l'ordinador: perfil actiu, dispositius coneguts, zoom, sortida de
+      l'editor, historial d'enregistraments, Recents.</td></tr>
+    <tr><td><code>perfils\&lt;nom&gt;\perfil.json</code></td><td>Un perfil: distribució, dispositius, enregistradors,
+      processament, presets, normalització, retall, limitador, carpetes del panell lateral.</td></tr>
+    <tr><td><code>perfils\&lt;nom&gt;\llistes\</code></td><td>L'última llista de cada reproductor (<code>.obpl</code>).</td></tr>
+    <tr><td><code>enregistraments-recents.json</code></td><td>Pendents i Recents.</td></tr>
+    <tr><td><code>engine.json</code></td><td>Port, testimoni i PID del motor en marxa.</td></tr>
+    <tr><td><code>historial\</code></td><td>Què ha sonat: un CSV per dia.</td></tr>
+    <tr><td><code>logs\</code></td><td>Registre del motor, un fitxer per dia (es guarden 30 dies).</td></tr>
+    <tr><td><code>cache\</code></td><td>Formes d'ona i mesures de sonoritat (s'esborren si fa 60 dies que no es fan
+      servir).</td></tr>
+    <tr><td><code>electron\</code></td><td>Només a la versió portable: dades d'Electron i <code>finestres.json</code> (si no, van
+      a la carpeta habitual d'Electron).</td></tr>
+  </table>
+  <p><strong>On és tot:</strong> a <code>%APPDATA%\OnaBages\</code>. A la <strong>versió portable</strong>, si al costat de
+    l'executable hi ha una carpeta <code>dades\</code>, tot va allà. Els enregistraments van a la carpeta de treball de cada
+    enregistrador, i l'historial d'enregistraments a <code>Documents\Ona Bages Play\Historial d'enregistraments</code> (o on
+    es configuri).</p>
 
   <h2 id="protocol">El protocol</h2>
-  <p class="pending">Pendent (pas 12c).</p>
+  <ul>
+    <li>WebSocket a <code>ws://127.0.0.1:&lt;port&gt;/ws?token=&lt;testimoni&gt;</code>, només des del mateix ordinador. Port per
+      defecte: 47800.</li>
+    <li>Missatges JSON amb <code>"v": 1</code>.</li>
+    <li><strong>Ordres</strong> (interfície → motor) amb <code>id</code>, i resposta <code>ok</code> o <code>error</code> (amb un
+      codi: <code>bad_params</code>, <code>bad_state</code>, <code>player_error</code>…).</li>
+    <li><strong>Esdeveniments</strong> (motor → tots els clients) amb <code>ev</code>, sense resposta.</li>
+  </ul>
+  <pre><code>{ "v": 1, "id": 42, "cmd": "player.play", "player": "1" }
+{ "v": 1, "id": 42, "ok": true, "result": { … } }
+{ "v": 1, "ev": "meters", … }</code></pre>
+  <p>Les ordres s'agrupen per àmbit: <code>engine.*</code>, <code>devices.*</code>, <code>player.*</code>,
+    <code>playlist.*</code>, <code>recorder.*</code>, <code>recording.*</code>, <code>cue.*</code>, <code>settings.*</code>,
+    <code>editor.*</code>, <code>profile.*</code>, <code>explorer.*</code>, <code>processing.*</code>. La llista completa, amb
+    els paràmetres i les respostes, és a <code>docs/protocol.md</code>.</p>
+
   <h3 id="ordre-nova">Com afegir una ordre</h3>
-  <p class="pending">Pendent (pas 12c).</p>
+  <p>Exemple real: <code>recordings.clear</code> (netejar Recents).</p>
+  <ol>
+    <li><strong>Protocol:</strong> anota-la a <code>docs/protocol.md</code> (paràmetres, resposta, errors) en el mateix canvi
+      que el codi.</li>
+    <li><strong>Motor:</strong> a <code>Protocol/CommandRouter.cs</code>, una línia al <code>switch</code> de les ordres
+      (<code>"recordings.clear" =&gt; RecordingsClear(msg)</code>) i el mètode que llegeix i valida els paràmetres. Un valor
+      no vàlid llança <code>BadParamsException</code>, que es converteix en l'error <code>bad_params</code>. La lògica va a
+      la classe que toca (aquí, <code>RecordingList.Clear</code>), no al router.</li>
+    <li><strong>Prova:</strong> a <code>OnaBages.Tests</code>, crida <code>router.Handle("{ … }")</code> i comprova la resposta,
+      també amb paràmetres no vàlids.</li>
+    <li><strong>Interfície:</strong> <code>request('recordings.clear', { includeUnsaved })</code> des del panell. L'estat nou no
+      el llegeix de la resposta: arriba amb l'esdeveniment corresponent i el <code>store</code> el reparteix.</li>
+    <li>Si es desa alguna cosa nova, passa per <code>ConfigRepository</code>, amb camp opcional o migració.</li>
+  </ol>
 
   <h2 id="interficie">La interfície</h2>
-  <p class="pending">Pendent (pas 12c).</p>
+  <ul>
+    <li>HTML + Bootstrap 5 (tema fosc) + JavaScript pur amb mòduls ES. <strong>Sense React, sense TypeScript, sense
+      empaquetadors.</strong> JSDoc i <code>// @ts-check</code> per comprovar tipus.</li>
+    <li><strong>Seguretat:</strong> <code>contextIsolation: true</code>, <code>nodeIntegration: false</code> i una política de
+      contingut (CSP). La pàgina només accedeix al sistema pel que exposa <code>preload.js</code>
+      (<code>window.onabages</code>): diàlegs de fitxers, mostrar a l'Explorador, obrir l'editor, aquesta ajuda…</li>
+    <li><strong>Flux de dades:</strong> <code>engine-client.js</code> (connexió WebSocket) → <code>store.js</code> (còpia de
+      l'estat, omplerta amb <code>state.get</code> i els esdeveniments; avisa amb esdeveniments del DOM) → un mòdul per panell
+      a <code>js/ui/</code>, que escolta el <code>store</code> i envia ordres. Cap panell guarda estat propi de l'àudio.</li>
+    <li><strong>Editor:</strong> <code>editor.html</code> en una finestra pròpia, amb la seva connexió al motor
+      (<code>js/editor/</code>).</li>
+    <li><strong>Estils:</strong> colors i mides en variables CSS i en <code>rem</code>, perquè el zoom ho escali tot. Els estats
+      es mostren amb color + icona + text. Les accions que interrompen demanen confirmació.</li>
+    <li><strong>Procés principal</strong> (<code>main.js</code>): arrenca el motor, crea les finestres i en recorda la posició,
+      fa créixer la finestra amb el panell lateral, i atén les peticions de <code>preload.js</code>.</li>
+  </ul>
+
+  <h2 id="dependencies">Dependències i llicències</h2>
+  <table>
+    <tr><th>Dependència</th><th>Llicència</th><th>Per a què</th></tr>
+    <tr><td>Electron</td><td>MIT</td><td>Finestres, diàlegs, empaquetat de la interfície</td></tr>
+    <tr><td>Bootstrap 5 i Bootstrap Icons</td><td>MIT</td><td>Estil i icones de la interfície</td></tr>
+    <tr><td>.NET 10 i ASP.NET Core (Kestrel)</td><td>MIT</td><td>Motor i WebSocket</td></tr>
+    <tr><td>NAudio.Wasapi 3.3.0</td><td>MIT</td><td>WASAPI, lectura de formats, remostreig</td></tr>
+    <tr><td>LAME 3.100 (<code>libmp3lame.dll</code>)</td><td>LGPL</td><td>Codificació MP3 (DLL separada)</td></tr>
+    <tr><td>TagLibSharp 2.3.0</td><td>LGPL</td><td>Metadades i format de les pistes (DLL separada)</td></tr>
+    <tr><td>@electron/packager</td><td>BSD-2</td><td>Només per empaquetar; no es distribueix</td></tr>
+    <tr><td>xUnit</td><td>Apache 2.0</td><td>Només proves</td></tr>
+  </table>
+  <p>Les biblioteques LGPL s'enllacen dinàmicament (DLL a part) i se n'inclou el text de llicència. Cada dependència nova
+    s'ha de justificar i anotar a <code>docs/decisions.md</code>.</p>
 
   <h2 id="decisions">Decisions clau</h2>
-  <p class="pending">Pendent (pas 12c).</p>
+  <table>
+    <tr><th>Decisió</th><th>Per què</th></tr>
+    <tr><td>C# + NAudio en lloc de C++ (D-002)</td><td>Molt menys risc per a un sol desenvolupador; errors clars.</td></tr>
+    <tr><td>JavaScript pur + Bootstrap (D-003)</td><td>Tecnologia coneguda, sense passos de compilació.</td></tr>
+    <tr><td>Motor i interfície separats, per WebSocket (D-004)</td><td>La interfície pot caure sense aturar el so; el motor es
+      pot provar des del navegador.</td></tr>
+    <tr><td>JSON en lloc de SQLite (D-005)</td><td>Fàcil de copiar, exportar i depurar; capa de dades preparada per
+      migrar.</td></tr>
+    <tr><td>MP3 directe en un sol fitxer (D-006, D-021)</td><td>Estalvi de temps i d'espai; fitxer vàlid en tot moment gràcies
+      als fotogrames independents i el bolcat cada 2 s.</td></tr>
+    <tr><td>Mode compartit de WASAPI (D-007)</td><td>El més compatible amb targetes de consum.</td></tr>
+    <tr><td>Cap reassignació automàtica de dispositius (D-016)</td><td>Que el so no surti mai per on no toca.</td></tr>
+    <tr><td>Versió portable, sense instal·lador (D-044, D-047)</td><td>Es copia, s'actualitza i es fa la còpia de seguretat
+      amb una carpeta.</td></tr>
+    <tr><td><code>OnaBages.Audio</code> independent (D-046)</td><td>Reutilitzable per a altres projectes de l'emissora.</td></tr>
+    <tr><td>Edició i fosos sense recodificar (D-049, D-073)</td><td>Sense pèrdua de qualitat i desar immediat, com el
+      mp3DirectCut.</td></tr>
+  </table>
+  <p>Ajornat de moment: l'equalitzador (D-073) i els panells configurables (D-069). Pendent de provar amb el maquinari real:
+    la prova de 3 hores, la desconnexió d'un USB i un programa complet en paral·lel amb el Winamp (D-026, D-048, D-056).</p>
 </main>
 
 <script>

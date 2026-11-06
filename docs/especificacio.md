@@ -666,6 +666,8 @@ Fet: **limitador opcional als enregistradors** (D-083, D-084): botó LIM a cada 
 
 Fet: **historial d'enregistraments** (D-086, D-087): còpia de cada enregistrament original en una carpeta per perfil i per dia (D-088), escrita alhora que l'enregistrament; activat per defecte, 30 dies (configurable; 0 = no esborrar mai).
 
+Fet: **documentació integrada** (D-092–D-094): manual d'usuari i documentació tècnica en dos fitxers HTML autoportables (`docs/`), que s'obren al navegador amb el botó «?» de l'aplicació.
+
 Candidates: equalitzador per reproductor (ajornat de la fase 4, D-073), botonera de talls (cartwall), detector de silenci, punts cue d'inici i final, biblioteca musical amb cerca, inicis programats, control MIDI o per *fader start*, usuaris.
 
 # 15. Proves i criteris de qualitat

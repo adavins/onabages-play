@@ -29,6 +29,20 @@ public sealed class EngineConfig
     /// <summary>Nom del perfil, tal com es mostra (p. ex. «La Central»).</summary>
     public string ProfileName { get; set; } = ConfigRepository.DefaultProfileName;
 
+    /// <summary>
+    /// PIN del perfil (fase 5, pas 13a), o null si no en té. És una protecció contra canvis per error, no seguretat:
+    /// es desa en text pla a perfil.json i només el comprova la interfície (abans de triar el perfil, d'obrir
+    /// ⚙ Configuració...). El motor no el dona mai: només diu si n'hi ha (hasPin) i si un PIN és correcte.
+    /// </summary>
+    public string? ProfilePin { get; set; }
+
+    public const int MinPinLength = 4;
+    public const int MaxPinLength = 8;
+
+    /// <summary>Un PIN és de 4 a 8 xifres (0-9).</summary>
+    public static bool IsValidPin(string pin) =>
+        pin.Length is >= MinPinLength and <= MaxPinLength && pin.All(c => c is >= '0' and <= '9');
+
     // --- Del perfil: dispositius, enregistradors, distribució i programa. Del perfil, també les últimes llistes. ---
     // --- De l'ordinador (config.json): KnownDevices, UiZoom, EditorDevice i l'historial d'enregistraments. ---
 

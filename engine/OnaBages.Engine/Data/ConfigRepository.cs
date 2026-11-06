@@ -12,7 +12,7 @@ namespace OnaBages.Engine.Data;
 public sealed record ConfigLoadResult(EngineConfig Config, string? Problem);
 
 /// <summary>Un perfil: <paramref name="Id"/> és el nom de la seva carpeta; <paramref name="Name"/>, el que es mostra.</summary>
-public sealed record ProfileInfo(string Id, string Name);
+public sealed record ProfileInfo(string Id, string Name, bool HasPin = false);
 
 /// <summary>Una operació amb perfils no es pot fer. <paramref name="Code"/> és el codi d'error del protocol.</summary>
 public sealed class ProfileException(string code, string message) : Exception(message)
@@ -248,24 +248,54 @@ public sealed class ConfigRepository
                 string id = Path.GetFileName(folder);
                 if (!IsValidProfileId(id) || !File.Exists(ProfileFilePath(id)))
                     continue;
-                list.Add(new ProfileInfo(id, ReadProfileName(id)));
+                var (name, pin) = ReadProfileHeader(id);
+                list.Add(new ProfileInfo(id, name, pin is not null));
             }
             list.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.CurrentCultureIgnoreCase));
             return list;
         }
     }
 
-    /// <summary>Nom d'un perfil (el de la carpeta si el fitxer no es pot llegir).</summary>
-    private string ReadProfileName(string id)
+    /// <summary>Nom i PIN d'un perfil (el nom de la carpeta i sense PIN si el fitxer no es pot llegir).</summary>
+    private (string Name, string? Pin) ReadProfileHeader(string id)
     {
         try
         {
-            if (JsonNode.Parse(File.ReadAllText(ProfileFilePath(id)))?["name"] is JsonValue v
-                && v.TryGetValue(out string? name) && CleanProgramName(name) is { Length: > 0 } clean)
-                return clean;
+            if (JsonNode.Parse(File.ReadAllText(ProfileFilePath(id))) is JsonObject root)
+            {
+                string name = Text(root["name"]) is { } n && CleanProgramName(n) is { Length: > 0 } clean ? clean : id;
+                return (name, ReadPin(root));
+            }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException) { }
-        return id;
+        return (id, null);
+    }
+
+    /// <summary>El PIN d'un perfil que <b>no</b> és l'actiu (el de l'actiu el té ConfigStore), o null.</summary>
+    public string? ReadProfilePin(string id)
+    {
+        lock (_sync)
+            return ReadProfileHeader(id).Pin;
+    }
+
+    /// <summary>Posa o treu (null) el PIN d'un perfil que <b>no</b> és l'actiu. El PIN ja ha d'estar comprovat.</summary>
+    public void SetProfilePin(string id, string? pin)
+    {
+        lock (_sync)
+        {
+            try
+            {
+                var root = JsonNode.Parse(File.ReadAllText(ProfileFilePath(id))) as JsonObject
+                    ?? throw new FormatException("no és un objecte JSON");
+                if (pin is null) root.Remove("pin");
+                else root["pin"] = pin;
+                AtomicFile.WriteAllText(ProfileFilePath(id), ToText(root));
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or FormatException)
+            {
+                throw new ProfileException("file_error", $"No s'ha pogut desar el PIN del perfil: {ex.Message}");
+            }
+        }
     }
 
     /// <summary>
@@ -374,7 +404,12 @@ public sealed class ConfigRepository
                 if (File.Exists(temp)) File.Delete(temp);
                 using (var zip = ZipFile.Open(temp, ZipArchiveMode.Create))
                 {
-                    zip.CreateEntryFromFile(ProfileFilePath(id), ProfileFileName);
+                    // Sense el PIN (pas 13a): és en text pla i el .zip pot anar a una altra emissora.
+                    var profile = JsonNode.Parse(File.ReadAllText(ProfileFilePath(id))) as JsonObject
+                        ?? throw new IOException("perfil.json no és un objecte JSON");
+                    profile.Remove("pin");
+                    using (var writer = new StreamWriter(zip.CreateEntry(ProfileFileName).Open()))
+                        writer.Write(ToText(profile));
                     string lists = LastListsFolder(id);
                     if (Directory.Exists(lists))
                     {
@@ -384,7 +419,7 @@ public sealed class ConfigRepository
                 }
                 File.Move(temp, zipPath, overwrite: true);
             }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException or JsonException)
             {
                 try { File.Delete(temp); } catch (Exception) { /* només queda un temporal */ }
                 throw new ProfileException("file_error", $"No s'ha pogut exportar el perfil: {ex.Message}");
@@ -430,6 +465,7 @@ public sealed class ConfigRepository
                 {
                     var root = ReadImportedProfile(zip);
                     root["name"] = name;
+                    root.Remove("pin"); // un perfil importat arriba sense PIN (l'exportació ja no en posa)
                     Directory.CreateDirectory(Path.Combine(temp, "llistes"));
                     AtomicFile.WriteAllText(Path.Combine(temp, ProfileFileName), ToText(root));
 
@@ -618,6 +654,9 @@ public sealed class ConfigRepository
     {
         if (Text(root["name"]) is { } name && CleanProgramName(name) is { Length: > 0 } cleanName)
             config.ProfileName = cleanName;
+
+        // PIN (fase 5, pas 13a; camp opcional, sense canvi de versió). Un PIN que no és vàlid no compta.
+        config.ProfilePin = ReadPin(root);
 
         ReadAssignments(root["players"], config.Players);
         ReadAssignments(root["recorders"], config.Recorders);
@@ -823,8 +862,20 @@ public sealed class ConfigRepository
         },
     };
 
-    /// <summary>perfil.json: la configuració de treball del programa.</summary>
-    private static JsonObject ProfileJson(EngineConfig config) => new()
+    /// <summary>El PIN de perfil.json, si n'hi ha un de vàlid.</summary>
+    private static string? ReadPin(JsonObject root) =>
+        Text(root["pin"]) is { } pin && EngineConfig.IsValidPin(pin) ? pin : null;
+
+    /// <summary>perfil.json: la configuració de treball del programa. El PIN, només si n'hi ha.</summary>
+    private static JsonObject ProfileJson(EngineConfig config)
+    {
+        var root = ProfileJsonWithoutPin(config);
+        if (config.ProfilePin is { } pin)
+            root["pin"] = pin;
+        return root;
+    }
+
+    private static JsonObject ProfileJsonWithoutPin(EngineConfig config) => new()
     {
         ["schemaVersion"] = ProfileSchemaVersion,
         ["name"] = config.ProfileName,

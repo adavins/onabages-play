@@ -186,6 +186,39 @@ public sealed class ConfigStore
         }
     }
 
+    // -----------------------------------------------------------------------
+    // PIN de cada perfil (fase 5, pas 13a). Protecció contra canvis per error: la comprova la interfície.
+    // -----------------------------------------------------------------------
+
+    /// <summary>Si <paramref name="pin"/> és el PIN del perfil. Un perfil sense PIN accepta qualsevol PIN.</summary>
+    public bool CheckPin(string id, string pin)
+    {
+        lock (_sync)
+        {
+            string realId = RequireProfile(id);
+            string? stored = IsActive(realId) ? _config.ProfilePin : _repository.ReadProfilePin(realId);
+            return stored is null || stored == pin;
+        }
+    }
+
+    /// <summary>Posa el PIN d'un perfil (4 a 8 xifres) o el treu (null).</summary>
+    /// <exception cref="ProfileException">bad_params si el PIN no és vàlid o el perfil no existeix.</exception>
+    public void SetPin(string id, string? pin)
+    {
+        if (pin is not null && !EngineConfig.IsValidPin(pin))
+            throw new ProfileException("bad_params",
+                $"El PIN ha de tenir de {EngineConfig.MinPinLength} a {EngineConfig.MaxPinLength} xifres.");
+        lock (_sync)
+        {
+            EnsureActiveSaved();
+            string realId = RequireProfile(id);
+            if (IsActive(realId))
+                Update(c => c.ProfilePin = pin);
+            else
+                _repository.SetProfilePin(realId, pin);
+        }
+    }
+
     private bool IsActive(string id) => string.Equals(id, _config.ProfileId, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>

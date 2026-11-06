@@ -10,12 +10,45 @@ namespace OnaBages.Engine.Protocol;
 /// </summary>
 public sealed partial class CommandRouter
 {
-    /// <summary>{ profiles: [{ id, name, active }] }, ordenats pel nom.</summary>
+    /// <summary>{ profiles: [{ id, name, active, hasPin }] }, ordenats pel nom.</summary>
     private JsonObject ProfileList() => new() { ["profiles"] = ProfilesJson(RequireConfig()) };
 
     private static JsonArray ProfilesJson(ConfigStore config) => new(config.ListProfiles()
-        .Select(p => (JsonNode)new JsonObject { ["id"] = p.Profile.Id, ["name"] = p.Profile.Name, ["active"] = p.Active })
+        .Select(p => (JsonNode)new JsonObject
+        {
+            ["id"] = p.Profile.Id, ["name"] = p.Profile.Name, ["active"] = p.Active, ["hasPin"] = p.Profile.HasPin,
+        })
         .ToArray());
+
+    /// <summary>
+    /// profile, pin → { valid }. Un perfil sense PIN sempre és vàlid. El motor no dona mai el PIN:
+    /// només diu si és correcte (fase 5, pas 13a).
+    /// </summary>
+    private JsonObject ProfileCheckPin(JsonObject msg)
+    {
+        var config = RequireConfig();
+        string id = RequireString(msg, "profile");
+        string pin = msg["pin"] is JsonValue v && v.TryGetValue(out string? text) ? text
+            : throw new BadParamsException("Falta el camp 'pin' (un text).");
+        return new JsonObject { ["valid"] = config.CheckPin(id, pin) };
+    }
+
+    /// <summary>profile, pin (4 a 8 xifres; null o "" el treu) → { profiles }.</summary>
+    private JsonObject ProfileSetPin(JsonObject msg)
+    {
+        var config = RequireConfig();
+        string id = RequireString(msg, "profile");
+        if (!msg.ContainsKey("pin"))
+            throw new BadParamsException("Falta el camp 'pin' (null per treure'l).");
+        string? pin = msg["pin"] switch
+        {
+            null => null,
+            JsonValue v when v.TryGetValue(out string? text) => text.Length == 0 ? null : text,
+            _ => throw new BadParamsException("'pin' ha de ser un text o null."),
+        };
+        config.SetPin(id, pin);
+        return new JsonObject { ["profiles"] = ProfilesJson(config) };
+    }
 
     /// <summary>name; opcional copyFrom (id d'un perfil): si hi és, el nou és una còpia d'aquell.</summary>
     private JsonObject ProfileCreate(JsonObject msg)

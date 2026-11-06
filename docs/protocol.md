@@ -385,23 +385,26 @@ Mentre `busy` no és `null`, `delete`, `keep`, `undo`, `redo` i `save` donen `ba
 - `error`: motiu de l'última feina que ha fallat (obrir o desar). Es neteja amb l'ordre següent.
 - Es desen els fotogrames **tal qual** (sense recodificar). Les etiquetes ID3v2 i ID3v1 es conserven; el fotograma Xing/Info de LAME es treu (diria una durada falsa).
 
-### 4.11. Perfils (fase 4, D-057, D-058 i D-061)
+### 4.11. Perfils (fase 4, D-057, D-058 i D-061; PIN: fase 5, D-095)
 
 Un perfil és la configuració de treball d'un programa (vegeu 4.9). El paràmetre que diu quin perfil és es diu `profile` (no `id`, que ja és l'identificador del missatge) i porta l'`id` del perfil: el nom de la seva carpeta.
 
 | Ordre | Paràmetres | Resposta |
 |---|---|---|
-| `profile.list` | — | `{ profiles: [{ id, name, active }] }`, ordenats pel nom |
+| `profile.list` | — | `{ profiles: [{ id, name, active, hasPin }] }`, ordenats pel nom. `hasPin`: si el perfil té PIN (mai el PIN) |
 | `profile.create` | `name`; opcional `copyFrom` (l'`id` d'un perfil) | `{ profile: { id, name }, profiles }`. Sense `copyFrom`, un perfil buit (2 reproductors, 2 enregistradors, sense dispositius) amb el programa del mateix nom; amb `copyFrom`, una còpia d'aquell, amb les seves últimes llistes. No canvia el perfil actiu |
 | `profile.rename` | `profile`, `name` | `{ profiles, settings }`. La carpeta no canvia |
 | `profile.delete` | `profile` | `{ profiles }`. Esborra la carpeta del perfil (configuració i últimes llistes; mai fitxers d'àudio). L'actiu no es pot eliminar: `bad_state` |
 | `profile.export` | `profile`, `path` (ruta completa del `.zip`; si ja hi és, se substitueix) | `{ profile: { id, name }, path }`. El `.zip` porta `perfil.json` i `llistes/*.obpl` (mai fitxers d'àudio) |
 | `profile.import` | `path` (ruta completa del `.zip`); opcional `name` | `{ profile: { id, name }, profiles }`. Un perfil nou amb el contingut del `.zip`; no canvia l'actiu. Sense `name`, es diu com el perfil del `.zip`; si ja n'hi ha un que es diu així, `profile_exists` (es pot tornar a enviar amb un altre `name`). Si el fitxer no és un perfil, és d'una versió desconeguda o passa dels límits (200 entrades, 10 MB per fitxer, 50 MB en total): `file_error`. Del `.zip` només s'agafen `perfil.json` i `llistes/<nom>.obpl`; les entrades amb camins (`..`, subcarpetes) s'ignoren |
+| `profile.checkPin` | `profile`, `pin` (text) | `{ valid }`: si és el PIN del perfil. Un perfil sense PIN sempre dona `true` |
+| `profile.setPin` | `profile`, `pin`: de 4 a 8 xifres, o `null` / `""` per treure'l | `{ profiles }`. Un PIN que no és vàlid: `bad_params` i no canvia res |
 | `profile.switch` | `profile` | `{ switching: true, profile: { id, name } }`, i **el motor s'atura** poc després (com `engine.shutdown`). La interfície l'ha de tornar a arrencar: el motor nou llegeix el perfil triat (el nombre de reproductors i d'enregistradors només es pot canviar en arrencar). Des d'aquest moment el motor ja no desa res més de la configuració |
 
 - Noms: de 1 a 60 caràcters (es treuen els espais repetits); no n'hi pot haver dos d'iguals (sense distingir majúscules). Si no, `bad_params`. Un perfil que no existeix, també `bad_params`.
 - `profile.switch` dona `bad_state`, i no canvia res, si: algun enregistrador enregistra, algun reproductor o la preescolta sonen, o l'editor està obrint o desant o té canvis sense desar. El missatge diu què cal aturar. Canviar al perfil que ja és l'actiu: `bad_params`.
 - Un enregistrament pendent (sense desar ni descartar) no impedeix el canvi: el fitxer ja és al disc i surt a Recents.
+- **PIN** (D-095): protecció contra canvis per error, no seguretat. Es desa en text pla a `perfil.json` (`pin`) i el motor **no el comprova en cap altra ordre**: és la interfície qui el demana (triar un perfil, ⚙ Configuració, canviar el nom, eliminar i importar). El motor no el dona mai. Un perfil nou no en té; un duplicat (`copyFrom`) conserva el de l'origen; `profile.export` el treu del `.zip` i `profile.import` també el treu.
 - Errors de disc en crear, canviar el nom o eliminar: `file_error`.
 
 ### 4.12. Explorador del panell lateral (fase 4, D-063)

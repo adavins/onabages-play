@@ -24,6 +24,9 @@
       <button id="ed-open" class="btn btn-sm btn-outline-secondary" type="button" title="Obrir un MP3 (Ctrl+O)"><i class="bi bi-folder2-open"></i> Obrir…</button>
       <button id="ed-save" class="btn btn-sm btn-outline-secondary" type="button" title="Desar a sobre de l'original (Ctrl+S)"><i class="bi bi-floppy"></i> Desar</button>
       <button id="ed-save-as" class="btn btn-sm btn-primary" type="button" title="Desar com a fitxer nou (Ctrl+Maj+S)"><i class="bi bi-floppy2"></i> Desar com…</button>
+      <!-- Només si el fitxer és un enregistrament que encara no s'ha desat (fase 5, pas 14b; D-102). -->
+      <button id="ed-save-rec" class="btn btn-sm btn-primary d-none" type="button"
+              title="Desar la versió editada amb el nom i la carpeta que triïs: l'enregistrament queda desat (no cal tornar-lo a desar a l'enregistrador)"><i class="bi bi-record-circle"></i> Desar l'enregistrament…</button>
     </div>
     <span id="ed-engine" class="status status-connecting" role="status"><i class="bi bi-hourglass-split"></i> <span class="label">Connectant…</span></span>
   </header>

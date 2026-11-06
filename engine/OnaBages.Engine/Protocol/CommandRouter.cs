@@ -118,6 +118,7 @@ public sealed partial class CommandRouter
                 "recorder.setGain" => RecorderSetGain(msg),
                 "recorder.setLimiter" => RecorderSetLimiter(msg),
                 "recording.save" => RecordingSave(msg),
+                "recording.saveEdited" => RecordingSaveEdited(msg),
                 "recording.discard" => RecordingDiscard(msg),
                 "recording.remove" => RecordingRemove(msg),
                 "recordings.clear" => RecordingsClear(msg),
@@ -1059,6 +1060,31 @@ public sealed partial class CommandRouter
         string target = _recordings.Save(item.Id, path);
         ReleasePending(item.Path);
         return new JsonObject { ["path"] = target, ["recording"] = RecordingJson.Item(_recordings.Find(item.Id) ?? item) };
+    }
+
+    /// <summary>
+    /// "recordingId" i "path": el fitxer que l'editor acaba de desar amb la versió editada (fase 5, pas 14b; D-102).
+    /// L'enregistrament passa a ser aquest fitxer i queda desat; si era el pendent d'un enregistrador, aquest torna a
+    /// Inactiu. L'original va a la paperera si n'hi ha còpia a l'historial; si no, es queda on és.
+    /// </summary>
+    private JsonObject RecordingSaveEdited(JsonObject msg)
+    {
+        var item = GetRecording(msg);
+        string path = RequireString(msg, "path");
+        if (!Path.IsPathFullyQualified(path))
+            throw new BadParamsException("'path' ha de ser una ruta completa.");
+
+        // Durada de la versió editada, llegida del fitxer (només les capçaleres dels fotogrames: és ràpid).
+        // Si no es pot llegir, es manté la de l'original (només es veu a Recents).
+        TimeSpan? duration = File.Exists(path) ? RecordingList.DurationOf(path) : null;
+
+        var (updated, recycled, kept) = _recordings.SaveEdited(item.Id, path, duration);
+        ReleasePending(item.Path);
+        return new JsonObject
+        {
+            ["recording"] = RecordingJson.Item(updated),
+            ["original"] = new JsonObject { ["path"] = item.Path, ["recycled"] = recycled, ["kept"] = kept },
+        };
     }
 
     /// <summary>"recordingId": envia el fitxer a la paperera i el treu de la llista.</summary>

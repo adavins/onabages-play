@@ -20,8 +20,10 @@ public sealed class RecorderCommandException(string message) : Exception(message
 
 /// <summary>Un enregistrament acabat (vegeu <see cref="Recorder.Finished"/>).</summary>
 /// <param name="ClosedCleanly">El fitxer s'ha tancat bé. Si és false, queda el marcador .rec per recuperar-lo.</param>
+/// <param name="ArchivePath">Còpia d'historial (D-086), només si s'ha fet sencera; null si no n'hi ha o ha fallat (pas 14b).</param>
 public sealed record FinishedRecording(
-    string RecorderId, string Path, DateTimeOffset StartedAt, TimeSpan Duration, long FileSize, bool ClosedCleanly);
+    string RecorderId, string Path, DateTimeOffset StartedAt, TimeSpan Duration, long FileSize, bool ClosedCleanly,
+    string? ArchivePath = null);
 
 /// <summary>
 /// Un enregistrador: una entrada → un fitxer MP3 escrit directament (LAME, 320 kbps CBR, estèreo).
@@ -890,7 +892,8 @@ public sealed class Recorder : IDisposable
 
     /// <summary>Dades de l'enregistrament que s'acaba de tancar (dins de _sync).</summary>
     private FinishedRecording? Snapshot(bool ok) => FilePath is null ? null : new FinishedRecording(
-        Id, FilePath, StartedAt ?? DateTimeOffset.Now, Elapsed, FileSize, ClosedCleanly: ok);
+        Id, FilePath, StartedAt ?? DateTimeOffset.Now, Elapsed, FileSize, ClosedCleanly: ok,
+        ArchivePath: ArchiveError is null ? ArchivePath : null);
 
     private void RaiseFinished(FinishedRecording? finished)
     {

@@ -275,6 +275,89 @@ public class RecordingsTests : IDisposable
         foreach (var rec in state.Recorders) rec.Dispose();
     }
 
+    // --- Desar la versió editada (fase 5, pas 14b; D-102) ---
+
+    /// <summary>Simula l'editor: una còpia del fitxer a una altra carpeta, com si fos la versió editada.</summary>
+    private string EditedCopy(string original, string name)
+    {
+        string folder = Path.Combine(_folder, "Desats");
+        Directory.CreateDirectory(folder);
+        string edited = Path.Combine(folder, name);
+        File.Copy(original, edited);
+        return edited;
+    }
+
+    [Fact]
+    public void Desar_la_versio_editada_amb_historial_envia_l_original_a_la_paperera()
+    {
+        var (router, state, list) = NewRouter();
+        var one = state.FindRecorder("1")!;
+        string archive = Path.Combine(_folder, "historial");
+        one.SetArchive(archive);
+        string original = RecordOneSecond(one);
+        var item = list.Items.Single();
+        Assert.NotNull(item.ArchivePath); // la còpia d'historial es recorda
+        string edited = EditedCopy(original, "Programa editat.mp3");
+
+        var r = router.Handle($$"""{ "v": 1, "id": 1, "cmd": "recording.saveEdited", "recordingId": "{{item.Id}}", "path": "{{Escape(edited)}}" }""");
+
+        Assert.True(r["ok"]!.GetValue<bool>(), r.ToJsonString());
+        Assert.True(r["result"]!["original"]!["recycled"]!.GetValue<bool>());
+        Assert.Null(r["result"]!["original"]!["kept"]);
+        Assert.Equal(RecorderState.Idle, one.State); // ja no és pendent
+        var saved = list.Find(item.Id)!;
+        Assert.Equal(edited, saved.Path);
+        Assert.True(saved.Saved);
+        Assert.Equal(Mp3FrameIndex.Build(edited).Duration, saved.Duration); // llegida del fitxer desat
+        Assert.Equal([original], _recycled);
+        Assert.True(File.Exists(item.ArchivePath)); // la còpia de l'historial no es toca
+        foreach (var rec in state.Recorders) rec.Dispose();
+    }
+
+    [Fact]
+    public void Desar_la_versio_editada_sense_historial_deixa_l_original_on_es()
+    {
+        var (router, state, list) = NewRouter();
+        var two = state.FindRecorder("2")!;
+        string original = RecordOneSecond(two);
+        var item = list.Items.Single();
+        Assert.Null(item.ArchivePath);
+        string edited = EditedCopy(original, "Línia editada.mp3");
+
+        var r = router.Handle($$"""{ "v": 1, "id": 1, "cmd": "recording.saveEdited", "recordingId": "{{item.Id}}", "path": "{{Escape(edited)}}" }""");
+
+        Assert.True(r["ok"]!.GetValue<bool>(), r.ToJsonString());
+        Assert.False(r["result"]!["original"]!["recycled"]!.GetValue<bool>());
+        Assert.Contains("historial", r["result"]!["original"]!["kept"]!.GetValue<string>());
+        Assert.True(File.Exists(original)); // és l'únic original: es queda
+        Assert.Empty(_recycled);
+        Assert.Equal(RecorderState.Idle, two.State);
+        Assert.True(list.Find(item.Id)!.Saved);
+        foreach (var rec in state.Recorders) rec.Dispose();
+    }
+
+    [Fact]
+    public void Desar_la_versio_editada_amb_errors_no_canvia_res()
+    {
+        var (router, state, list) = NewRouter();
+        var one = state.FindRecorder("1")!;
+        string original = RecordOneSecond(one);
+        var item = list.Items.Single();
+
+        string Code(string json) => router.Handle(json)["error"]!["code"]!.GetValue<string>();
+        // El mateix fitxer, un que no hi és i una ruta que no és completa.
+        Code($$"""{ "v": 1, "id": 1, "cmd": "recording.saveEdited", "recordingId": "{{item.Id}}", "path": "{{Escape(original)}}" }""");
+        Code($$"""{ "v": 1, "id": 2, "cmd": "recording.saveEdited", "recordingId": "{{item.Id}}", "path": "{{Escape(Path.Combine(_folder, "no-hi-es.mp3"))}}" }""");
+        Assert.Equal("bad_params", Code($$"""{ "v": 1, "id": 3, "cmd": "recording.saveEdited", "recordingId": "{{item.Id}}", "path": "editat.mp3" }"""));
+        Assert.Equal("bad_params", Code("""{ "v": 1, "id": 4, "cmd": "recording.saveEdited", "recordingId": "e99", "path": "C:\\x.mp3" }"""));
+
+        Assert.Equal(RecorderState.Pending, one.State);
+        Assert.False(list.Find(item.Id)!.Saved);
+        Assert.Equal(original, list.Find(item.Id)!.Path);
+        Assert.Empty(_recycled);
+        foreach (var rec in state.Recorders) rec.Dispose();
+    }
+
     // --- Persistència ---
 
     [Fact]
@@ -283,7 +366,8 @@ public class RecordingsTests : IDisposable
         string file = Path.Combine(_folder, "recents.json");
         var list = new RecordingList(synchronous: true);
         list.Add(new FinishedRecording("1", @"C:\a\Programa.mp3", DateTimeOffset.Parse("2026-11-04T10:00:00+01:00"), TimeSpan.FromMinutes(62), 1234, true));
-        list.Add(new FinishedRecording("2", @"C:\a\Línia.mp3", DateTimeOffset.Parse("2026-11-04T11:00:00+01:00"), TimeSpan.FromSeconds(5), 99, false));
+        list.Add(new FinishedRecording("2", @"C:\a\Línia.mp3", DateTimeOffset.Parse("2026-11-04T11:00:00+01:00"), TimeSpan.FromSeconds(5), 99, false,
+            ArchivePath: @"C:\h\2026-11-04\Línia.mp3"));
 
         RecentRecordingsFile.Write(list.Items, file);
         var loaded = new RecordingList(synchronous: true);
@@ -292,6 +376,8 @@ public class RecordingsTests : IDisposable
         Assert.Equal([@"C:\a\Línia.mp3", @"C:\a\Programa.mp3"], loaded.Items.Select(i => i.Path));
         Assert.False(loaded.Items[0].ClosedCleanly);
         Assert.Equal(TimeSpan.FromMinutes(62), loaded.Items[1].Duration);
+        Assert.Equal(@"C:\h\2026-11-04\Línia.mp3", loaded.Items[0].ArchivePath); // pas 14b
+        Assert.Null(loaded.Items[1].ArchivePath);
         Assert.Empty(RecentRecordingsFile.Read(Path.Combine(_folder, "no-hi-es.json")));
     }
 

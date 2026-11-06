@@ -19,6 +19,7 @@ const els = {
   open: $('ed-open'),
   save: /** @type {HTMLButtonElement} */ ($('ed-save')),
   saveAs: /** @type {HTMLButtonElement} */ ($('ed-save-as')),
+  saveRec: /** @type {HTMLButtonElement} */ ($('ed-save-rec')),
   empty: $('ed-empty'),
   busy: $('ed-busy'),
   busyText: $('ed-busy-text'),
@@ -64,6 +65,14 @@ let outputs = [];
 let cueDeviceName = '';
 /** Fitxer que s'ha demanat obrir abans d'estar connectats al motor. @type {string | null} */
 let pendingFile = null;
+/** Enregistraments acabats (protocol 4.6): per saber si el fitxer obert és un enregistrament per desar (pas 14b). @type {any[]} */
+let recordings = [];
+/**
+ * Desat d'un enregistrament en curs (pas 14b): quan l'editor acabi de desar, l'enregistrament queda desat.
+ * `inPlace`: s'ha substituït l'original (el fitxer no canvia de lloc).
+ * @type {{ recordingId: string, path: string, inPlace: boolean } | null}
+ */
+let savingRecording = null;
 
 const wave = new Waveform(
   /** @type {HTMLCanvasElement} */ ($('ed-wave')),
@@ -98,6 +107,10 @@ async function init() {
     client.addEventListener('ev:editor.changed', (e) => apply(/** @type {any} */ (e).detail.editor));
     client.addEventListener('ev:editor.position', (e) => showPlayhead(/** @type {any} */ (e).detail.position));
     client.addEventListener('ev:devices.changed', () => loadDevices());
+    client.addEventListener('ev:recordings.changed', (e) => {
+      recordings = /** @type {any} */ (e).detail.recordings ?? [];
+      renderControls();
+    });
     client.addEventListener('ev:cue.state', (e) => { cueDeviceName = deviceName(/** @type {any} */ (e).detail.cue.deviceId); renderDevice(); });
     client.connect();
   } catch (err) {
@@ -214,7 +227,18 @@ function apply(/** @type {any} */ state) {
   if (state.error && state.error !== previous?.error) showMessage(state.error, true);
   if (state.peaksError && state.peaksError !== previous?.peaksError) showMessage(state.peaksError, true);
   if (state.playback.error && state.playback.error !== previous?.playback?.error) showMessage(state.playback.error, true);
-  if (state.savedPath && state.savedPath !== previous?.savedPath) showMessage(`Desat: ${state.savedPath}`);
+  if (state.savedPath && state.savedPath !== previous?.savedPath) {
+    // Desat d'un enregistrament (pas 14b): és aquest desat (savingRecording només hi és mentre se n'espera un).
+    // No es comparen les rutes: el motor la torna completa (p. ex. «albertdavins» en lloc de «ALBERT~1»).
+    // Si s'ha desat a un altre lloc, l'enregistrament passa a ser el fitxer que diu el motor.
+    if (savingRecording) {
+      finishRecordingSave(savingRecording.inPlace ? savingRecording : { ...savingRecording, path: state.savedPath });
+    } else {
+      showMessage(`Desat: ${state.savedPath}`);
+    }
+  }
+  // Si el desat ha fallat, l'enregistrament no es toca.
+  if (savingRecording && !state.busy && state.error) savingRecording = null;
 
   render();
 }
@@ -280,6 +304,13 @@ function renderControls() {
   els.open.toggleAttribute('disabled', !connected || !!editor?.busy);
   els.save.disabled = !ready || !editor.modified;
   els.saveAs.disabled = !ready;
+  // «Desar l'enregistrament…» (pas 14b): només si el fitxer obert és un enregistrament que no s'ha desat.
+  // Llavors és el botó principal, i «Desar com…» passa a ser secundari.
+  const rec = currentRecording();
+  els.saveRec.classList.toggle('d-none', !rec);
+  els.saveRec.disabled = !ready || !!savingRecording;
+  els.saveAs.classList.toggle('btn-primary', !rec);
+  els.saveAs.classList.toggle('btn-outline-secondary', !!rec);
   els.home.disabled = !ready;
   els.play.disabled = !ready;
   els.playSel.disabled = !hasSel;
@@ -330,8 +361,9 @@ async function loadDevices() {
   try {
     const { devices } = await request('devices.list', { kind: 'output' });
     outputs = devices; // només les sortides actives
-    const { cue } = await request('state.get');
+    const { cue, recordings: finished } = await request('state.get');
     cueDeviceName = deviceName(cue.deviceId);
+    recordings = finished ?? [];
   } catch {
     outputs = [];
   }
@@ -400,7 +432,21 @@ async function saveOver() {
     ],
   });
   if (choice === 'as') return saveAs();
-  if (choice === 'over') await send('editor.save', { overwrite: true });
+  if (choice === 'over') await saveInPlace();
+}
+
+/**
+ * Substitueix l'original per la versió editada. Si és un enregistrament no desat, després queda desat on és
+ * (l'enregistrador deixa de tenir-lo pendent).
+ */
+async function saveInPlace() {
+  const item = currentRecording();
+  if (item) {
+    savingRecording = { recordingId: item.id, path: item.path, inPlace: true };
+    renderControls();
+  }
+  if (!(await send('editor.save', { overwrite: true }))) savingRecording = null;
+  renderControls();
 }
 
 /** Desar com a fitxer nou (si ja existeix, el diàleg de Windows ja ha demanat si es substitueix). */
@@ -409,6 +455,64 @@ async function saveAs() {
   const path = await bridge.saveMp3File(editor.path);
   if (!path) return;
   await send('editor.save', { path, overwrite: true });
+}
+
+/** L'enregistrament no desat que té obert l'editor, si n'és un (pas 14b). */
+function currentRecording() {
+  if (!editor?.open) return null;
+  return recordings.find((i) => samePath(i.path, editor.path) && !i.saved && !i.busy) ?? null;
+}
+
+/**
+ * «Desar l'enregistrament…» (fase 5, pas 14b; D-102): desa la versió editada on triï l'operador (el mateix diàleg
+ * que l'enregistrador: el nom actual i l'última carpeta) i l'enregistrament passa a ser aquest fitxer, ja desat.
+ * Així no cal tornar-lo a desar a l'enregistrador. L'original sense editar va a la paperera si n'hi ha còpia a
+ * l'historial d'enregistraments (ho decideix el motor); si no, es queda on és.
+ */
+async function saveRecordingEdited() {
+  const item = currentRecording();
+  if (!item || savingRecording) return;
+  const chosen = await bridge.saveRecordingFile(item.path);
+  if (!chosen) return;
+  const path = /\.mp3$/i.test(chosen) ? chosen : `${chosen}.mp3`;
+  if (samePath(path, item.path)) {
+    // El mateix nom i la mateixa carpeta: es substitueix l'original (sense canvis, només queda desat).
+    if (editor.modified) await saveInPlace();
+    else await finishRecordingSave({ recordingId: item.id, path: item.path, inPlace: true });
+    return;
+  }
+  savingRecording = { recordingId: item.id, path, inPlace: false };
+  renderControls();
+  // Quan l'editor acabi de desar (editor.changed amb savedPath), apply() crida finishRecordingSave.
+  if (!(await send('editor.save', { path, overwrite: true }))) savingRecording = null;
+  renderControls();
+}
+
+/** L'editor ha desat la versió editada: l'enregistrament passa a ser aquest fitxer, desat. */
+async function finishRecordingSave(/** @type {{ recordingId: string, path: string, inPlace: boolean }} */ saving) {
+  savingRecording = null;
+  try {
+    if (saving.inPlace) {
+      // Substituït on era: només queda desat (no es mou res ni va res a la paperera).
+      await request('recording.save', { recordingId: saving.recordingId, path: saving.path });
+      showMessage(`Enregistrament desat: ${saving.path}.`);
+      renderControls();
+      return;
+    }
+    const { original } = await request('recording.saveEdited', { recordingId: saving.recordingId, path: saving.path });
+    const what = original.recycled
+      ? 'L\'original sense editar és a la paperera (n\'hi ha una còpia a l\'historial d\'enregistraments).'
+      : (original.kept ?? '');
+    showMessage(`Enregistrament desat: ${saving.path}. ${what}`);
+  } catch (err) {
+    showMessage(`La versió editada s'ha desat a ${saving.path}, però l'enregistrament no s'ha pogut marcar com a desat: ${/** @type {Error} */ (err).message}`, true);
+  }
+  renderControls();
+}
+
+/** Mateix fitxer (Windows no distingeix majúscules). */
+function samePath(/** @type {string | null | undefined} */ a, /** @type {string | null | undefined} */ b) {
+  return !!a && !!b && a.toLowerCase() === b.toLowerCase();
 }
 
 async function togglePlay() {
@@ -495,6 +599,7 @@ function setupButtons() {
   els.open.addEventListener('click', chooseAndOpen);
   els.save.addEventListener('click', saveOver);
   els.saveAs.addEventListener('click', saveAs);
+  els.saveRec.addEventListener('click', saveRecordingEdited);
   els.home.addEventListener('click', () => moveCursor(0));
   els.play.addEventListener('click', togglePlay);
   els.playSel.addEventListener('click', playSelection);

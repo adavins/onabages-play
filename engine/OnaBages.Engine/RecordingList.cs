@@ -13,9 +13,10 @@ public sealed class RecordingCommandException(string message) : Exception(messag
 /// <param name="ClosedCleanly">El fitxer es va tancar bé. Si no, es va tallar (entrada perduda, disc ple) o s'ha hagut de recuperar.</param>
 /// <param name="Problem">L'últim error en desar-lo, si n'hi ha hagut.</param>
 /// <param name="Recovered">Es va recuperar en arrencar el motor: l'enregistrament s'havia interromput (especificació 8.5).</param>
+/// <param name="ArchivePath">Còpia de l'original a l'historial d'enregistraments (pas 14b), si es va fer sencera.</param>
 public sealed record RecordingItem(
     string Id, string Path, string RecorderId, DateTimeOffset StartedAt, TimeSpan Duration, long FileSize,
-    bool Saved, bool Busy, bool ClosedCleanly, string? Problem, bool Recovered = false);
+    bool Saved, bool Busy, bool ClosedCleanly, string? Problem, bool Recovered = false, string? ArchivePath = null);
 
 /// <summary>
 /// Enregistraments acabats: el pendent de cada enregistrador i els recents (D-036).
@@ -66,7 +67,7 @@ public sealed class RecordingList
         lock (_sync)
         {
             item = new RecordingItem(NewId(), finished.Path, finished.RecorderId, finished.StartedAt, finished.Duration,
-                finished.FileSize, Saved: false, Busy: false, finished.ClosedCleanly, Problem: null);
+                finished.FileSize, Saved: false, Busy: false, finished.ClosedCleanly, Problem: null, ArchivePath: finished.ArchivePath);
             _items.Insert(0, item);
             Trim();
         }
@@ -143,8 +144,9 @@ public sealed class RecordingList
             source = item.Path;
             if (string.Equals(System.IO.Path.GetFullPath(source), System.IO.Path.GetFullPath(targetPath), StringComparison.OrdinalIgnoreCase))
             {
-                // Desar-lo on ja és: no cal moure res.
-                Replace(item with { Saved = true, Problem = null });
+                // Desar-lo on ja és: no cal moure res. Potser l'editor l'ha substituït per la versió editada (pas 14b):
+                // la durada i la mida, les del fitxer d'ara.
+                Replace(item with { Saved = true, Problem = null, FileSize = new FileInfo(source).Length, Duration = DurationOf(source) ?? item.Duration });
                 target = source;
             }
             else
@@ -161,6 +163,62 @@ public sealed class RecordingList
             else _ = Task.Run(() => Move(id, source, target));
         }
         return target;
+    }
+
+    /// <summary>
+    /// L'enregistrament s'ha editat i l'editor n'ha desat la versió editada a <paramref name="editedPath"/> (fase 5,
+    /// pas 14b; D-102): l'enregistrament passa a ser aquest fitxer i queda desat. L'original sense editar va a la
+    /// paperera només si n'hi ha una còpia a l'historial d'enregistraments; si no, es queda on és (és l'únic original).
+    /// </summary>
+    /// <param name="duration">Durada de la versió editada, si se sap (la de l'editor).</param>
+    /// <returns>L'element actualitzat, si l'original ha anat a la paperera, i, si no, per què.</returns>
+    public (RecordingItem Item, bool OriginalRecycled, string? OriginalKept) SaveEdited(string id, string editedPath, TimeSpan? duration = null)
+    {
+        if (!System.IO.Path.IsPathFullyQualified(editedPath))
+            throw new RecordingCommandException("La ruta del fitxer editat ha de ser completa.");
+        if (!File.Exists(editedPath))
+            throw new RecordingCommandException($"No es troba el fitxer editat: {editedPath}");
+
+        string original;
+        RecordingItem updated;
+        lock (_sync)
+        {
+            var item = Existing(id);
+            original = item.Path;
+            if (string.Equals(System.IO.Path.GetFullPath(original), System.IO.Path.GetFullPath(editedPath), StringComparison.OrdinalIgnoreCase))
+                throw new RecordingCommandException("El fitxer editat és el mateix que l'original: desa'l amb recording.save.");
+            updated = item with
+            {
+                Path = editedPath, Saved = true, Problem = null,
+                FileSize = new FileInfo(editedPath).Length, Duration = duration ?? item.Duration,
+            };
+            Replace(updated);
+        }
+
+        bool recycled = false;
+        string? kept = null;
+        if (File.Exists(original))
+        {
+            if (updated.ArchivePath is { } archive && File.Exists(archive))
+            {
+                try
+                {
+                    _sendToRecycleBin(original);
+                    recycled = true;
+                }
+                catch (Exception ex)
+                {
+                    kept = $"No s'ha pogut enviar l'original a la paperera ({ex.Message}): es queda a {original}.";
+                }
+            }
+            else
+            {
+                kept = $"No hi ha cap còpia de l'original a l'historial d'enregistraments: es queda a {original}.";
+            }
+        }
+
+        Changed?.Invoke();
+        return (updated, recycled, kept);
     }
 
     /// <summary>Envia el fitxer a la paperera de Windows i el treu de la llista.</summary>
@@ -269,6 +327,13 @@ public sealed class RecordingList
     }
 
     private string NewId() => $"e{++_nextId}";
+
+    /// <summary>Durada d'un MP3 (només llegeix les capçaleres dels fotogrames), o null si no es pot llegir.</summary>
+    internal static TimeSpan? DurationOf(string path)
+    {
+        try { return Mp3FrameIndex.Build(path).Duration; }
+        catch (Exception ex) when (ex is Mp3EditException or IOException or UnauthorizedAccessException) { return null; }
+    }
 
     private static string UniquePath(string path)
     {

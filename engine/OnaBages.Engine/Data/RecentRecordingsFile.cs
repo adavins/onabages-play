@@ -30,6 +30,7 @@ public static class RecentRecordingsFile
                 ["saved"] = item.Saved,
                 ["closedCleanly"] = item.ClosedCleanly,
                 ["recovered"] = item.Recovered,
+                ["archivePath"] = item.ArchivePath, // pas 14b; opcional
             });
         }
         var root = new JsonObject { ["schemaVersion"] = SchemaVersion, ["items"] = list };
@@ -66,7 +67,9 @@ public static class RecentRecordingsFile
                     ClosedCleanly: o["closedCleanly"]?.GetValue<bool>() ?? true,
                     Problem: null,
                     // Camp afegit al pas 7 (opcional: els fitxers d'abans no el tenen; no cal canviar de versió).
-                    Recovered: o["recovered"]?.GetValue<bool>() ?? false));
+                    Recovered: o["recovered"]?.GetValue<bool>() ?? false,
+                    // Camp afegit al pas 14b de la fase 5 (opcional, com l'anterior).
+                    ArchivePath: o["archivePath"]?.GetValue<string>()));
             }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException or FormatException)

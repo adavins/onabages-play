@@ -183,6 +183,26 @@ public sealed class RecordingList
         Changed?.Invoke();
     }
 
+    /// <summary>
+    /// Neteja la llista (fase 5, pas 11a; D-089): treu els enregistraments desats i els que ja no es troben i, amb
+    /// <paramref name="includeUnsaved"/>, també els que no s'han desat. Els fitxers no es toquen. Mai no treu el
+    /// pendent d'un enregistrador ni un que s'està desant. Retorna quants n'ha tret i quants de no desats hi queden.
+    /// </summary>
+    public (int Removed, int UnsavedLeft) Clear(bool includeUnsaved)
+    {
+        int removed, unsavedLeft;
+        lock (_sync)
+        {
+            int before = _items.Count;
+            _items.RemoveAll(i => !i.Busy && !_isPending(i.Path)
+                && (i.Saved || !File.Exists(i.Path) || includeUnsaved));
+            removed = before - _items.Count;
+            unsavedLeft = _items.Count(i => !i.Saved && !_isPending(i.Path));
+        }
+        if (removed > 0) Changed?.Invoke();
+        return (removed, unsavedLeft);
+    }
+
     /// <summary>Treu l'enregistrament de la llista. El fitxer no es toca.</summary>
     public void Remove(string id)
     {

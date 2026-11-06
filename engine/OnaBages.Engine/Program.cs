@@ -208,6 +208,14 @@ void SaveRecordings()
 var config = new ConfigStore(configRepository);
 config.Warning += message => log.LogWarning("Configuració: {Message}", message);
 var hardware = new HardwareAssignments(state, config);
+
+// «Netejar Recents en tancar l'aplicació» (fase 5, pas 11a): es fa en arrencar, abans que la interfície vegi la
+// llista (així també es fa si l'ordinador va caure). Només els desats i els no trobats: els no desats es queden.
+if (config.Read(c => c.ClearRecentsOnExit))
+{
+    var (cleared, _) = recordings.Clear(includeUnsaved: false);
+    if (cleared > 0) log.LogInformation("Recents: s'han tret {Count} enregistraments desats o no trobats.", cleared);
+}
 hardware.Warning += message => log.LogWarning("Maquinari: {Message}", message);
 
 // Editor (fase 3): cada canvi va a la interfície; al registre, obrir, desar, reproduir i els errors.
@@ -328,13 +336,15 @@ foreach (var recorder in state.Recorders)
 }
 
 // Historial d'enregistraments (fase 5, pas 10a): una còpia de cada original. Els dies antics s'esborren en segon pla.
-var (archiveFolder, archiveKeepDays) = config.Read(c => (c.EffectiveRecordingArchiveFolder, c.RecordingArchiveKeepDays));
+// Les còpies van a la subcarpeta del perfil actiu (D-088); la neteja revisa les de tots els perfils.
+var (archiveFolder, profileArchiveFolder, archiveKeepDays) =
+    config.Read(c => (c.EffectiveRecordingArchiveFolder, c.ProfileRecordingArchiveFolder, c.RecordingArchiveKeepDays));
 foreach (var recorder in state.Recorders)
-    recorder.SetArchive(archiveFolder);
+    recorder.SetArchive(profileArchiveFolder);
 // La carpeta existeix des del principi (la interfície la pot obrir encara que estigui buida).
-if (archiveFolder is not null)
+if (profileArchiveFolder is not null)
 {
-    try { Directory.CreateDirectory(archiveFolder); }
+    try { Directory.CreateDirectory(profileArchiveFolder); }
     catch (Exception ex) { log.LogWarning("No s'ha pogut crear la carpeta de l'historial d'enregistraments: {Message}", ex.Message); }
 }
 if (archiveFolder is not null && archiveKeepDays > 0)

@@ -38,6 +38,7 @@ public sealed partial class CommandRouter
         string id = RequireString(msg, "profile");
         string name = ReadString(msg["name"]) ?? throw new BadParamsException("Falta el camp 'name'.");
         config.RenameProfile(id, name);
+        ApplyRecordingArchive(config); // si és l'actiu, l'historial va a la carpeta amb el nom nou
         return new JsonObject { ["profiles"] = ProfilesJson(config), ["settings"] = SettingsJson(config) };
     }
 

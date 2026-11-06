@@ -53,6 +53,11 @@ public sealed class EngineConfig
     /// <summary>Dispositius que hi havia l'última vegada: serveix per detectar els nous i els formats canviats.</summary>
     public List<AudioDevice> KnownDevices { get; set; } = [];
 
+    // --- Enregistraments recents (fase 5, pas 11a; de l'ordinador, com la llista) ---
+
+    /// <summary>En tornar a obrir l'aplicació, es treuen de Recents els desats i els no trobats (per defecte, no).</summary>
+    public bool ClearRecentsOnExit { get; set; }
+
     // --- Historial d'enregistraments (fase 5, pas 10a; de l'ordinador: depèn dels discos) ---
 
     /// <summary>Es fa una còpia de cada enregistrament original (per defecte, sí).</summary>
@@ -64,9 +69,13 @@ public sealed class EngineConfig
     /// <summary>Dies que es guarden (0 = no esborrar mai).</summary>
     public int RecordingArchiveKeepDays { get; set; } = RecordingArchive.DefaultKeepDays;
 
-    /// <summary>On es fan les còpies ara, o null si no se'n fan.</summary>
+    /// <summary>Carpeta de l'historial (l'arrel, amb una subcarpeta per perfil), o null si no se'n fan còpies.</summary>
     public string? EffectiveRecordingArchiveFolder =>
         RecordingArchiveEnabled ? RecordingArchiveFolder ?? RecordingArchive.DefaultFolder : null;
+
+    /// <summary>On es fan les còpies del perfil actiu (D-088), o null si no se'n fan.</summary>
+    public string? ProfileRecordingArchiveFolder =>
+        EffectiveRecordingArchiveFolder is { } root ? RecordingArchive.ProfileFolder(root, ProfileName) : null;
 
     /// <summary>Escala de la interfície (1 = 100 %). Entre <see cref="MinZoom"/> i <see cref="MaxZoom"/>.</summary>
     public double UiZoom { get; set; } = 1.0;

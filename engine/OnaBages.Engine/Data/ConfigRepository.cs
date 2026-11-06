@@ -591,6 +591,10 @@ public sealed class ConfigRepository
         if (Text(root["editor"]?["device"]?["id"]) is { Length: > 0 } editorId)
             config.EditorDevice = new DeviceRef(editorId, Text(root["editor"]?["device"]?["name"]) ?? "");
 
+        // Enregistraments recents (fase 5, pas 11a; camp opcional, sense canvi de versió).
+        if (root["recents"]?["clearOnExit"] is JsonValue clear && clear.TryGetValue(out bool clearOnExit))
+            config.ClearRecentsOnExit = clearOnExit;
+
         // Historial d'enregistraments (fase 5, pas 10a; camp opcional, sense canvi de versió).
         if (root["recordingArchive"] is JsonObject archive)
         {
@@ -804,6 +808,7 @@ public sealed class ConfigRepository
         ["activeProfile"] = config.ProfileId,
         ["knownDevices"] = new JsonArray(config.KnownDevices.Select(d => (JsonNode)WriteDevice(d)).ToArray()),
         ["ui"] = new JsonObject { ["zoom"] = config.UiZoom },
+        ["recents"] = new JsonObject { ["clearOnExit"] = config.ClearRecentsOnExit },
         ["recordingArchive"] = new JsonObject
         {
             ["enabled"] = config.RecordingArchiveEnabled,

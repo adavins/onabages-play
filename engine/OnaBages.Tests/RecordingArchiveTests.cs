@@ -153,6 +153,40 @@ public class RecordingArchiveTests : IDisposable
     }
 
     [Fact]
+    public void La_neteja_tambe_mira_dins_de_cada_perfil()
+    {
+        var today = new DateTime(2026, 11, 6);
+        string Dir(params string[] parts)
+        {
+            string dir = Path.Combine([Archive, .. parts]);
+            Directory.CreateDirectory(dir);
+            File.WriteAllText(Path.Combine(dir, "a.mp3"), "x");
+            return dir;
+        }
+        string oldA = Dir("La Central", "2026-09-01");
+        string newA = Dir("La Central", "2026-11-06");
+        string oldB = Dir("Magazín", "2026-08-01");
+        string deeper = Dir("Magazín", "Altres", "2020-01-01"); // massa endins: no es toca
+
+        Assert.Equal(2, RecordingArchive.DeleteOld(Archive, 30, today));
+        Assert.False(Directory.Exists(oldA));
+        Assert.False(Directory.Exists(oldB));
+        Assert.True(Directory.Exists(Path.Combine(Archive, "La Central")));   // la del perfil es queda
+        Assert.True(File.Exists(Path.Combine(newA, "a.mp3")));
+        Assert.True(File.Exists(Path.Combine(deeper, "a.mp3")));
+    }
+
+    [Theory]
+    [InlineData("La Central", "La Central")]
+    [InlineData("Matí: 8/9 h", "Matí_ 8_9 h")]
+    [InlineData("  Nit.  ", "Nit")]
+    [InlineData("???", "___")]
+    public void La_carpeta_del_perfil_porta_el_seu_nom(string profile, string folder)
+    {
+        Assert.Equal(Path.Combine(Archive, folder), RecordingArchive.ProfileFolder(Archive, profile));
+    }
+
+    [Fact]
     public void Amb_0_dies_no_s_esborra_mai_res()
     {
         string dir = Path.Combine(Archive, "2020-01-01");
@@ -200,7 +234,8 @@ public class RecordingArchiveTests : IDisposable
         string folder = Archive.Replace("\\", "\\\\");
         var r = router.Handle($$"""{ "v": 1, "id": 2, "cmd": "settings.set", "recordingArchive": { "folder": "{{folder}}", "keepDays": 0 } }""");
         Assert.Equal(Archive, r["result"]!["settings"]!["recordingArchive"]!["folder"]!.GetValue<string>());
-        Assert.Equal(Archive, recorder.ArchiveFolder);
+        string profile = store.Read(c => c.ProfileName);
+        Assert.Equal(Path.Combine(Archive, profile), recorder.ArchiveFolder);       // subcarpeta del perfil (D-088)
         var saved = repository.Load().Config;
         Assert.Equal(Archive, saved.RecordingArchiveFolder);
         Assert.Equal(0, saved.RecordingArchiveKeepDays);
@@ -209,7 +244,13 @@ public class RecordingArchiveTests : IDisposable
         router.Handle("""{ "v": 1, "id": 3, "cmd": "settings.set", "recordingArchive": { "enabled": false } }""");
         Assert.Null(recorder.ArchiveFolder);
         router.Handle("""{ "v": 1, "id": 4, "cmd": "settings.set", "recordingArchive": { "enabled": true, "folder": "" } }""");
-        Assert.Equal(RecordingArchive.DefaultFolder, recorder.ArchiveFolder);
+        Assert.Equal(Path.Combine(RecordingArchive.DefaultFolder, profile), recorder.ArchiveFolder);
+
+        // Canviar el nom del perfil actiu: les còpies van a la carpeta amb el nom nou.
+        string id = store.Read(c => c.ProfileId);
+        var renamed = router.Handle($$"""{ "v": 1, "id": 7, "cmd": "profile.rename", "profile": "{{id}}", "name": "La Central" }""");
+        Assert.True(renamed["ok"]!.GetValue<bool>(), renamed.ToJsonString());
+        Assert.Equal(Path.Combine(RecordingArchive.DefaultFolder, "La Central"), recorder.ArchiveFolder);
 
         Assert.Equal("bad_params", router.Handle("""{ "v": 1, "id": 5, "cmd": "settings.set", "recordingArchive": { "folder": "Historial" } }""")["error"]!["code"]!.GetValue<string>());
         Assert.Equal("bad_params", router.Handle("""{ "v": 1, "id": 6, "cmd": "settings.set", "recordingArchive": { "keepDays": -1 } }""")["error"]!["code"]!.GetValue<string>());

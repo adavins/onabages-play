@@ -120,6 +120,7 @@ public sealed partial class CommandRouter
                 "recording.save" => RecordingSave(msg),
                 "recording.discard" => RecordingDiscard(msg),
                 "recording.remove" => RecordingRemove(msg),
+                "recordings.clear" => RecordingsClear(msg),
                 "cue.play" => CuePlay(msg),
                 "cue.stop" => CueCommand(c => c.Stop()),
                 "cue.seek" => CueCommand(c => c.Seek(TimeSpan.FromSeconds(RequireNumber(msg, "position", "la posició en segons")))),
@@ -377,8 +378,12 @@ public sealed partial class CommandRouter
         var trim = msg["trim"] as JsonObject;
         var limiter = msg["recorderLimiter"] as JsonObject;
         var archive = msg["recordingArchive"] as JsonObject;
-        if (ui is null && layout is null && program is null && loudness is null && trim is null && limiter is null && archive is null)
-            throw new BadParamsException("Falta el camp 'ui', 'layout', 'program', 'loudness', 'trim', 'recorderLimiter' o 'recordingArchive' amb els ajustos a canviar.");
+        var recents = msg["recents"] as JsonObject;
+        if (ui is null && layout is null && program is null && loudness is null && trim is null && limiter is null && archive is null && recents is null)
+            throw new BadParamsException("Falta el camp 'ui', 'layout', 'program', 'loudness', 'trim', 'recorderLimiter', 'recordingArchive' o 'recents' amb els ajustos a canviar.");
+        bool? clearOnExit = null;
+        if (recents?["clearOnExit"] is { } clearNode)
+            clearOnExit = clearNode is JsonValue cv && cv.TryGetValue(out bool cb) ? cb : throw new BadParamsException("'recents.clearOnExit' ha de ser true o false.");
 
         double? zoom = OptionalNumber(ui?["zoom"], "ui.zoom", EngineConfig.MinZoom, EngineConfig.MaxZoom);
         int? perRow = OptionalInt(ui?["recordersPerRow"], "ui.recordersPerRow", 1, EngineConfig.MaxRecorders);
@@ -422,16 +427,12 @@ public sealed partial class CommandRouter
             if (archiveEnabled is { } ae) c.RecordingArchiveEnabled = ae;
             if (archiveFolder is not null) c.RecordingArchiveFolder = archiveFolder.Length == 0 ? null : archiveFolder;
             if (keepDays is { } kd) c.RecordingArchiveKeepDays = kd;
+            if (clearOnExit is { } co) c.ClearRecentsOnExit = co;
         });
 
         // L'historial s'aplica a partir del pròxim enregistrament (el que està en curs continua com era).
         // Els dies antics s'esborren en arrencar el motor.
-        if (archive is not null)
-        {
-            string? folder = config.Read(c => c.EffectiveRecordingArchiveFolder);
-            foreach (var recorder in _state.Recorders)
-                recorder.SetArchive(folder);
-        }
+        if (archive is not null) ApplyRecordingArchive(config);
 
         // El sostre nou s'aplica de seguida a tots els enregistradors (també als que enregistren).
         if (ceiling is not null)
@@ -460,6 +461,17 @@ public sealed partial class CommandRouter
         return new JsonObject { ["settings"] = SettingsJson(config) };
     }
 
+    /// <summary>
+    /// Carpeta de l'historial (la del perfil actiu, D-088) a tots els enregistradors: després de canviar els ajustos
+    /// o el nom del perfil. S'aplica a partir del pròxim enregistrament.
+    /// </summary>
+    private void ApplyRecordingArchive(ConfigStore config)
+    {
+        string? folder = config.Read(c => c.ProfileRecordingArchiveFolder);
+        foreach (var recorder in _state.Recorders)
+            recorder.SetArchive(folder);
+    }
+
     private JsonObject SettingsJson(ConfigStore config)
     {
         var (zoom, perRow, warning, players, recorders, programName) =
@@ -480,6 +492,8 @@ public sealed partial class CommandRouter
                 ["thresholds"] = new JsonArray(TrackLoudness.SilenceThresholdsDb.Select(t => (JsonNode)t).ToArray()),
                 ["maxMarginMs"] = Player.MaxTrimMarginMs,
             }),
+            // Enregistraments recents (fase 5, pas 11a; de l'ordinador).
+            ["recents"] = new JsonObject { ["clearOnExit"] = config.Read(c => c.ClearRecentsOnExit) },
             // Historial d'enregistraments (fase 5, pas 10a; de l'ordinador): còpia de cada original.
             ["recordingArchive"] = config.Read(c => new JsonObject
             {
@@ -1055,6 +1069,19 @@ public sealed partial class CommandRouter
         var item = GetRecording(msg);
         _recordings.Remove(item.Id);
         return new JsonObject { ["removed"] = item.Id };
+    }
+
+    /// <summary>
+    /// Neteja Recents (fase 5, pas 11a; D-089): treu els desats i els no trobats; amb "includeUnsaved": true, també els
+    /// no desats. Els fitxers no es toquen; el pendent de cada enregistrador i els que s'estan desant es queden.
+    /// </summary>
+    private JsonObject RecordingsClear(JsonObject msg)
+    {
+        bool includeUnsaved = false;
+        if (msg["includeUnsaved"] is { } node)
+            includeUnsaved = node is JsonValue v && v.TryGetValue(out bool b) ? b : throw new BadParamsException("'includeUnsaved' ha de ser true o false.");
+        var (removed, unsavedLeft) = _recordings.Clear(includeUnsaved);
+        return new JsonObject { ["removed"] = removed, ["unsavedLeft"] = unsavedLeft };
     }
 
     /// <summary>L'enregistrador que tenia aquest fitxer com a pendent torna a Inactiu.</summary>

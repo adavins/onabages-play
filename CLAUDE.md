@@ -25,6 +25,7 @@ Quan una fase s'acabi, actualitza aquesta línia i afegeix una entrada a `docs/d
   - quan facis un canvi, explica breument què has fet i per què, en llenguatge planer.
 - **Passos petits:** cada canvi ha de compilar i ha d'acabar amb una manera concreta de provar-lo. Per a canvis grans, proposa primer un pla breu.
 - **Git:** després de cada pas que funcioni, proposa un missatge de commit en català.
+- **Documentació:** quan un canvi afecta l'ús de l'aplicació, actualitza `docs/manual-usuari.html` en el mateix pas; si afecta com està feta, `docs/documentacio-tecnica.html` (D-092).
 - **Maquinari real:** no pots escoltar àudio, connectar dispositius ni veure la finestra. Quan una tasca ho necessiti, digues exactament què ha de fer el desenvolupador i què ha de comprovar. Sempre que es pugui, crea proves automàtiques (per exemple: reproduir un to de prova, enregistrar-lo i analitzar el fitxer per detectar talls).
 - **Abast:** implementa només el que demana la fase actual. Si veus una millora per a més endavant, anota-la; no la facis.
 - **Dependències:** no n'afegeixis cap sense justificar-ho. La llicència ha de permetre la distribució gratuïta (MIT, BSD, Apache; LGPL només enllaçada dinàmicament, com LAME). Cada dependència nova s'anota a `docs/decisions.md`.
@@ -114,3 +115,4 @@ docs/                       especificació, protocol, decisions, instal·lació
 - `docs/protocol.md` — ordres i esdeveniments entre interfície i motor.
 - `docs/decisions.md` — registre de decisions; afegeix-hi una línia per cada decisió nova.
 - `docs/installacio-windows.md` — preparació dels ordinadors i inventari del maquinari.
+- `docs/manual-usuari.html` i `docs/documentacio-tecnica.html` — documentació per a l'usuari i per a qui manté l'aplicació (botó «?» de l'aplicació).

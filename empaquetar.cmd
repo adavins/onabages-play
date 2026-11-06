@@ -58,10 +58,16 @@ for %%f in (build\OnaBagesPlay\locales\*.pak) do (
 )
 
 echo.
-echo [3/4] Carpeta de dades i instruccions...
+echo [3/4] Carpeta de dades, instruccions i documentacio...
 mkdir build\OnaBagesPlay\dades
 copy /y tools\portable\dades-LLEGEIX-ME.txt build\OnaBagesPlay\dades\LLEGEIX-ME.txt >nul
 copy /y tools\portable\LLEGEIX-ME.txt build\OnaBagesPlay\LLEGEIX-ME.txt >nul
+rem Documentacio (D-092): el boto "?" de l'aplicacio obre aquests fitxers al navegador.
+mkdir build\OnaBagesPlay\documentacio
+copy /y docs\manual-usuari.html build\OnaBagesPlay\documentacio\ >nul
+if errorlevel 1 goto :error
+copy /y docs\documentacio-tecnica.html build\OnaBagesPlay\documentacio\ >nul
+if errorlevel 1 goto :error
 
 echo.
 echo [4/4] Comprimint...

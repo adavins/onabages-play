@@ -619,6 +619,24 @@ ipcMain.handle('shell:open-folder', async (_event, folderPath) => {
 });
 
 /**
+ * Documentació (fase 5, D-092): fitxers HTML autoportables que s'obren al navegador predeterminat.
+ * Desenvolupament: docs\ del repositori. Versió portable: carpeta «documentacio» al costat de l'exe
+ * (la hi copia empaquetar.cmd). Només aquests dos noms: la interfície no pot obrir cap altre fitxer.
+ */
+const HELP_FILES = { manual: 'manual-usuari.html', technical: 'documentacio-tecnica.html' };
+const HELP_DIR = app.isPackaged
+  ? path.join(path.dirname(process.execPath), 'documentacio')
+  : path.join(REPO_ROOT, 'docs');
+
+/** Obre un document d'ajuda. Retorna un missatge d'error, o '' si s'ha obert. */
+ipcMain.handle('help:open', async (_event, name) => {
+  const file = Object.hasOwn(HELP_FILES, name) ? path.join(HELP_DIR, HELP_FILES[name]) : null;
+  if (!file) return 'Document desconegut.';
+  if (!fs.existsSync(file)) return `No es troba el document:\n${file}`;
+  return shell.openPath(file);
+});
+
+/**
  * Carpeta per defecte de les llistes (es crea si no hi és): Documents\Ona Bages Play\Llistes
  * o, en la versió portable, dades\Llistes (perquè viatgin amb l'aplicació).
  */

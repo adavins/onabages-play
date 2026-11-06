@@ -9,6 +9,10 @@ COM FER-LA SERVIR
 2. Obre OnaBagesPlay.exe. La primera vegada et preguntarà si vols una drecera a l'escriptori.
    Si Windows avisa que l'aplicació no és coneguda: "Més informació" > "Executa igualment".
 
+AJUDA
+Botó "?" de l'aplicació, o obre directament els fitxers de la carpeta "documentacio":
+manual-usuari.html i documentacio-tecnica.html (s'obren amb el navegador).
+
 ON ES GUARDA TOT
 A la carpeta "dades": configuració, últimes llistes, enregistraments recents, historial del
 que ha sonat (CSV) i registres del motor. Els enregistraments MP3 van a la carpeta que triïs a

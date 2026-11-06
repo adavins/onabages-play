@@ -14,6 +14,7 @@ import { editSettings } from './ui/settings-dialog.js';
 import { setupShortcuts } from './ui/shortcuts.js';
 import { choose } from './ui/dialogs.js';
 import { setupProfileMenu } from './ui/profile-menu.js';
+import { setupHelpMenu } from './ui/help-menu.js';
 import { setupSidePanel } from './ui/side-panel.js';
 import { setupZoom, applyZoom } from './ui/zoom.js';
 import { formatDuration } from './ui/format.js';
@@ -39,6 +40,7 @@ const els = {
   cue: $('cue'),
   settings: $('btn-settings'),
   editor: $('btn-editor'),
+  help: /** @type {HTMLButtonElement} */ ($('btn-help')),
   restartNotice: $('restart-notice'),
   programName: $('program-name'),
   profile: $('btn-profile'),
@@ -77,6 +79,7 @@ setupPanels();
 els.restart.addEventListener('click', restartEngine);
 els.settings.addEventListener('click', openSettings);
 els.editor.addEventListener('click', () => bridge?.openEditor());
+setupHelpMenu(els.help);
 setupProfileMenu({ button: els.profile, request, onSettings: applySettings, onSwitch: restartForProfile });
 setupShortcuts(store, request, (playerId, text) => playerPanels.get(playerId)?.showMessage(text));
 init();

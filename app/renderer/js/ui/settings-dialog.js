@@ -169,6 +169,16 @@ export function editSettings(settings, running, pin) {
       </div>
 
       <div class="obp-settings-panel" role="tabpanel" data-tab="recorders">
+      <h3 class="obp-settings-section">Pantalla</h3>
+      <div class="form-check form-switch mb-1">
+        <input id="st-hide-idle-meters" class="form-check-input" type="checkbox" role="switch"${settings.ui?.hideIdleRecorderMeters ? ' checked' : ''}>
+        <label class="form-check-label" for="st-hide-idle-meters">Amagar el mesurador dels enregistradors que no enregistren</label>
+      </div>
+      <div class="form-text mb-3">
+        Els que no enregistren ja es veuen atenuats i amb el mesurador en grisos; amb això, el mesurador ni tan sols es veu.
+        Es torna a veure en començar a enregistrar.
+      </div>
+
       <h3 class="obp-settings-section">Limitador (LIM)</h3>
       <div class="obp-settings-grid">
         <label for="st-limiter">Sostre</label>
@@ -404,6 +414,7 @@ export function editSettings(settings, running, pin) {
             zoom: Number($('#st-zoom').value),
             recordersPerRow: Number($('#st-per-row').value),
             endWarningSeconds: Number(warning.value),
+            hideIdleRecorderMeters: $('#st-hide-idle-meters').checked,
           },
           layout: { players: Number(players.value), recorders: Number(recorders.value) },
           program: { name: $('#st-program').value.trim() },

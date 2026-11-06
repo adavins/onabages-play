@@ -112,6 +112,23 @@ public class SettingsTests : IDisposable
     }
 
     [Fact]
+    public void Amagar_el_mesurador_dels_enregistradors_inactius_es_desa_al_perfil()
+    {
+        var s = Settings("""{ "v": 1, "id": 1, "cmd": "settings.get" }""");
+        Assert.False(s["ui"]!["hideIdleRecorderMeters"]!.GetValue<bool>()); // per defecte, es veu
+
+        s = Settings("""{ "v": 1, "id": 2, "cmd": "settings.set", "ui": { "hideIdleRecorderMeters": true } }""");
+
+        Assert.True(s["ui"]!["hideIdleRecorderMeters"]!.GetValue<bool>());
+        Assert.True(_repository.Load().Config.HideIdleRecorderMeters);
+        Assert.Equal(10, s["ui"]!["endWarningSeconds"]!.GetValue<int>()); // el que no s'envia no canvia
+
+        var bad = _router.Handle("""{ "v": 1, "id": 3, "cmd": "settings.set", "ui": { "hideIdleRecorderMeters": "sí" } }""");
+        Assert.Equal("bad_params", ErrorCode(bad));
+        Assert.True(_repository.Load().Config.HideIdleRecorderMeters);
+    }
+
+    [Fact]
     public void Treure_elements_no_esborra_la_seva_configuracio()
     {
         // Configuració amb 4 enregistradors, cada un amb entrada i nom.

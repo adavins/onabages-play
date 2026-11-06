@@ -111,6 +111,9 @@ public sealed class EngineConfig
     /// <summary>Segons abans del final en què el temps restant d'un reproductor canvia d'aspecte (0 = cap avís).</summary>
     public int EndWarningSeconds { get; set; } = 10;
 
+    /// <summary>Amagar el mesurador dels enregistradors que no enregistren (fase 5, pas 14c; del perfil). Per defecte, no.</summary>
+    public bool HideIdleRecorderMeters { get; set; }
+
     /// <summary>Nom del programa que es fa (p. ex. «Magazín dels dissabtes»). Surt a la barra superior i a l'historial. Buit = cap.</summary>
     public string ProgramName { get; set; } = "";
 

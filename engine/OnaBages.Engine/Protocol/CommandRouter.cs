@@ -367,7 +367,7 @@ public sealed partial class CommandRouter
 
     /// <summary>
     /// Canvia només els ajustos que s'envien (docs/protocol.md, «settings.set»):
-    /// "ui": { zoom, recordersPerRow, endWarningSeconds }, "layout": { players, recorders } i "program": { name }.
+    /// "ui": { zoom, recordersPerRow, endWarningSeconds, hideIdleRecorderMeters }, "layout": { players, recorders } i "program": { name }.
     /// Primer es comprova tot; si algun valor és fora de marge, no es canvia res.
     /// </summary>
     private JsonObject SettingsSet(JsonObject msg)
@@ -390,6 +390,9 @@ public sealed partial class CommandRouter
         double? zoom = OptionalNumber(ui?["zoom"], "ui.zoom", EngineConfig.MinZoom, EngineConfig.MaxZoom);
         int? perRow = OptionalInt(ui?["recordersPerRow"], "ui.recordersPerRow", 1, EngineConfig.MaxRecorders);
         int? warning = OptionalInt(ui?["endWarningSeconds"], "ui.endWarningSeconds", 0, EngineConfig.MaxEndWarningSeconds);
+        bool? hideIdleMeters = null;
+        if (ui?["hideIdleRecorderMeters"] is { } hideNode)
+            hideIdleMeters = hideNode is JsonValue hv && hv.TryGetValue(out bool hb) ? hb : throw new BadParamsException("'ui.hideIdleRecorderMeters' ha de ser true o false.");
         int? players = OptionalInt(layout?["players"], "layout.players", 1, EngineConfig.MaxPlayers);
         int? recorders = OptionalInt(layout?["recorders"], "layout.recorders", 1, EngineConfig.MaxRecorders);
         string? programName = OptionalProgramName(program?["name"]);
@@ -416,6 +419,7 @@ public sealed partial class CommandRouter
             if (zoom is { } z) c.UiZoom = Math.Round(z, 2);
             if (perRow is { } r) c.RecordersPerRow = r;
             if (warning is { } w) c.EndWarningSeconds = w;
+            if (hideIdleMeters is { } hm) c.HideIdleRecorderMeters = hm;
             // El nombre d'elements s'aplica en tornar a arrencar el motor. Les assignacions i els ajustos
             // dels que es treuen no s'esborren: si es tornen a posar, tornen tal com eren.
             if (players is { } p) c.PlayerCount = p;
@@ -478,6 +482,7 @@ public sealed partial class CommandRouter
     {
         var (zoom, perRow, warning, players, recorders, programName) =
             config.Read(c => (c.UiZoom, c.RecordersPerRow, c.EndWarningSeconds, c.PlayerCount, c.RecorderCount, c.ProgramName));
+        bool hideIdleMeters = config.Read(c => c.HideIdleRecorderMeters);
         var (profileId, profileName) = config.Read(c => (c.ProfileId, c.ProfileName));
         return new JsonObject
         {
@@ -514,7 +519,7 @@ public sealed partial class CommandRouter
             },
             // Presets del compressor/limitador dels reproductors (fase 4, pas 4b).
             ["processingPresets"] = ProcessingPresetsJson(),
-            ["ui"] = new JsonObject { ["zoom"] = zoom, ["recordersPerRow"] = perRow, ["endWarningSeconds"] = warning },
+            ["ui"] = new JsonObject { ["zoom"] = zoom, ["recordersPerRow"] = perRow, ["endWarningSeconds"] = warning, ["hideIdleRecorderMeters"] = hideIdleMeters },
             ["layout"] = new JsonObject { ["players"] = players, ["recorders"] = recorders },
             ["program"] = new JsonObject { ["name"] = programName },
             // Carpetes que la interfície pot obrir (botons de ⚙ Configuració).

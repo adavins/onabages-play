@@ -667,6 +667,8 @@ public sealed class ConfigRepository
         // Fora de marge, el límit més proper.
         if (Int(root["ui"]?["recordersPerRow"]) is { } perRow)
             config.RecordersPerRow = Math.Clamp(perRow, 1, EngineConfig.MaxRecorders);
+        if (root["ui"]?["hideIdleRecorderMeters"] is JsonValue hideIdle && hideIdle.TryGetValue(out bool hide))
+            config.HideIdleRecorderMeters = hide; // pas 14c; camp opcional, sense canvi de versió
         if (Int(root["ui"]?["endWarningSeconds"]) is { } warning)
             config.EndWarningSeconds = Math.Clamp(warning, 0, EngineConfig.MaxEndWarningSeconds);
         if (Int(root["layout"]?["players"]) is { } players)
@@ -885,6 +887,7 @@ public sealed class ConfigRepository
         {
             ["recordersPerRow"] = config.RecordersPerRow,
             ["endWarningSeconds"] = config.EndWarningSeconds,
+            ["hideIdleRecorderMeters"] = config.HideIdleRecorderMeters,
         },
         ["players"] = WriteAssignments(config.Players),
         ["recorders"] = WriteAssignments(config.Recorders),

@@ -1462,6 +1462,37 @@ body.engine-offline .side-content {
   .recorder .rec-action:not(.js-save) .rec-label { display: none; }
 }
 
+/* Estat de cada enregistrador d'un cop d'ull (fase 5, pas 14c; D-100) ------- */
+
+/* Inactiu: el mesurador en grisos i les dades atenuades. L'entrada i els botons es veuen normals. */
+.recorder.rec-idle .js-meter-slot { filter: grayscale(1); opacity: 0.5; }
+.recorder.rec-idle .js-fader-slot,
+.recorder.rec-idle .gr-row,
+.recorder.rec-idle .rec-info { opacity: 0.55; }
+
+/* ⚙ «Amagar el mesurador dels enregistradors inactius». */
+.recorder.rec-hide-meter .js-meter-slot,
+.recorder.rec-hide-meter .gr-row { display: none; }
+
+/* Enregistrant: vora i capçalera vermelles, perquè es vegi de lluny quins enregistren. */
+.recorder.rec-recording {
+  border-color: var(--obp-recording);
+  box-shadow: 0 0 0 2px var(--obp-recording);
+}
+.recorder.rec-recording > .panel-header {
+  background: var(--obp-recording);
+  color: #fff;
+}
+.recorder.rec-recording > .panel-header .panel-title { color: #fff; }
+/* L'etiqueta «Enregistrant» sobre la capçalera vermella: blanca, perquè es continuï veient. */
+.recorder.rec-recording > .panel-header .state-recording { background: #fff; color: var(--obp-recording); }
+
+/* Pendent: vora groga (hi ha un fitxer per desar o descartar). */
+.recorder.rec-pending {
+  border-color: var(--obp-warn);
+  box-shadow: 0 0 0 1px var(--obp-warn);
+}
+
 /* Enregistraments recents (js/ui/recents-panel.js) ----------------------- */
 
 /* Ocupa l'alçada de la pestanya del panell lateral: si la llista és llarga, es desplaça. */

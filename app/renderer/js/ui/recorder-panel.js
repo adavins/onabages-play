@@ -159,6 +159,14 @@ export class RecorderPanel {
     const recording = r.state === 'recording';
     const pending = r.state === 'pending';
 
+    // Menys soroll visual (fase 5, pas 14c; D-100): inactiu = atenuat i mesurador en grisos (o amagat, si es
+    // vol); enregistrant = vora i capçalera vermelles; pendent = vora groga. Ho fa el CSS amb aquestes classes.
+    const idle = r.state === 'idle';
+    this.element.classList.toggle('rec-idle', idle);
+    this.element.classList.toggle('rec-recording', recording);
+    this.element.classList.toggle('rec-pending', pending);
+    this.element.classList.toggle('rec-hide-meter', idle && !!this.#store.settings?.ui?.hideIdleRecorderMeters);
+
     el.name.textContent = r.name ?? `Enregistrador ${this.#id}`;
     el.title.title = `Canviar el nom i la carpeta\nCarpeta: ${r.folder ?? ''}`;
     el.state.innerHTML = stateBadge(RECORDER_STATES[r.state]);

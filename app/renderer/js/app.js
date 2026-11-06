@@ -15,6 +15,7 @@ import { setupShortcuts } from './ui/shortcuts.js';
 import { choose } from './ui/dialogs.js';
 import { setupProfileMenu } from './ui/profile-menu.js';
 import { setupHelpMenu } from './ui/help-menu.js';
+import { chooseStartupProfile } from './ui/startup-profile.js';
 import { setupSidePanel } from './ui/side-panel.js';
 import { setupZoom, applyZoom } from './ui/zoom.js';
 import { formatDuration } from './ui/format.js';
@@ -58,6 +59,8 @@ const store = new Store();
 let client = null;
 let failedReconnects = 0;
 let engineVersion = '';
+/** Ja s'ha mirat si cal fer triar el perfil en arrencar (pas 13b). */
+let startupChecked = false;
 
 /** @type {Map<string, PlayerPanel>} */
 let playerPanels = new Map();
@@ -185,6 +188,13 @@ async function onConnectionStatus(e) {
       await store.refresh();
     } catch (err) {
       console.warn('No s\'ha pogut llegir l\'estat del motor', err);
+    }
+    // Triar el perfil (pas 13b): només la primera connexió, i només si el motor acaba d'arrencar.
+    if (!startupChecked) {
+      startupChecked = true;
+      if (await bridge.takeStartupChoice()) {
+        chooseStartupProfile({ request, busy: store.busy, onSwitch: restartForProfile });
+      }
     }
     return;
   }

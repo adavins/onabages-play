@@ -119,6 +119,73 @@ export function askText(options) {
 }
 
 /**
+ * Demana el PIN d'un perfil (fase 5, pas 13) i el fa comprovar a `check` (que ho pregunta al motor).
+ * Si no és correcte, ho diu i es pot tornar a provar. Retorna true si s'ha entrat el PIN correcte,
+ * false si es cancel·la.
+ * @param {{ title: string, message: string, check: (pin: string) => Promise<boolean> }} options
+ * @returns {Promise<boolean>}
+ */
+export function askPin(options) {
+  const dialog = document.createElement('dialog');
+  dialog.className = 'obp-dialog obp-pin';
+  dialog.innerHTML = `
+    <form method="dialog">
+      <h2 class="obp-dialog-title"><i class="bi bi-lock-fill"></i> ${escapeHtml(options.title)}</h2>
+      <label class="form-label" for="obp-ask-pin">${escapeHtml(options.message)}</label>
+      <input id="obp-ask-pin" class="form-control obp-pin-input" type="password" inputmode="numeric"
+             autocomplete="off" maxlength="8">
+      <div class="error-text obp-pin-error js-error" role="alert"></div>
+      <div class="obp-dialog-buttons">
+        <button class="btn btn-secondary" value="cancel" formnovalidate>Cancel·lar</button>
+        <button class="btn btn-primary js-ok" type="button">D'acord</button>
+      </div>
+    </form>`;
+
+  document.body.appendChild(dialog);
+  const input = /** @type {HTMLInputElement} */ (dialog.querySelector('input'));
+  const ok = /** @type {HTMLButtonElement} */ (dialog.querySelector('.js-ok'));
+  const error = /** @type {HTMLElement} */ (dialog.querySelector('.js-error'));
+  let valid = false;
+
+  const submit = async () => {
+    if (ok.disabled || input.value === '') return;
+    ok.disabled = true;
+    try {
+      valid = await options.check(input.value);
+    } catch (err) {
+      error.textContent = /** @type {Error} */ (err).message;
+      ok.disabled = false;
+      return;
+    }
+    if (valid) {
+      dialog.close('ok');
+      return;
+    }
+    error.textContent = 'PIN incorrecte. Torna-ho a provar.';
+    ok.disabled = false;
+    input.select();
+  };
+
+  ok.addEventListener('click', submit);
+  input.addEventListener('input', () => { error.textContent = ''; });
+  // Retorn accepta (si no, el formulari faria servir el primer botó, que és Cancel·lar).
+  input.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    submit();
+  });
+  dialog.showModal();
+  input.focus();
+
+  return new Promise((resolve) => {
+    dialog.addEventListener('close', () => {
+      resolve(valid);
+      dialog.remove();
+    });
+  });
+}
+
+/**
  * Fa triar un element d'una llista (un desplegable). Retorna el `value` triat, o null si es cancel·la.
  * @param {{ title: string, label: string, message?: string, okLabel: string, okStyle?: string, icon?: string,
  *           options: { value: string, label: string }[] }} options

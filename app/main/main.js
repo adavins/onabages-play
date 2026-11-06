@@ -32,6 +32,10 @@ const APP_ICON = path.join(__dirname, '..', 'assets', 'icona.ico');
 let mainWindow = null;
 /** @type {{ port: number, token: string } | null} */
 let engineInfo = null;
+/** La primera comprovació del motor d'aquesta sessió encara no s'ha fet. */
+let firstEngineCheck = true;
+/** El motor s'ha arrencat en obrir l'aplicació i la interfície encara no ho ha preguntat (pas 13b). */
+let startupChoicePending = false;
 let closeConfirmed = false;
 
 // Només una finestra de l'aplicació alhora.
@@ -218,11 +222,17 @@ function engineCommand(port, token) {
  * la interfície es tanqui de manera inesperada.
  */
 async function ensureEngine(reuseToken = null) {
+  const first = firstEngineCheck;
+  firstEngineCheck = false;
+
   const existing = readRuntimeFile();
   if (existing && (await isEngineAlive(existing.port))) {
     engineInfo = existing;
     return engineInfo;
   }
+
+  // El motor arrenca ara, en obrir l'aplicació: la interfície pot fer triar el perfil (fase 5, pas 13b).
+  if (first) startupChoicePending = true;
 
   const port = DEFAULT_PORT;
   const token = reuseToken ?? crypto.randomBytes(24).toString('hex');
@@ -260,6 +270,17 @@ async function ensureEngine(reuseToken = null) {
 // ---------------------------------------------------------------------------
 
 ipcMain.handle('engine:get-info', async () => engineInfo ?? ensureEngine());
+
+/**
+ * Finestra inicial per triar el perfil (fase 5, pas 13b): només si el motor s'ha arrencat en obrir
+ * l'aplicació (si ja era en marxa, potser sona o enregistra). Es respon true una sola vegada:
+ * si la finestra es torna a carregar, no torna a sortir.
+ */
+ipcMain.handle('app:take-startup-choice', () => {
+  const pending = startupChoicePending;
+  startupChoicePending = false;
+  return pending;
+});
 
 ipcMain.handle('engine:ensure', async () => {
   engineInfo = null;

@@ -15,6 +15,9 @@ contextBridge.exposeInMainWorld('onabages', {
   /** Canvi de perfil: espera que el motor s'aturi i n'arrenca un de nou (mateix port i testimoni). */
   restartEngine: () => ipcRenderer.invoke('engine:restart'),
 
+  /** True una sola vegada si el motor s'ha arrencat en obrir l'aplicació: cal fer triar el perfil (pas 13b). */
+  takeStartupChoice: () => ipcRenderer.invoke('app:take-startup-choice'),
+
   /** L'usuari vol tancar la finestra. */
   onCloseRequested: (callback) => {
     ipcRenderer.on('app:close-requested', () => callback());

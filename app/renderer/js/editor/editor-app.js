@@ -50,6 +50,8 @@ let client = null;
 let editor = null;
 /** Fitxer del qual tenim la forma d'ona. */
 let loadedPath = '';
+/** Fitxer desat que ja es mostra (després de desar, la forma d'ona es torna a carregar: ja porta els talls i els fosos). */
+let loadedSavedPath = '';
 /** Fotogrames de l'original amb pic que ja hem demanat. */
 let peaksFetched = 0;
 let fetchingPeaks = false;
@@ -170,10 +172,13 @@ function apply(/** @type {any} */ state) {
   const previous = editor;
   editor = state;
 
-  // Fitxer nou (o el desat després de desar): forma d'ona des de zero.
+  // Fitxer nou, o el que s'acaba de desar (encara que tingui el mateix nom): forma d'ona des de zero.
   const ready = state.open && !state.busy && state.frames !== null;
-  if (ready && state.path !== loadedPath) {
+  const justSaved = !!state.savedPath && state.savedPath !== loadedSavedPath;
+  if (!state.savedPath) loadedSavedPath = ''; // s'ha tornat a modificar: el proper desat també es recarrega
+  if (ready && (state.path !== loadedPath || justSaved)) {
     loadedPath = state.path;
+    loadedSavedPath = state.savedPath ?? '';
     loadedGainsKey = '';
     peaksFetched = 0;
     segmentsKey = '';

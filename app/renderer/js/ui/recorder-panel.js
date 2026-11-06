@@ -92,6 +92,7 @@ export class RecorderPanel {
           </div>
         </div>
         <div class="rec-low-disk js-low-disk"></div>
+        <div class="rec-low-disk js-archive-error"></div>
 
         <div class="controls">
           <button class="btn btn-danger btn-control rec-start js-start" type="button" title="Enregistrar (sempre en un fitxer nou)">
@@ -186,12 +187,18 @@ export class RecorderPanel {
     el.elapsed.classList.toggle('dim', !recording && !pending);
     el.elapsed.classList.toggle('recording', recording);
     el.file.textContent = r.file ? fileName(r.file) : 'Cap fitxer';
-    el.file.title = r.file ?? '';
     el.file.classList.toggle('dim', !r.file);
     el.sizes.innerHTML = this.#sizesText(r);
     el['low-disk'].innerHTML = r.lowDiskSpace
       ? `<i class="bi bi-exclamation-triangle-fill"></i> Poc espai al disc: queden ${escapeHtml(formatBytes(r.freeDiskBytes))}`
       : '';
+
+    // Còpia d'historial (D-086): si no s'ha pogut fer o s'ha interromput, es diu (l'enregistrament continua).
+    el['archive-error'].innerHTML = r.archive?.error
+      ? `<i class="bi bi-exclamation-triangle-fill"></i> ${escapeHtml(r.archive.error)}`
+      : '';
+    el['archive-error'].title = r.archive?.errorDetail ?? '';
+    el.file.title = r.archive?.path ? `${r.file ?? ''}\nCòpia d'historial: ${r.archive.path}` : (r.file ?? '');
 
     // Enregistrament nou: l'indicador de saturació torna a començar.
     if (recording && r.file !== this.#lastFile) {

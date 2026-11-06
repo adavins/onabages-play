@@ -331,6 +331,12 @@ foreach (var recorder in state.Recorders)
 var (archiveFolder, archiveKeepDays) = config.Read(c => (c.EffectiveRecordingArchiveFolder, c.RecordingArchiveKeepDays));
 foreach (var recorder in state.Recorders)
     recorder.SetArchive(archiveFolder);
+// La carpeta existeix des del principi (la interfície la pot obrir encara que estigui buida).
+if (archiveFolder is not null)
+{
+    try { Directory.CreateDirectory(archiveFolder); }
+    catch (Exception ex) { log.LogWarning("No s'ha pogut crear la carpeta de l'historial d'enregistraments: {Message}", ex.Message); }
+}
 if (archiveFolder is not null && archiveKeepDays > 0)
 {
     _ = Task.Run(() =>

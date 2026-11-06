@@ -16,11 +16,13 @@ const MAX_END_WARNING = 60;
 /** Marge màxim del retall de silencis (ms), com accepta el motor. */
 const MAX_TRIM_MARGIN = 2000;
 const MAX_PROGRAM_NAME = 60;
+/** Dies màxims de l'historial d'enregistraments, com accepta el motor. */
+const MAX_ARCHIVE_DAYS = 3650;
 
 /**
  * @param {any} settings  objecte settings del motor
  * @param {{ players: number, recorders: number }} running  quants n'hi ha ara al motor
- * @returns {Promise<{ ui: object, layout: object, program: object, loudness: object, trim: object, recorderLimiter: object } | null>}
+ * @returns {Promise<{ ui: object, layout: object, program: object, loudness: object, trim: object, recorderLimiter: object, recordingArchive: object } | null>}
  */
 export function editSettings(settings, running) {
   const options = (/** @type {number} */ max, /** @type {number} */ selected) =>
@@ -43,6 +45,8 @@ export function editSettings(settings, running) {
   const ceilingOptions = ceilings
     .map((c) => `<option value="${c}"${c === ceiling ? ' selected' : ''}>${c.toFixed(1).replace('.', ',').replace('-', '−')} dB${c === -1 ? ' (recomanat)' : ''}</option>`)
     .join('');
+  // Historial d'enregistraments (fase 5, D-086).
+  const archive = settings.recordingArchive ?? { enabled: true, folder: '', defaultFolder: '', keepDays: 30 };
   const loudnessOptions = targets
     .map((t) => `<option value="${t}"${t === target ? ' selected' : ''}>${String(t).replace('-', '−').replace('.', ',')} LUFS${t === -12 ? ' (recomanat)' : ''}</option>`)
     .join('');
@@ -132,6 +136,33 @@ export function editSettings(settings, running) {
         Amb −1,0 dB, l'MP3 no passa de 0 dB en reproduir-lo; amb −0,1 dB, en pot passar una mica.
       </div>
 
+      <div class="form-check form-switch mb-1">
+        <input id="st-archive" class="form-check-input" type="checkbox" role="switch"${archive.enabled ? ' checked' : ''}>
+        <label class="form-check-label" for="st-archive">Historial: desar una còpia de cada enregistrament</label>
+      </div>
+      <div class="js-archive-options">
+        <input class="form-control form-control-sm mb-1 js-archive-folder" type="text" readonly aria-label="Carpeta de l'historial"
+               value="${escapeHtml(archive.folder)}" title="${escapeHtml(archive.folder)}">
+        <div class="d-flex flex-wrap gap-2 mb-2">
+          <button class="btn btn-sm btn-outline-secondary js-archive-browse" type="button"><i class="bi bi-folder2-open"></i> Canviar…</button>
+          <button class="btn btn-sm btn-outline-secondary js-archive-default" type="button" title="Tornar a la carpeta per defecte">Per defecte</button>
+          <button class="btn btn-sm btn-outline-secondary js-archive-open" type="button"><i class="bi bi-box-arrow-up-right"></i> Obrir</button>
+        </div>
+        <div class="obp-settings-grid">
+          <label for="st-archive-days">Guardar les còpies</label>
+          <div class="input-group input-group-sm">
+            <input id="st-archive-days" class="form-control" type="number" min="0" max="${MAX_ARCHIVE_DAYS}" step="1"
+                   value="${escapeHtml(archive.keepDays)}">
+            <span class="input-group-text">dies</span>
+          </div>
+        </div>
+      </div>
+      <div class="form-text mb-3">
+        Mentre s'enregistra, se'n fa una còpia en aquesta carpeta (una subcarpeta per dia), que no es toca en desar,
+        descartar ni editar. Millor en un altre disc. Les còpies de fa més dels dies triats s'esborren en obrir
+        l'aplicació (0 = no s'esborren mai). Els canvis s'apliquen a partir del pròxim enregistrament.
+      </div>
+
       <h3 class="obp-settings-section">Fitxers</h3>
       <div class="d-flex flex-wrap gap-2 mb-1">
         <button class="btn btn-sm btn-outline-secondary js-open-history" type="button">
@@ -173,6 +204,36 @@ export function editSettings(settings, running) {
 
   $('.js-cancel').addEventListener('click', () => dialog.close('cancel'));
 
+  // Historial d'enregistraments: carpeta (triar, per defecte, obrir) i dies. Apagat, les opcions s'enfosqueixen.
+  const archiveSwitch = $('#st-archive');
+  const archiveFolder = $('.js-archive-folder');
+  /** Carpeta triada: '' = la per defecte. */
+  let chosenArchiveFolder = archive.folder === archive.defaultFolder ? '' : archive.folder;
+  const showArchiveFolder = () => {
+    const folder = chosenArchiveFolder || archive.defaultFolder;
+    archiveFolder.value = chosenArchiveFolder ? folder : `${folder} (per defecte)`;
+    archiveFolder.title = folder;
+  };
+  const showArchiveEnabled = () => {
+    for (const control of dialog.querySelectorAll('.js-archive-options input, .js-archive-options button')) {
+      /** @type {HTMLInputElement} */ (control).disabled = !archiveSwitch.checked;
+    }
+  };
+  archiveSwitch.addEventListener('change', showArchiveEnabled);
+  showArchiveFolder();
+  showArchiveEnabled();
+  $('.js-archive-browse').addEventListener('click', async () => {
+    const folder = await /** @type {any} */ (window).onabages?.chooseFolder(chosenArchiveFolder || archive.defaultFolder);
+    if (folder) {
+      chosenArchiveFolder = folder;
+      showArchiveFolder();
+    }
+  });
+  $('.js-archive-default').addEventListener('click', () => {
+    chosenArchiveFolder = '';
+    showArchiveFolder();
+  });
+
   // Obrir les carpetes de l'historial i dels registres (les diu el motor).
   const openFolder = async (/** @type {string | undefined} */ folder) => {
     const bridge = /** @type {any} */ (window).onabages;
@@ -180,6 +241,7 @@ export function editSettings(settings, running) {
     error.textContent = problem ? `No s'ha pogut obrir la carpeta: ${problem}` : '';
   };
   $('.js-open-history').addEventListener('click', () => openFolder(settings.folders?.history));
+  $('.js-archive-open').addEventListener('click', () => openFolder(chosenArchiveFolder || archive.defaultFolder));
   $('.js-open-logs').addEventListener('click', () => openFolder(settings.folders?.logs));
 
   // Abans de tancar amb «Desar», es comprova l'avís de final (és l'únic camp que s'escriu a mà).
@@ -189,6 +251,14 @@ export function editSettings(settings, running) {
       e.preventDefault();
       error.textContent = `L'avís de final ha de ser un nombre de segons entre 0 i ${MAX_END_WARNING}.`;
       warning.focus();
+      return;
+    }
+    // Els dies de l'historial també s'escriuen a mà.
+    const days = Number($('#st-archive-days').value);
+    if (!Number.isInteger(days) || days < 0 || days > MAX_ARCHIVE_DAYS) {
+      e.preventDefault();
+      error.textContent = `Els dies de l'historial han de ser un nombre entre 0 (no esborrar mai) i ${MAX_ARCHIVE_DAYS}.`;
+      $('#st-archive-days').focus();
       return;
     }
     // Els marges del retall de silencis també s'escriuen a mà.
@@ -219,6 +289,11 @@ export function editSettings(settings, running) {
           program: { name: $('#st-program').value.trim() },
           loudness: { targetLufs: Number($('#st-loudness').value) },
           recorderLimiter: { ceilingDb: Number($('#st-limiter').value) },
+          recordingArchive: {
+            enabled: archiveSwitch.checked,
+            folder: chosenArchiveFolder,
+            keepDays: Number($('#st-archive-days').value),
+          },
           trim: {
             thresholdDb: Number($('#st-trim-threshold').value),
             leadMs: Number($('#st-trim-lead').value),

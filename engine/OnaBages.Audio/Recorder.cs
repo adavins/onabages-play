@@ -261,6 +261,9 @@ public sealed class Recorder : IDisposable
     /// </summary>
     public string? ArchiveError { get; private set; }
 
+    /// <summary>Detall tècnic de <see cref="ArchiveError"/> (la carpeta i el missatge de Windows), o null.</summary>
+    public string? ArchiveErrorDetail { get; private set; }
+
     /// <summary>
     /// Carpeta de l'historial d'enregistraments (null = sense còpia). S'aplica a partir del pròxim enregistrament.
     /// </summary>
@@ -384,7 +387,7 @@ public sealed class Recorder : IDisposable
             // La còpia d'historial ha fallat: es diu (l'enregistrament continua).
             if (ArchiveError is null && _archive?.Error is { } archiveError)
             {
-                ArchiveError = ArchiveFailedMessage(archiveError);
+                SetArchiveFailed(archiveError);
                 _changed = true;
             }
 
@@ -719,7 +722,7 @@ public sealed class Recorder : IDisposable
         _encoderThread = null;
         _limiter = null;
         if (ArchiveError is null && _archive?.Error is { } archiveError)
-            ArchiveError = ArchiveFailedMessage(archiveError);
+            SetArchiveFailed(archiveError);
         _archive = null;
 
         if (_inputError is not null)
@@ -798,6 +801,7 @@ public sealed class Recorder : IDisposable
     {
         ArchivePath = null;
         ArchiveError = null;
+        ArchiveErrorDetail = null;
         if (ArchiveFolder is not { } root) return null;
         try
         {
@@ -810,13 +814,17 @@ public sealed class Recorder : IDisposable
         }
         catch (Exception ex)
         {
-            ArchiveError = $"Còpia d'historial: no s'ha pogut crear a {root} ({ex.Message}). L'enregistrament continua sense còpia.";
+            ArchiveError = "No es fa la còpia d'historial: la carpeta no està disponible. L'enregistrament continua.";
+            ArchiveErrorDetail = $"{root}: {ex.Message}";
             return null;
         }
     }
 
-    private static string ArchiveFailedMessage(Exception ex) =>
-        $"Còpia d'historial: s'ha deixat d'escriure (disc ple o inaccessible: {ex.Message}). L'enregistrament continua; la còpia és vàlida fins aquí.";
+    private void SetArchiveFailed(Exception ex)
+    {
+        ArchiveError = "La còpia d'historial s'ha interromput (disc ple o no disponible). L'enregistrament continua.";
+        ArchiveErrorDetail = $"{ArchivePath}: {ex.Message}";
+    }
 
     /// <summary>
     /// Segon fitxer de l'enregistrament (historial). Només l'escriu el fil de codificació. Si falla, apunta

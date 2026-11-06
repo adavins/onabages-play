@@ -18,7 +18,7 @@ public static class RecorderJson
         ["deviceId"] = recorder.DeviceId,
         ["file"] = recorder.FilePath,
         // Còpia d'historial (fase 5, pas 10a): on és i, si ha fallat, per què (l'enregistrament continua igualment).
-        ["archive"] = new JsonObject { ["path"] = recorder.ArchivePath, ["error"] = recorder.ArchiveError },
+        ["archive"] = new JsonObject { ["path"] = recorder.ArchivePath, ["error"] = recorder.ArchiveError, ["errorDetail"] = recorder.ArchiveErrorDetail },
         ["startedAt"] = recorder.StartedAt?.ToString("O"),
         ["elapsed"] = Math.Round(recorder.Elapsed.TotalSeconds, 1),
         ["fileSize"] = recorder.FileSize,

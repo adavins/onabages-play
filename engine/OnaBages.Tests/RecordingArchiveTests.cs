@@ -110,8 +110,9 @@ public class RecordingArchiveTests : IDisposable
         Assert.Equal(0, recorder.SamplesLost);
         Assert.True(new FileInfo(recorder.FilePath!).Length > 50_000);
         Assert.Null(recorder.ArchivePath);
-        Assert.Contains("Còpia d'historial", recorder.ArchiveError);
+        Assert.Contains("còpia d'historial", recorder.ArchiveError);
         Assert.Contains("continua", recorder.ArchiveError);
+        Assert.StartsWith(Archive, recorder.ArchiveErrorDetail);
     }
 
     [Fact]

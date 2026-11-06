@@ -93,6 +93,11 @@ public sealed partial class CommandRouter
             throw new PlaylistFileException(ex.Message); // file_error
         }
 
+        // Durada (fase 5, pas 15a; només Àudios): les que ja se saben; les altres arriben amb l'avís explorer.durations.
+        var (durations, pending) = kind == ExplorerKind.Audios
+            ? _state.Durations.Lookup(listing.Files)
+            : (new Dictionary<string, double?>(), 0);
+
         return new JsonObject
         {
             ["path"] = listing.Path,
@@ -105,8 +110,10 @@ public sealed partial class CommandRouter
                     ["path"] = f.Path,
                     ["size"] = f.Size,
                     ["modified"] = f.Modified.ToString("yyyy-MM-ddTHH:mm:ss"),
+                    ["duration"] = durations.GetValueOrDefault(f.Path),
                 }).ToArray()),
             ["truncated"] = listing.Truncated,
+            ["durationsPending"] = pending,
         };
     }
 

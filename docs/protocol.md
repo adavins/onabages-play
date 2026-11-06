@@ -417,7 +417,7 @@ Cada perfil té les seves carpetes per a dues pestanyes: `kind` = `"audios"` (fi
 |---|---|---|
 | `explorer.get` | — | `{ audios: [{ name, path, exists }], lists: [...] }`. `exists`: la carpeta hi és ara (una unitat de xarxa o un USB poden no ser-hi). `path` es dona normalitzada com a `explorer.list` (p. ex. els noms curts com `ALBERT~1` desplegats) |
 | `explorer.setFolders` | `kind`, `folders: [{ name?, path }]` (en l'ordre que es mostren; substitueixen les d'abans) | El mateix que `explorer.get`. `path`: ruta completa; no cal que existeixi. Sense `name`, el de la carpeta. Com a molt 20 carpetes i 40 caràcters per nom; una carpeta repetida dona `bad_params`. Es desa al perfil actiu (`explorer` a `perfil.json`) |
-| `explorer.list` | `kind`, `path` | `{ path, folders: [{ name, path }], files: [{ name, path, size, modified }], truncated }`: subcarpetes i fitxers de la pestanya (sense baixar a les subcarpetes), en l'ordre de l'Explorador de Windows («2» abans de «10»). Se salten els fitxers ocults i de sistema. Com a molt 5.000 de cada; si n'hi ha més, `truncated: true`. `modified`: data i hora local |
+| `explorer.list` | `kind`, `path` | `{ path, folders: [{ name, path }], files: [{ name, path, size, modified, duration }], truncated, durationsPending }`: subcarpetes i fitxers de la pestanya (sense baixar a les subcarpetes), en l'ordre de l'Explorador de Windows («2» abans de «10»). Se salten els fitxers ocults i de sistema. Com a molt 5.000 de cada; si n'hi ha més, `truncated: true`. `modified`: data i hora local. `duration` (fase 5, D-104; només `audios`): segons, si ja se sap; si no, `null` i el motor la mesura en segon pla i l'envia amb l'esdeveniment `explorer.durations` (`durationsPending`: quantes falten). La llista no s'espera mai a mesurar |
 
 - `explorer.list` **només llegeix dins de les carpetes configurades** per a aquella pestanya (la carpeta mateixa o una subcarpeta). Qualsevol altra ruta, també amb `..` o una carpeta germana que comenci igual (`Música2` no és dins de `Música`), dona `bad_params`. Una carpeta que no hi és o no es pot llegir: `file_error`.
 - Per afegir el que es tria a un reproductor es fa servir `playlist.add` amb les rutes (també accepta llistes `.obpl` i `.m3u`, i n'afegeix les pistes).
@@ -476,6 +476,7 @@ Objecte `processing` (al reproductor, a `player.setProcessing` i a cada preset):
 | `cue.state` | `cue`: objecte complet (vegeu 4.8) | quan canvia l'estat, la pista, la sortida, el volum o l'error de la preescolta | fase 2 |
 | `cue.position` | `position`, `duration` (segons), `format` (el de la pista, quan ja es coneix) | 10 per segon, només mentre la preescolta sona | fase 2 |
 | `editor.changed` | `editor`: objecte complet (vegeu 4.10) | a cada canvi: obrir, editar, desar, reproduir, errors; el progrés d'obrir, desar o fer la forma d'ona, com a molt 4 per segon | fase 3 |
+| `explorer.durations` | `durations`: `{ "<ruta>": segons | null }` (`null`: no s'ha pogut llegir) | a grups (com a molt 100 o cada 0,3 s) mentre es mesuren els àudios de l'última carpeta llistada amb `explorer.list`; si se'n llista una altra, les que faltaven de l'anterior ja no es mesuren | fase 5 (D-104) |
 | `editor.position` | `position` (segons de la versió editada) | 10 per segon, només mentre l'editor reprodueix | fase 3 |
 
 ### 5.1. Canvis de dispositius

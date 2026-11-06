@@ -18,14 +18,19 @@ public sealed class EngineState
     /// <param name="recorders">Enregistradors del motor. Igual.</param>
     /// <param name="cue">Preescolta. Les proves en poden passar una amb una sortida falsa.</param>
     /// <param name="editor">Editor. Les proves en passen un amb la memòria cau en una carpeta temporal.</param>
+    /// <param name="durations">Durada dels àudios de l'explorador. Les proves en passen una que no llegeix fitxers.</param>
     public EngineState(IEnumerable<Player>? players = null, IEnumerable<Recorder>? recorders = null, CuePlayer? cue = null,
-        EditorSession? editor = null)
+        EditorSession? editor = null, AudioDurations? durations = null)
     {
+        Durations = durations ?? new AudioDurations();
         Editor = editor ?? new EditorSession();
         Players = (players ?? []).ToList();
         Recorders = (recorders ?? []).ToList();
         Cue = cue ?? new CuePlayer();
     }
+
+    /// <summary>Durada dels àudios de l'explorador del panell lateral (fase 5, pas 15a).</summary>
+    public AudioDurations Durations { get; }
 
     /// <summary>Identificador de la preescolta a config.json i als avisos de maquinari (només n'hi ha una).</summary>
     public const string CueId = "1";

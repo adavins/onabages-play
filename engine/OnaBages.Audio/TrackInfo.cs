@@ -73,6 +73,25 @@ public static class TrackInfo
     }
 
     /// <summary>
+    /// Durada sense descodificar l'àudio (fase 5, pas 15a; per a l'explorador del panell lateral): la diu TagLib#
+    /// llegint les capçaleres (en un MP3 de bitrate variable, la capçalera Xing). És aproximada en alguns fitxers,
+    /// prou bona per mostrar-la i ordenar. Mai no llança excepcions: si no es pot llegir, null.
+    /// </summary>
+    public static TimeSpan? QuickDuration(string path)
+    {
+        try
+        {
+            using var file = TagLib.File.Create(path, TagLib.ReadStyle.Average);
+            var duration = file.Properties?.Duration ?? TimeSpan.Zero;
+            return duration > TimeSpan.Zero ? duration : null;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
     /// Només el títol i l'artista (per a l'historial), sense descodificar l'àudio.
     /// Mai no llança excepcions: si no es poden llegir, null.
     /// </summary>

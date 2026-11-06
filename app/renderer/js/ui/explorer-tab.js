@@ -7,7 +7,7 @@
 // - Doble clic a un àudio: s'escolta a la preescolta. Botó dret: més opcions.
 // El contingut de les carpetes el llegeix el motor (explorer.list): aquí només es mostra.
 
-import { escapeHtml } from './format.js';
+import { escapeHtml, formatDuration } from './format.js';
 import { showContextMenu } from './context-menu.js';
 import { togglePreview, previewButton } from './cue-actions.js';
 import { PATHS_DRAG_TYPE } from './drag-types.js';
@@ -17,7 +17,19 @@ import { choose } from './dialogs.js';
 /** @typedef {import('../store.js').Store} Store */
 /** @typedef {(cmd: string, params?: object) => Promise<any>} Request */
 /** @typedef {{ name: string, path: string, exists: boolean }} RootFolder */
-/** @typedef {{ name: string, path: string, size?: number }} Entry */
+/** @typedef {{ name: string, path: string, size?: number, duration?: number | null }} Entry */
+
+/**
+ * Ordenació de la llista (fase 5, pas 15; D-104). Per nom és l'ordre de l'Explorador de Windows («2» abans de «10»),
+ * que ja dona el motor. Per durada, només a Àudios; els que encara no se saben, al final.
+ * Les carpetes van sempre a dalt, per nom.
+ */
+const SORTS = {
+  name: 'Nom A→Z',
+  'name-desc': 'Nom Z→A',
+  duration: 'Més curts',
+  'duration-desc': 'Més llargs',
+};
 
 /** @type {any} API de preload.js */
 const bridge = /** @type {any} */ (window).onabages;
@@ -40,6 +52,11 @@ export class ExplorerTab {
   /** Error en llegir la carpeta (es mostra al lloc de la llista). @type {string | null} */ #error = null;
   /** Fitxers seleccionats (rutes). @type {Set<string>} */ #selected = new Set();
   /** @type {string | null} */ #anchor = null;
+  /** Ordenació triada (es recorda per pestanya). @type {keyof SORTS} */ #sort = 'name';
+  /** Àudios de la carpeta que encara no tenen durada: el motor la mesura i l'envia (explorer.durations). @type {Set<string>} */
+  #pendingDurations = new Set();
+  /** Temporitzador per tornar a pintar quan arriben durades (ordenació per durada). @type {number | undefined} */
+  #redrawTimer;
 
   /**
    * @param {'audios' | 'lists'} kind
@@ -68,13 +85,33 @@ export class ExplorerTab {
         <button class="btn btn-sm btn-outline-secondary ex-tool js-refresh" type="button" title="Tornar a llegir la carpeta"><i class="bi bi-arrow-clockwise"></i></button>
       </div>
       <div class="ex-crumbs js-crumbs"></div>
-      <input class="form-control form-control-sm ex-filter js-filter" type="search" placeholder="Filtrar per nom…" aria-label="Filtrar per nom">
+      <div class="ex-tools">
+        <input class="form-control form-control-sm ex-filter js-filter" type="search" placeholder="Filtrar per nom…" aria-label="Filtrar per nom">
+        <select class="form-select form-select-sm ex-sort js-sort" aria-label="Ordenar" title="Ordenar per nom o per durada">
+          ${Object.entries(SORTS)
+            .filter(([id]) => kind === 'audios' || !id.startsWith('duration'))
+            .map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}
+        </select>
+      </div>
       <div class="ex-rows js-rows" tabindex="0" aria-label="Contingut de la carpeta"></div>
       <div class="ex-status js-status"></div>`;
 
-    for (const name of ['manage', 'root', 'up', 'refresh', 'crumbs', 'filter', 'rows', 'status']) {
+    for (const name of ['manage', 'root', 'up', 'refresh', 'crumbs', 'filter', 'sort', 'rows', 'status']) {
       this.#el[name] = /** @type {HTMLElement} */ (this.element.querySelector(`.js-${name}`));
     }
+
+    // Ordenació (pas 15): la que es va triar l'última vegada en aquesta pestanya.
+    const sortSelect = /** @type {HTMLSelectElement} */ (this.#el.sort);
+    const savedSort = localStorage.getItem(`${this.#storageKey()}.sort`);
+    if (savedSort && [...sortSelect.options].some((o) => o.value === savedSort)) this.#sort = /** @type {keyof SORTS} */ (savedSort);
+    sortSelect.value = this.#sort;
+    sortSelect.addEventListener('change', () => {
+      this.#sort = /** @type {keyof SORTS} */ (sortSelect.value);
+      localStorage.setItem(`${this.#storageKey()}.sort`, this.#sort);
+      this.#renderRows();
+    });
+    // Durades que arriben del motor a mesura que les mesura.
+    if (kind === 'audios') store.addEventListener('explorerDurations', (e) => this.#onDurations(/** @type {any} */ (e).detail));
 
     this.#el.manage.addEventListener('click', () => this.#manageFolders());
     this.#el.root.addEventListener('change', () => {
@@ -130,6 +167,7 @@ export class ExplorerTab {
     this.#anchor = null;
     this.#listing = null;
     this.#error = null;
+    this.#pendingDurations = new Set();
     if (path) localStorage.setItem(this.#storageKey(), path);
     this.#renderCrumbs();
     this.#renderRows(path ? 'Llegint la carpeta…' : undefined);
@@ -139,6 +177,10 @@ export class ExplorerTab {
       const listing = await this.#request('explorer.list', { kind: this.#kind, path });
       if (this.#path !== path) return; // mentrestant s'ha anat a una altra carpeta
       this.#listing = listing;
+      // Els que no tenen durada i el motor encara mesura (els que no s'han pogut llegir ja venen sense, i no s'esperen).
+      this.#pendingDurations = new Set(listing.durationsPending > 0
+        ? listing.files.filter((/** @type {Entry} */ f) => f.duration == null).map((/** @type {Entry} */ f) => f.path)
+        : []);
     } catch (err) {
       if (this.#path !== path) return;
       this.#error = /** @type {Error} */ (err).message;
@@ -251,6 +293,20 @@ export class ExplorerTab {
     const matches = (/** @type {Entry} */ e) => !filter || normalize(e.name).includes(filter);
     const folders = this.#listing.folders.filter(matches);
     const files = this.#listing.files.filter(matches);
+    // Ordenació (pas 15): el motor ja les dona per nom, en l'ordre de l'Explorador.
+    if (this.#sort === 'name-desc') {
+      folders.reverse();
+      files.reverse();
+    } else if (this.#sort === 'duration' || this.#sort === 'duration-desc') {
+      const sign = this.#sort === 'duration' ? 1 : -1;
+      // Estable: amb la mateixa durada (o sense), es queda l'ordre per nom. Els que no se saben, al final.
+      files.sort((a, b) => {
+        const da = a.duration ?? null;
+        const db = b.duration ?? null;
+        if (da === null || db === null) return (da === null ? 1 : 0) - (db === null ? 1 : 0);
+        return sign * (da - db);
+      });
+    }
 
     if (folders.length === 0 && files.length === 0) {
       rows.innerHTML = `<div class="ex-empty">${filter ? 'Cap nom no coincideix amb el filtre.' : `Aquesta carpeta no té ${k.what} ni subcarpetes.`}</div>`;
@@ -264,6 +320,7 @@ export class ExplorerTab {
           <div class="ex-row ex-file${this.#selected.has(f.path) ? ' ex-selected' : ''}" draggable="true"
                data-path="${escapeHtml(f.path)}" title="${escapeHtml(f.name)}">
             <i class="bi ${k.fileIcon}"></i><span class="ex-name">${escapeHtml(f.name)}</span>
+            ${this.#kind === 'audios' ? `<span class="ex-dur">${this.#durationText(f)}</span>` : ''}
             ${this.#kind === 'audios' ? previewButton(this.#store.isPreviewing(f.path), 'data-action="preview"', 'ex-btn') : ''}
           </div>`),
       ].join('');
@@ -273,7 +330,48 @@ export class ExplorerTab {
     const counts = [`${files.length} ${k.what}`, `${folders.length} carpetes`];
     if (filter) counts.push(`filtre: «${/** @type {HTMLInputElement} */ (this.#el.filter).value.trim()}»`);
     if (this.#listing.truncated) counts.push('n\'hi ha més: no es mostren tots');
+    if (this.#pendingDurations.size > 0) counts.push(`mesurant durades (falten ${this.#pendingDurations.size})`);
     this.#el.status.textContent = counts.join(' · ');
+  }
+
+  /** Durada d'un àudio: «3:42»; «…» si encara es mesura; «—» si no s'ha pogut llegir. @param {Entry} f */
+  #durationText(f) {
+    if (f.duration != null) return formatDuration(f.duration);
+    return this.#pendingDurations.has(f.path) ? '…' : '—';
+  }
+
+  /**
+   * Durades noves del motor (explorer.durations). Si són d'aquesta carpeta, s'hi posen. Si s'ordena per durada,
+   * es torna a pintar la llista (com a molt, un cop cada mig segon); si no, només el text de cada fila.
+   * @param {Record<string, number | null>} durations
+   */
+  #onDurations(durations) {
+    if (!this.#listing) return;
+    let changed = false;
+    for (const file of this.#listing.files) {
+      if (!(file.path in durations)) continue;
+      file.duration = durations[file.path];
+      this.#pendingDurations.delete(file.path);
+      changed = true;
+    }
+    if (!changed) return;
+    if (this.#sort.startsWith('duration') || this.#pendingDurations.size === 0) {
+      if (this.#redrawTimer === undefined) {
+        this.#redrawTimer = window.setTimeout(() => {
+          this.#redrawTimer = undefined;
+          this.#renderRows();
+        }, 500);
+      }
+      return;
+    }
+    for (const row of this.#el.rows.querySelectorAll('.ex-file')) {
+      const path = /** @type {string} */ (/** @type {HTMLElement} */ (row).dataset.path);
+      if (!(path in durations)) continue;
+      const file = this.#listing.files.find((f) => f.path === path);
+      const cell = row.querySelector('.ex-dur');
+      if (file && cell) cell.textContent = this.#durationText(file);
+    }
+    this.#el.status.textContent = this.#el.status.textContent.replace(/falten \d+/, `falten ${this.#pendingDurations.size}`);
   }
 
   /** Encén la fila (i la 🎧) del fitxer que sona a la preescolta. */

@@ -29,7 +29,7 @@
 
   /* Mides de la distribució */
   --obp-topbar-h: calc(4rem * var(--obp-ui-scale));
-  --obp-panel-w: calc(21rem * var(--obp-ui-scale));         /* panell lateral obert (sense la franja) */
+  --obp-panel-w: calc(28rem * var(--obp-ui-scale));         /* panell lateral obert (sense la franja); 21rem fins a D-104 */
   --obp-strip-w: calc(2.6rem * var(--obp-ui-scale));        /* franja d'icones del panell lateral */
   --obp-player-min-w: calc(16rem * var(--obp-ui-scale));    /* més estret, els reproductors passen a una altra fila */
   --obp-recorder-min-w: calc(15rem * var(--obp-ui-scale));
@@ -439,9 +439,23 @@ body.engine-offline .side-content {
 .ex-crumb:hover { text-decoration: underline; }
 .ex-crumb-sep { font-size: 0.65rem; color: var(--bs-secondary-color); }
 
-.ex-filter {
+/* Filtre i ordenació, en una fila (pas 15). */
+.ex-tools {
+  display: flex;
+  gap: 0.3rem;
   margin: 0.3rem 0.4rem;
+}
+
+.ex-filter {
+  flex: 1;
+  min-width: 0;
   width: auto;
+}
+
+.ex-sort {
+  flex: none;
+  width: auto;
+  max-width: 11rem;
 }
 
 .ex-rows {
@@ -476,6 +490,13 @@ body.engine-offline .side-content {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Durada de cada àudio (pas 15), alineada a la dreta, abans de la 🎧. */
+.ex-dur {
+  flex: none;
+  color: var(--bs-secondary-color);
+  font-variant-numeric: tabular-nums;
 }
 
 .ex-btn {

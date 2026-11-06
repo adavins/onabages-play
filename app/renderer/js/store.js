@@ -15,6 +15,7 @@
 //   'cue'              ha canviat la preescolta (estat, pista, sortida, volum)
 //   'cuePosition'      posició nova de la preescolta (10 per segon, mentre sona)
 //   'meters'           nivells nous dels mesuradors (25 per segon)
+//   'explorerDurations' durades noves d'àudios de l'explorador (detail: { ruta: segons | null }; fase 5, pas 15)
 
 /** @typedef {import('./engine-client.js').EngineClient} EngineClient */
 
@@ -70,6 +71,8 @@ export class Store extends EventTarget {
       Object.assign(this.cue, { position, duration, format: format ?? this.cue.format });
       this.#emit('cuePosition');
     });
+    // Durades dels àudios de l'explorador (pas 15): no es guarden aquí, les fa servir la pestanya Àudios.
+    client.addEventListener('ev:explorer.durations', (e) => this.#emit('explorerDurations', /** @type {any} */ (e).detail.durations));
     client.addEventListener('ev:meters', (e) => {
       this.meters = /** @type {any} */ (e).detail;
       this.#emit('meters');

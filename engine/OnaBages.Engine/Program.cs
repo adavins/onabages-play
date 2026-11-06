@@ -128,6 +128,16 @@ void Broadcast(System.Text.Json.Nodes.JsonObject ev) => _ = Task.Run(async () =>
     catch (OperationCanceledException) { /* el motor s'està aturant */ }
 });
 
+// Durada dels àudios de l'explorador (fase 5, pas 15a): a grups, a mesura que el fil de prioritat baixa les mesura.
+state.Durations.Measured += batch =>
+{
+    var durations = new System.Text.Json.Nodes.JsonObject();
+    foreach (var (path, seconds) in batch) durations[path] = seconds;
+    var ev = Messages.Event("explorer.durations");
+    ev["durations"] = durations;
+    Broadcast(ev);
+};
+
 foreach (var player in state.Players)
 {
     string lastLogged = "";

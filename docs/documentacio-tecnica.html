@@ -307,7 +307,8 @@ npm start
     <li>Els àudios no es copien mai a la configuració: només se'n guarden les rutes.</li>
   </ul>
   <p>Excepció acceptada: la posició i la mida de les finestres (<code>finestres.json</code>) les desa Electron,
-    perquè s'ha de saber abans de connectar-se al motor.</p>
+    perquè s'ha de saber abans de connectar-se al motor. La de la finestra principal es desa per a cada perfil (D-099):
+    la interfície diu a Electron quin és el perfil actiu, i en canviar de perfil la finestra va on era la d'aquell perfil.</p>
   <table>
     <tr><th>Fitxer o carpeta</th><th>Què hi ha</th></tr>
     <tr><td><code>config.json</code></td><td>Ajustos de l'ordinador: perfil actiu, dispositius coneguts, zoom, sortida de

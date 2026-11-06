@@ -450,23 +450,44 @@ function windowStatesFile() {
   return path.join(app.getPath('userData'), 'finestres.json');
 }
 
-/** @returns {Record<string, { x: number, y: number, width: number, height: number, maximized: boolean }>} */
-function readWindowStates() {
+// Versió 2 (fase 5, D-099): la finestra principal es desa també per perfil («profiles»), i «lastProfile» diu
+// quin era l'actiu en tancar (per obrir-la al seu lloc abans de saber-ho del motor). «windows.main» és l'última
+// posició, per a un perfil que encara no en té cap. Un fitxer de la versió 1 es llegeix igual (sense perfils).
+
+/** @typedef {{ x: number, y: number, width: number, height: number, maximized: boolean }} WindowState */
+
+/** @returns {{ windows: Record<string, WindowState>, profiles: Record<string, WindowState>, lastProfile: string | null }} */
+function readWindowFile() {
   try {
     const data = JSON.parse(fs.readFileSync(windowStatesFile(), 'utf8'));
-    if (data && data.schemaVersion === 1 && data.windows && typeof data.windows === 'object') return data.windows;
+    if (data && (data.schemaVersion === 1 || data.schemaVersion === 2) && data.windows && typeof data.windows === 'object') {
+      return {
+        windows: data.windows,
+        profiles: data.profiles && typeof data.profiles === 'object' ? data.profiles : {},
+        lastProfile: typeof data.lastProfile === 'string' ? data.lastProfile : null,
+      };
+    }
   } catch { /* encara no n'hi ha, o està malmès */ }
-  return {};
+  return { windows: {}, profiles: {}, lastProfile: null };
 }
+
+/** @returns {Record<string, WindowState>} */
+function readWindowStates() {
+  return readWindowFile().windows;
+}
+
+/** Perfil actiu del motor, segons la interfície (null fins que es connecta). */
+let windowProfile = null;
 
 /**
  * Opcions de mida i posició per crear una finestra: les desades si encara caben en alguna
- * pantalla (potser s'ha desconnectat un monitor), o les per defecte.
+ * pantalla (potser s'ha desconnectat un monitor), o les per defecte. La principal, la de l'últim perfil.
  * @param {string} name  'main' o 'editor'
  * @param {{ width: number, height: number, minWidth: number, minHeight: number }} defaults
  */
 function windowBounds(name, defaults) {
-  const saved = readWindowStates()[name];
+  const file = readWindowFile();
+  const saved = (name === 'main' && file.lastProfile ? file.profiles[file.lastProfile] : null) ?? file.windows[name];
   const valid = saved && ['x', 'y', 'width', 'height'].every((k) => Number.isFinite(saved[k]));
   if (!valid || !isOnSomeDisplay(saved)) return { bounds: { ...defaults }, maximized: false };
   return {
@@ -493,18 +514,70 @@ function isOnSomeDisplay(/** @type {{ x: number, y: number, width: number }} */ 
 /** Desa on és la finestra (si està maximitzada, la mida que tenia abans, i que ho estava). */
 function saveWindowState(/** @type {string} */ name, /** @type {BrowserWindow} */ win) {
   try {
-    const windows = readWindowStates();
+    const { windows, profiles, lastProfile } = readWindowFile();
     // La principal, sense l'amplada que ha guanyat per al panell lateral (en tornar a obrir-la, és plegat).
     const bounds = win === mainWindow ? mainBoundsWithoutSidePanel() : win.getNormalBounds();
-    windows[name] = { ...bounds, maximized: win.isMaximized() };
+    const state = { ...bounds, maximized: win.isMaximized() };
+    windows[name] = state;
+    // La principal, també la del perfil actiu (D-099).
+    if (win === mainWindow && windowProfile) profiles[windowProfile] = state;
+    const last = win === mainWindow ? (windowProfile ?? lastProfile) : lastProfile;
     // Escriptura atòmica: fitxer temporal i substitució.
     const file = windowStatesFile();
     const temp = `${file}.tmp`;
-    fs.writeFileSync(temp, JSON.stringify({ schemaVersion: 1, windows }, null, 2), 'utf8');
+    fs.writeFileSync(temp, JSON.stringify({ schemaVersion: 2, windows, profiles, lastProfile: last }, null, 2), 'utf8');
     fs.renameSync(temp, file);
   } catch (err) {
     console.warn('No s\'ha pogut desar la posició de la finestra', err);
   }
+}
+
+/**
+ * La interfície diu quin és el perfil actiu (en connectar-se al motor, també després de canviar de perfil).
+ * Si ha canviat, es desa on era la finestra per a l'anterior i es posa on era la del nou (si en té).
+ * Si el panell lateral està obert, la finestra continua oberta amb el panell (més ampla).
+ */
+ipcMain.on('ui:window-profile', (_event, profileId) => {
+  if (typeof profileId !== 'string' || profileId === '' || profileId === windowProfile) return;
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    windowProfile = profileId;
+    return;
+  }
+  if (windowProfile) saveWindowState('main', mainWindow); // la de l'anterior
+  windowProfile = profileId;
+
+  const saved = readWindowFile().profiles[profileId];
+  const valid = saved && ['x', 'y', 'width', 'height'].every((k) => Number.isFinite(saved[k]));
+  if (!valid || !isOnSomeDisplay(saved)) {
+    saveWindowState('main', mainWindow); // el perfil nou es queda on és ara
+    return;
+  }
+  applyMainWindowState(saved);
+});
+
+/** Posa la finestra principal on diu `state` (amb el panell lateral, si està obert). @param {WindowState} state */
+function applyMainWindowState(state) {
+  if (!mainWindow) return;
+  if (mainWindow.isFullScreen()) mainWindow.setFullScreen(false);
+  if (mainWindow.isMaximized() && !state.maximized) mainWindow.unmaximize();
+
+  const bounds = {
+    x: Math.round(state.x),
+    y: Math.round(state.y),
+    width: Math.max(Math.round(state.width), 512),
+    height: Math.max(Math.round(state.height), 340),
+  };
+  if (sidePanelGrowth && !state.maximized) {
+    // El panell continua obert: la finestra hi guanya la mateixa amplada (cap a l'esquerra si no hi cap).
+    const area = screen.getDisplayMatching(bounds).workArea;
+    const width = Math.min(bounds.width + sidePanelGrowth.extra, area.width);
+    const x = Math.max(area.x, Math.min(bounds.x, area.x + area.width - width));
+    sidePanelGrowth = { extra: width - bounds.width, movedLeft: bounds.x - x };
+    mainWindow.setBounds({ ...bounds, x, width });
+  } else {
+    mainWindow.setBounds(bounds);
+  }
+  if (state.maximized && !mainWindow.isMaximized()) mainWindow.maximize();
 }
 
 // ---------------------------------------------------------------------------

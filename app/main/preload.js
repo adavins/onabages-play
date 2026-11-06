@@ -71,6 +71,9 @@ contextBridge.exposeInMainWorld('onabages', {
   /** Alçada de la capçalera (píxels CSS), perquè els botons de la finestra hi encaixin (D-060). */
   setTopbarHeight: (cssHeight) => ipcRenderer.send('ui:topbar-height', cssHeight),
 
+  /** Perfil actiu (D-099): la finestra principal es posa on era la d'aquest perfil, i s'hi desa. */
+  setWindowProfile: (profileId) => ipcRenderer.send('ui:window-profile', profileId),
+
   /** La interfície confirma que la finestra es pot tancar. */
   confirmClose: () => ipcRenderer.send('app:close-confirmed'),
 

@@ -189,6 +189,8 @@ async function onConnectionStatus(e) {
 
       const { settings } = await client.request('settings.get');
       applySettings(settings);
+      // La finestra va on era la d'aquest perfil (D-099; també després de canviar de perfil).
+      if (settings.profile?.id) bridge.setWindowProfile(settings.profile.id);
 
       await store.refresh();
     } catch (err) {

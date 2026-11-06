@@ -16,7 +16,7 @@ import { choose } from './ui/dialogs.js';
 import { setupProfileMenu } from './ui/profile-menu.js';
 import { setupHelpMenu } from './ui/help-menu.js';
 import { chooseStartupProfile } from './ui/startup-profile.js';
-import { activeProfile, requirePin, markUnlocked, lockAll, minutesLeft, pinEvents } from './ui/pin-lock.js';
+import { activeProfile, requirePin, markUnlocked, lockAll, keepOnlyUnlocked, minutesLeft, pinEvents } from './ui/pin-lock.js';
 import { setupSidePanel } from './ui/side-panel.js';
 import { setupZoom, applyZoom } from './ui/zoom.js';
 import { formatDuration } from './ui/format.js';
@@ -148,9 +148,11 @@ async function restartEngine() {
 /**
  * Canvi de perfil (D-058): el motor ja s'està aturant. Electron espera que s'aturi i n'arrenca un
  * de nou, que llegeix el perfil triat; aquí ens hi tornem a connectar i es tornen a muntar els panells.
- * @param {{ name: string }} profile
+ * @param {{ id: string, name: string }} profile
  */
 async function restartForProfile(profile) {
+  // PIN (pas 13c): només queda desbloquejat el perfil on s'entra; els altres el tornaran a demanar.
+  keepOnlyUnlocked(profile.id);
   client?.close(); // sense els reintents normals: ara és normal que el motor no respongui
   setStatus('connecting', `Canviant al perfil «${profile.name}»…`);
   try {

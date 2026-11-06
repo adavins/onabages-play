@@ -15,7 +15,7 @@ import { requirePin } from './pin-lock.js';
 
 /**
  * @param {{ request: Request, busy: { playing: string[], recording: string[] },
- *           onSwitch: (profile: { name: string }) => Promise<void> }} options
+ *           onSwitch: (profile: { id: string, name: string }) => Promise<void> }} options
  *   onSwitch: el motor s'està aturant per canviar de perfil; cal tornar-lo a arrencar
  */
 export async function chooseStartupProfile({ request, busy, onSwitch }) {

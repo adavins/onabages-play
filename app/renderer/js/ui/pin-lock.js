@@ -41,6 +41,16 @@ export function markUnlocked(id) {
   changed();
 }
 
+/**
+ * En canviar de perfil: només es manté desbloquejat el perfil on s'entra (s'hi acaba d'entrar el PIN);
+ * els altres es tornen a bloquejar. Així, en tornar a un perfil anterior, es torna a demanar el seu PIN.
+ * @param {string} id
+ */
+export function keepOnlyUnlocked(id) {
+  for (const other of [...unlocked.keys()]) if (other !== id) unlocked.delete(other);
+  changed();
+}
+
 /** Torna a demanar el PIN a tots els perfils (cadenat de la barra). */
 export function lockAll() {
   unlocked.clear();

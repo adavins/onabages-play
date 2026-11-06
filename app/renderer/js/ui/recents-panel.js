@@ -2,8 +2,10 @@
 // Panell «Recents»: enregistraments acabats que ja no són el pendent de cap enregistrador
 // (especificació 8.3, docs/protocol.md 4.6). El més nou, a dalt.
 // Accions de cada un: Preescoltar, Desar, Mostrar a l'Explorador, Descartar i Treure de la llista.
+// «Netejar» (fase 5, D-089) treu els desats i els no trobats; si n'hi ha de no desats, pregunta.
 
 import { saveRecording, discardRecording } from './recording-actions.js';
+import { choose } from './dialogs.js';
 import { togglePreview, previewButton } from './cue-actions.js';
 import { escapeHtml, fileName, formatBytes, formatDuration } from './format.js';
 
@@ -22,6 +24,7 @@ export class RecentsPanel {
   #request;
   /** @type {HTMLElement} */ #list;
   /** @type {HTMLElement} */ #count;
+  /** @type {HTMLButtonElement} */ #clear;
   /** @type {HTMLElement} */ #message;
   /** @type {number | undefined} */ #messageTimer;
   /** Què es va dibuixar l'última vegada: si no ha canviat, no es torna a dibuixar. */
@@ -41,7 +44,10 @@ export class RecentsPanel {
     this.element.innerHTML = `
       <div class="card-header panel-header">
         <span class="panel-title"><i class="bi bi-clock-history"></i> Recents</span>
-        <span class="rc-count js-count"></span>
+        <span class="panel-header-right">
+          <span class="rc-count js-count"></span>
+          <button class="btn btn-sm dsp-btn js-clear" type="button"><i class="bi bi-eraser"></i> Netejar</button>
+        </span>
       </div>
       <div class="card-body panel-body rc-body">
         <div class="message-text js-message"></div>
@@ -52,6 +58,8 @@ export class RecentsPanel {
     this.#count = /** @type {HTMLElement} */ (this.element.querySelector('.js-count'));
     this.#message = /** @type {HTMLElement} */ (this.element.querySelector('.js-message'));
     this.#list.addEventListener('click', (e) => this.#onClick(e));
+    this.#clear = /** @type {HTMLButtonElement} */ (this.element.querySelector('.js-clear'));
+    this.#clear.addEventListener('click', () => this.#clearList());
 
     this.render();
   }
@@ -68,6 +76,11 @@ export class RecentsPanel {
     this.#key = key;
 
     this.#count.textContent = items.length > 0 ? String(items.length) : '';
+    const { removable, unsaved } = clearable(items);
+    this.#clear.disabled = removable + unsaved === 0;
+    this.#clear.title = removable + unsaved === 0
+      ? 'No hi ha res a netejar'
+      : 'Treure de la llista els desats i els no trobats (els fitxers no es toquen). Si n\'hi ha de no desats, es pregunta.';
     if (items.length === 0) {
       this.#list.innerHTML = '<div class="pl-empty"><i class="bi bi-inbox"></i> Encara no hi ha enregistraments acabats.</div>';
       return;
@@ -149,11 +162,53 @@ export class RecentsPanel {
     if (message) this.#showMessage(message);
   }
 
+  /**
+   * Netejar: els desats i els no trobats es treuen sense preguntar (no es perd res de vista que calgui).
+   * Si n'hi ha de no desats, es pregunta: els fitxers no s'esborren, però deixarien de sortir aquí.
+   */
+  async #clearList() {
+    const items = this.#store.recordings.filter((i) => !this.#store.isPending(i));
+    const { removable, unsaved } = clearable(items);
+    let includeUnsaved = false;
+    if (unsaved > 0) {
+      const which = unsaved === 1
+        ? 'Hi ha 1 enregistrament que encara no s\'ha desat.'
+        : `Hi ha ${unsaved} enregistraments que encara no s'han desat.`;
+      /** @type {{ label: string, value: string, style?: string }[]} */
+      const buttons = [{ label: 'Cancel·lar', value: 'cancel' }];
+      if (removable > 0) buttons.push({ label: 'Només els desats', value: 'saved', style: 'primary' });
+      buttons.push({ label: 'Treure\'ls tots', value: 'all', style: removable > 0 ? 'outline-warning' : 'warning' });
+      const choice = await choose({
+        title: 'Netejar Recents',
+        icon: 'bi-eraser',
+        message: `${which}\nSi els treus de la llista, els fitxers no s'esborren (són a la carpeta de treball i a l'historial d'enregistraments), però ja no sortiran aquí.`,
+        buttons,
+      });
+      if (choice === 'cancel') return;
+      includeUnsaved = choice === 'all';
+    }
+    try {
+      await this.#request('recordings.clear', { includeUnsaved });
+    } catch (err) {
+      this.#showMessage(/** @type {Error} */ (err).message);
+    }
+  }
+
   #showMessage(/** @type {string} */ text) {
     this.#message.textContent = text;
     clearTimeout(this.#messageTimer);
     this.#messageTimer = window.setTimeout(() => { this.#message.textContent = ''; }, MESSAGE_MS);
   }
+}
+
+/**
+ * Què es pot netejar (com ho fa el motor amb recordings.clear): quants són desats o no trobats, i quants
+ * no s'han desat. Els que s'estan desant no compten.
+ */
+function clearable(/** @type {any[]} */ items) {
+  const free = items.filter((i) => !i.busy);
+  const removable = free.filter((i) => i.saved || !i.exists).length;
+  return { removable, unsaved: free.length - removable };
 }
 
 /** Hora d'inici: «14:22» si és d'avui; si no, «03/11 14:22». */

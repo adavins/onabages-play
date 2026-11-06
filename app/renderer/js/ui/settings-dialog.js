@@ -22,7 +22,7 @@ const MAX_ARCHIVE_DAYS = 3650;
 /**
  * @param {any} settings  objecte settings del motor
  * @param {{ players: number, recorders: number }} running  quants n'hi ha ara al motor
- * @returns {Promise<{ ui: object, layout: object, program: object, loudness: object, trim: object, recorderLimiter: object, recordingArchive: object } | null>}
+ * @returns {Promise<{ ui: object, layout: object, program: object, loudness: object, trim: object, recorderLimiter: object, recordingArchive: object, recents: object } | null>}
  */
 export function editSettings(settings, running) {
   const options = (/** @type {number} */ max, /** @type {number} */ selected) =>
@@ -134,6 +134,15 @@ export function editSettings(settings, running) {
         Als enregistradors amb el botó LIM encès, el que es desa no passa d'aquest nivell: el limitador abaixa el volum
         just abans d'un cop, sense retallar-lo, i per sota del sostre no toca res. S'aplica de seguida.
         Amb −1,0 dB, l'MP3 no passa de 0 dB en reproduir-lo; amb −0,1 dB, en pot passar una mica.
+      </div>
+
+      <div class="form-check form-switch mb-1">
+        <input id="st-clear-recents" class="form-check-input" type="checkbox" role="switch"${settings.recents?.clearOnExit ? ' checked' : ''}>
+        <label class="form-check-label" for="st-clear-recents">Netejar Recents en tancar l'aplicació</label>
+      </div>
+      <div class="form-text mb-3">
+        Es treuen de la llista els enregistraments desats i els que ja no es troben. Els no desats es queden, perquè no
+        te n'oblidis. Els fitxers no es toquen.
       </div>
 
       <div class="form-check form-switch mb-1">
@@ -289,6 +298,7 @@ export function editSettings(settings, running) {
           program: { name: $('#st-program').value.trim() },
           loudness: { targetLufs: Number($('#st-loudness').value) },
           recorderLimiter: { ceilingDb: Number($('#st-limiter').value) },
+          recents: { clearOnExit: $('#st-clear-recents').checked },
           recordingArchive: {
             enabled: archiveSwitch.checked,
             folder: chosenArchiveFolder,

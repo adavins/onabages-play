@@ -209,13 +209,6 @@ var config = new ConfigStore(configRepository);
 config.Warning += message => log.LogWarning("Configuració: {Message}", message);
 var hardware = new HardwareAssignments(state, config);
 
-// «Netejar Recents en tancar l'aplicació» (fase 5, pas 11a): es fa en arrencar, abans que la interfície vegi la
-// llista (així també es fa si l'ordinador va caure). Només els desats i els no trobats: els no desats es queden.
-if (config.Read(c => c.ClearRecentsOnExit))
-{
-    var (cleared, _) = recordings.Clear(includeUnsaved: false);
-    if (cleared > 0) log.LogInformation("Recents: s'han tret {Count} enregistraments desats o no trobats.", cleared);
-}
 hardware.Warning += message => log.LogWarning("Maquinari: {Message}", message);
 
 // Editor (fase 3): cada canvi va a la interfície; al registre, obrir, desar, reproduir i els errors.
@@ -319,6 +312,14 @@ catch (Exception ex)
 
 // Comparació del maquinari amb la configuració desada (especificació 5.6).
 LogHardwareReport(hardware.Start(devicesAtStart));
+
+// «Netejar Recents en tancar l'aplicació» (fase 5, pas 11a): es fa en arrencar (amb la configuració ja llegida), abans que la interfície vegi la
+// llista (així també es fa si l'ordinador va caure). Només els desats i els no trobats: els no desats es queden.
+if (config.Read(c => c.ClearRecentsOnExit))
+{
+    var (cleared, _) = recordings.Clear(includeUnsaved: false);
+    if (cleared > 0) log.LogInformation("Recents: s'han tret {Count} enregistraments desats o no trobats.", cleared);
+}
 
 // Nom, carpeta i volum de cada enregistrador (config.json; ja s'ha llegit en començar el maquinari).
 foreach (var recorder in state.Recorders)

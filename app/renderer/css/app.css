@@ -1098,6 +1098,12 @@ body.engine-offline .side-content {
   flex-wrap: wrap;
 }
 
+/* Botons just després d'un camp (askText: «Perfil nou», «Canviar el nom»...; pickOne sense missatge). */
+.obp-dialog .form-control + .obp-dialog-buttons,
+.obp-dialog .form-select + .obp-dialog-buttons {
+  margin-top: 1.5rem;
+}
+
 /* Cadenat de la barra (pas 13c): el text dels minuts, una mica més petit que la icona. */
 .btn-lock span { font-size: 0.8rem; vertical-align: middle; }
 
@@ -1108,7 +1114,10 @@ body.engine-offline .side-content {
 /* PIN d'un perfil (js/ui/dialogs.js, askPin; pas 13) */
 .obp-pin { width: 22rem; }
 .obp-pin-input { font-size: 1.4rem; letter-spacing: 0.3em; text-align: center; }
-.obp-pin-error { min-height: 1.5rem; margin: 0.5rem 0; }
+.obp-pin .form-label { margin-bottom: 0.6rem; }
+.obp-pin-error { margin-top: 0.75rem; }
+/* El text d'error buit s'amaga (.error-text:empty): l'espai el posen els botons, perquè hi sigui sempre. */
+.obp-pin .obp-dialog-buttons { margin-top: 1.5rem; }
 
 /* Finestra inicial per triar el perfil (js/ui/startup-profile.js; pas 13b) */
 .obp-startup { width: min(40rem, 92vw); max-width: none; }
@@ -1138,7 +1147,8 @@ body.engine-offline .side-content {
 .obp-startup-profile.last { border-color: var(--bs-primary); }
 .obp-startup-name { font-size: 1.15rem; font-weight: 600; overflow-wrap: anywhere; }
 .obp-startup-info { font-size: 0.85rem; color: var(--bs-secondary-color); }
-.obp-startup .error-text { min-height: 1.5rem; margin: 0.5rem 0; }
+.obp-startup .error-text { margin-top: 0.75rem; }
+.obp-startup .obp-dialog-buttons { margin-top: 1.5rem; }
 
 /* Mesurador en un panell estret: menys marques a l'escala perquè no es trepitgin. */
 @container (max-width: 21rem) {

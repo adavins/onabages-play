@@ -16,6 +16,7 @@ import { choose } from './ui/dialogs.js';
 import { setupProfileMenu } from './ui/profile-menu.js';
 import { setupHelpMenu } from './ui/help-menu.js';
 import { chooseStartupProfile } from './ui/startup-profile.js';
+import { activeProfile, requirePin, markUnlocked, lockAll, minutesLeft, pinEvents } from './ui/pin-lock.js';
 import { setupSidePanel } from './ui/side-panel.js';
 import { setupZoom, applyZoom } from './ui/zoom.js';
 import { formatDuration } from './ui/format.js';
@@ -42,6 +43,7 @@ const els = {
   settings: $('btn-settings'),
   editor: $('btn-editor'),
   help: /** @type {HTMLButtonElement} */ ($('btn-help')),
+  lock: /** @type {HTMLButtonElement} */ ($('btn-lock')),
   restartNotice: $('restart-notice'),
   programName: $('program-name'),
   profile: $('btn-profile'),
@@ -83,6 +85,7 @@ els.restart.addEventListener('click', restartEngine);
 els.settings.addEventListener('click', openSettings);
 els.editor.addEventListener('click', () => bridge?.openEditor());
 setupHelpMenu(els.help);
+setupLockButton();
 setupProfileMenu({ button: els.profile, request, onSettings: applySettings, onSwitch: restartForProfile });
 setupShortcuts(store, request, (playerId, text) => playerPanels.get(playerId)?.showMessage(text));
 init();
@@ -373,7 +376,24 @@ function applySettings(settings) {
 /** Botó ⚙: finestra de configuració. */
 async function openSettings() {
   if (!client?.connected || !store.settings) return;
-  const changes = await editSettings(store.settings, { players: store.players.size, recorders: store.recorders.size });
+  // PIN del perfil actiu (pas 13c), si en té i no està desbloquejat.
+  let profile;
+  try {
+    profile = await activeProfile(request);
+  } catch {
+    return;
+  }
+  if (!profile || !(await requirePin(request, profile, 'obrir la configuració'))) return;
+  const pin = {
+    profileName: profile.name,
+    hasPin: !!profile.hasPin,
+    /** @param {string | null} value */
+    set: async (value) => {
+      await request('profile.setPin', { profile: profile.id, pin: value });
+      if (value !== null) markUnlocked(profile.id); // qui l'acaba de posar no l'ha de tornar a escriure
+    },
+  };
+  const changes = await editSettings(store.settings, { players: store.players.size, recorders: store.recorders.size }, pin);
   if (!changes) return;
   try {
     const { settings } = await client.request('settings.set', changes);
@@ -398,6 +418,23 @@ function startClock() {
   };
   tick();
   setInterval(tick, 250);
+}
+
+// ---------------------------------------------------------------------------
+// Cadenat del PIN (pas 13c): visible mentre algun perfil està desbloquejat; un clic el torna a bloquejar.
+// ---------------------------------------------------------------------------
+
+function setupLockButton() {
+  const update = () => {
+    const minutes = minutesLeft();
+    els.lock.classList.toggle('d-none', minutes === 0);
+    /** @type {HTMLElement} */ (els.lock.querySelector('.js-lock-label')).textContent = ` ${minutes} min`;
+    els.lock.title = `PIN entrat: no es tornarà a demanar durant ${minutes} min. Clica per demanar-lo de nou ara.`;
+  };
+  els.lock.addEventListener('click', () => lockAll());
+  pinEvents.addEventListener('change', update);
+  setInterval(update, 30_000); // els minuts que queden, al tooltip
+  update();
 }
 
 // ---------------------------------------------------------------------------

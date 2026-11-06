@@ -6,8 +6,9 @@
 // marcat i amb el focus: Retorn hi entra) i «Perfil nou…». Un perfil amb PIN demana el PIN.
 // No es pot tancar sense triar (amb Esc torna a sortir): si no, es podria entrar sense el PIN.
 
-import { askPin, askText } from './dialogs.js';
+import { askText } from './dialogs.js';
 import { escapeHtml } from './format.js';
+import { requirePin } from './pin-lock.js';
 
 /** @typedef {(cmd: string, params?: object) => Promise<any>} Request */
 /** @typedef {{ id: string, name: string, active: boolean, hasPin: boolean }} Profile */
@@ -63,14 +64,8 @@ export async function chooseStartupProfile({ request, busy, onSwitch }) {
 
   /** @param {Profile} profile */
   const choose = async (profile) => {
-    if (profile.hasPin) {
-      const ok = await askPin({
-        title: profile.name,
-        message: 'Escriu el PIN d\'aquest perfil:',
-        check: async (pin) => (await request('profile.checkPin', { profile: profile.id, pin })).valid,
-      });
-      if (!ok) return;
-    }
+    // Amb el PIN entrat, el perfil queda desbloquejat: ⚙ no el torna a demanar de seguida (pas 13c).
+    if (!(await requirePin(request, profile, 'entrar-hi'))) return;
     if (profile.active) {
       finish();
       return;

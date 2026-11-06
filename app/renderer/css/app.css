@@ -1098,6 +1098,13 @@ body.engine-offline .side-content {
   flex-wrap: wrap;
 }
 
+/* Cadenat de la barra (pas 13c): el text dels minuts, una mica més petit que la icona. */
+.btn-lock span { font-size: 0.8rem; vertical-align: middle; }
+
+/* PIN del perfil a ⚙ Configuració (pas 13c) */
+.obp-pin-row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.obp-pin-status { margin-right: auto; }
+
 /* PIN d'un perfil (js/ui/dialogs.js, askPin; pas 13) */
 .obp-pin { width: 22rem; }
 .obp-pin-input { font-size: 1.4rem; letter-spacing: 0.3em; text-align: center; }

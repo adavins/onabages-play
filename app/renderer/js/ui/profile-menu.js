@@ -5,8 +5,9 @@
 
 import { showContextMenu } from './context-menu.js';
 import { choose, askText, pickOne } from './dialogs.js';
+import { requirePin, activeProfile } from './pin-lock.js';
 
-/** @typedef {{ id: string, name: string, active: boolean }} Profile */
+/** @typedef {{ id: string, name: string, active: boolean, hasPin?: boolean }} Profile */
 
 /** @type {any} API de preload.js (diàlegs de fitxer) */
 const bridge = /** @type {any} */ (window).onabages;
@@ -98,6 +99,9 @@ export function setupProfileMenu({ button, request, onSettings, onSwitch }) {
 
   /** Importa un perfil d'un .zip com a perfil nou; si el nom ja existeix, en demana un altre. */
   async function importProfile() {
+    // PIN del perfil actiu (pas 13c): importar és un canvi delicat.
+    const current = await activeProfile(request).catch(() => null);
+    if (current && !(await requirePin(request, current, 'importar un perfil'))) return;
     const path = await bridge?.openProfileFile();
     if (!path) return;
 
@@ -178,6 +182,7 @@ export function setupProfileMenu({ button, request, onSettings, onSwitch }) {
   /** @param {Profile | undefined} profile */
   async function rename(profile) {
     if (!profile) return;
+    if (!(await requirePin(request, profile, 'canviar-li el nom'))) return;
     const name = await askText({
       title: 'Canviar el nom del perfil',
       icon: 'bi-pencil',
@@ -219,6 +224,7 @@ export function setupProfileMenu({ button, request, onSettings, onSwitch }) {
     });
     if (id === null) return;
     const profile = others.find((p) => p.id === id);
+    if (!profile || !(await requirePin(request, profile, 'eliminar-lo'))) return;
 
     const choice = await choose({
       title: 'Eliminar el perfil',
@@ -243,6 +249,7 @@ export function setupProfileMenu({ button, request, onSettings, onSwitch }) {
    * @param {{ confirmed?: boolean }} [options]
    */
   async function switchTo(profile, { confirmed = false } = {}) {
+    if (!(await requirePin(request, profile, 'canviar-hi'))) return;
     if (!confirmed) {
       const choice = await choose({
         title: 'Canviar de perfil',

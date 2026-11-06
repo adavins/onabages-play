@@ -8,6 +8,8 @@
 import { ZOOM_STEPS } from './zoom.js';
 import { SHORTCUTS_HELP } from './shortcuts.js';
 import { escapeHtml } from './format.js';
+import { askNewPin, choose } from './dialogs.js';
+import { UNLOCK_MINUTES } from './pin-lock.js';
 
 /** Límits (els mateixos que comprova el motor). */
 const MAX_PLAYERS = 6;
@@ -33,9 +35,11 @@ let lastTab = 'general';
 /**
  * @param {any} settings  objecte settings del motor
  * @param {{ players: number, recorders: number }} running  quants n'hi ha ara al motor
+ * @param {{ profileName: string, hasPin: boolean, set: (pin: string | null) => Promise<void> }} pin
+ *   PIN del perfil actiu (pas 13c): `set` el desa de seguida al motor (null el treu)
  * @returns {Promise<{ ui: object, layout: object, program: object, loudness: object, trim: object, recorderLimiter: object, recordingArchive: object, recents: object } | null>}
  */
-export function editSettings(settings, running) {
+export function editSettings(settings, running, pin) {
   const options = (/** @type {number} */ max, /** @type {number} */ selected) =>
     Array.from({ length: max }, (_, i) => i + 1)
       .map((n) => `<option value="${n}"${n === selected ? ' selected' : ''}>${n}</option>`).join('');
@@ -100,6 +104,20 @@ export function editSettings(settings, running) {
       <div class="message-text mb-2 js-restart"><i class="bi bi-arrow-repeat"></i>
         El nombre de reproductors i enregistradors s'aplicarà quan tornis a obrir l'aplicació
         (ara n'hi ha ${running.players} i ${running.recorders}). Si en treus algun, la seva configuració no s'esborra.
+      </div>
+
+      <h3 class="obp-settings-section">PIN del perfil «${escapeHtml(pin.profileName)}»</h3>
+      <div class="obp-pin-row">
+        <span class="obp-pin-status js-pin-status"></span>
+        <button class="btn btn-sm btn-outline-secondary js-pin-set" type="button"></button>
+        <button class="btn btn-sm btn-outline-danger js-pin-remove" type="button"><i class="bi bi-unlock"></i> Treure el PIN</button>
+      </div>
+      <div class="error-text js-pin-error"></div>
+      <div class="form-text mb-3">
+        Es demana per entrar en aquest perfil, obrir ⚙ Configuració, i canviar el nom, eliminar o importar perfils.
+        Mai en les accions del directe. Un cop entrat, no es torna a demanar durant ${UNLOCK_MINUTES} minuts.
+        Es desa de seguida. És una protecció contra canvis per error, no seguretat: si l'oblides, es pot treure
+        esborrant la línia <code>"pin"</code> del fitxer <code>perfil.json</code> del perfil.
       </div>
       </div>
 
@@ -309,6 +327,44 @@ export function editSettings(settings, running) {
   $('.js-open-history').addEventListener('click', () => openFolder(settings.folders?.history));
   $('.js-archive-open').addEventListener('click', () => openFolder(chosenArchiveFolder || archive.defaultFolder));
   $('.js-open-logs').addEventListener('click', () => openFolder(settings.folders?.logs));
+
+  // PIN del perfil (pas 13c): es desa de seguida, no amb «Desar».
+  let hasPin = pin.hasPin;
+  const pinError = $('.js-pin-error');
+  const showPin = () => {
+    $('.js-pin-status').innerHTML = hasPin
+      ? '<i class="bi bi-lock-fill"></i> Té PIN'
+      : '<i class="bi bi-unlock"></i> Sense PIN';
+    $('.js-pin-set').innerHTML = hasPin ? '<i class="bi bi-key"></i> Canviar el PIN…' : '<i class="bi bi-lock"></i> Posar un PIN…';
+    $('.js-pin-remove').classList.toggle('d-none', !hasPin);
+  };
+  const setPin = async (/** @type {string | null} */ value) => {
+    pinError.textContent = '';
+    try {
+      await pin.set(value);
+      hasPin = value !== null;
+      showPin();
+    } catch (err) {
+      pinError.textContent = /** @type {Error} */ (err).message;
+    }
+  };
+  $('.js-pin-set').addEventListener('click', async () => {
+    const value = await askNewPin({ title: hasPin ? 'Canviar el PIN' : 'Posar un PIN' });
+    if (value !== null) await setPin(value);
+  });
+  $('.js-pin-remove').addEventListener('click', async () => {
+    const choice = await choose({
+      title: 'Treure el PIN',
+      icon: 'bi-unlock',
+      message: `El perfil «${pin.profileName}» es podrà fer servir i configurar sense PIN.`,
+      buttons: [
+        { label: 'Cancel·lar', value: 'cancel' },
+        { label: 'Treure el PIN', value: 'remove', style: 'danger' },
+      ],
+    });
+    if (choice === 'remove') await setPin(null);
+  });
+  showPin();
 
   // Abans de tancar amb «Desar», es comproven els camps que s'escriuen a mà. La validació del navegador no es fa
   // servir (novalidate): amb un camp no vàlid en una pestanya amagada, no es podria desar i no es veuria per què.

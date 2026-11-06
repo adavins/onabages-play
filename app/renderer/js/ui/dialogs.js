@@ -186,6 +186,73 @@ export function askPin(options) {
 }
 
 /**
+ * Demana un PIN nou (fase 5, pas 13c): de 4 a 8 xifres, escrit dues vegades.
+ * Retorna el PIN, o null si es cancel·la.
+ * @param {{ title: string }} options
+ * @returns {Promise<string | null>}
+ */
+export function askNewPin(options) {
+  const dialog = document.createElement('dialog');
+  dialog.className = 'obp-dialog obp-pin';
+  dialog.innerHTML = `
+    <form method="dialog">
+      <h2 class="obp-dialog-title"><i class="bi bi-lock-fill"></i> ${escapeHtml(options.title)}</h2>
+      <label class="form-label" for="obp-new-pin">PIN nou (de 4 a 8 xifres):</label>
+      <input id="obp-new-pin" class="form-control obp-pin-input mb-2" type="password" inputmode="numeric"
+             autocomplete="new-password" maxlength="8">
+      <label class="form-label" for="obp-new-pin-2">Torna'l a escriure:</label>
+      <input id="obp-new-pin-2" class="form-control obp-pin-input" type="password" inputmode="numeric"
+             autocomplete="new-password" maxlength="8">
+      <div class="error-text obp-pin-error js-error" role="alert"></div>
+      <div class="obp-dialog-buttons">
+        <button class="btn btn-secondary" value="cancel" formnovalidate>Cancel·lar</button>
+        <button class="btn btn-primary js-ok" type="button">Desar el PIN</button>
+      </div>
+    </form>`;
+
+  document.body.appendChild(dialog);
+  const [first, second] = /** @type {HTMLInputElement[]} */ ([...dialog.querySelectorAll('input')]);
+  const error = /** @type {HTMLElement} */ (dialog.querySelector('.js-error'));
+  let pin = null;
+
+  const submit = () => {
+    if (!/^\d{4,8}$/.test(first.value)) {
+      error.textContent = 'El PIN ha de tenir de 4 a 8 xifres (només números).';
+      first.select();
+      return;
+    }
+    if (second.value !== first.value) {
+      error.textContent = 'Els dos PIN no coincideixen.';
+      second.select();
+      return;
+    }
+    pin = first.value;
+    dialog.close('ok');
+  };
+
+  /** @type {HTMLButtonElement} */ (dialog.querySelector('.js-ok')).addEventListener('click', submit);
+  for (const input of [first, second]) {
+    input.addEventListener('input', () => { error.textContent = ''; });
+    // Retorn: al primer camp passa al segon; al segon, desa.
+    input.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      if (input === first) second.focus();
+      else submit();
+    });
+  }
+  dialog.showModal();
+  first.focus();
+
+  return new Promise((resolve) => {
+    dialog.addEventListener('close', () => {
+      resolve(pin);
+      dialog.remove();
+    });
+  });
+}
+
+/**
  * Fa triar un element d'una llista (un desplegable). Retorna el `value` triat, o null si es cancel·la.
  * @param {{ title: string, label: string, message?: string, okLabel: string, okStyle?: string, icon?: string,
  *           options: { value: string, label: string }[] }} options

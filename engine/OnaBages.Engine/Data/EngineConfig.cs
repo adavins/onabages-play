@@ -179,6 +179,6 @@ public sealed class EngineConfig
     public const int MaxExplorerFolderName = 40;
 
     public const int MaxPlayers = 6;
-    public const int MaxRecorders = 4;
+    public const int MaxRecorders = 6; // fase 5, pas 14a (D-101): abans 4
     public const int MaxEndWarningSeconds = 60;
 }

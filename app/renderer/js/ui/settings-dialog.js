@@ -13,7 +13,7 @@ import { UNLOCK_MINUTES } from './pin-lock.js';
 
 /** Límits (els mateixos que comprova el motor). */
 const MAX_PLAYERS = 6;
-const MAX_RECORDERS = 4;
+const MAX_RECORDERS = 6; // fase 5, pas 14a (D-101)
 const MAX_END_WARNING = 60;
 /** Marge màxim del retall de silencis (ms), com accepta el motor. */
 const MAX_TRIM_MARGIN = 2000;

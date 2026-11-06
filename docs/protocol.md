@@ -140,7 +140,7 @@ Objecte `player` (també a `state.get` i a l'esdeveniment `player.state`):
 
 ### 4.3. Enregistradors
 
-Per defecte hi ha dos enregistradors, `"1"` i `"2"`; se'n poden configurar fins a 4 (`layout.recorders`, en arrencar el motor, vegeu 4.9). Desar i Descartar són a 4.6; Editar, a la fase 3.
+Per defecte hi ha dos enregistradors, `"1"` i `"2"`; se'n poden configurar fins a 6 (`layout.recorders`; fins a 4 abans de D-101, en arrencar el motor, vegeu 4.9). Desar i Descartar són a 4.6; Editar, a la fase 3.
 
 | Ordre | Paràmetres | Estats en què es pot fer | Resultat |
 |---|---|---|---|
@@ -331,11 +331,11 @@ Objecte `settings` (resultat de `settings.get` i `settings.set`):
 |---|---|---|
 | `profile` | només es llegeix | Perfil actiu (fase 4, D-057): `id` és el nom de la seva carpeta (`perfils\<id>\`) i `name`, el nom que es mostra |
 | `ui.zoom` | de `0.5` a `1.5` (per defecte `1`) | Escala de la interfície. Per sota de `0.7` la lletra no es fa més petita |
-| `ui.recordersPerRow` | enter de `1` a `4` (per defecte `2`) | Enregistradors per fila a la interfície |
+| `ui.recordersPerRow` | enter de `1` a `6` (per defecte `2`) | Enregistradors per fila a la interfície |
 | `ui.endWarningSeconds` | enter de `0` a `60` (per defecte `10`; `0` = sense avís) | Segons abans del final en què el temps restant d'un reproductor canvia d'aspecte |
 | `ui.hideIdleRecorderMeters` | `true` / `false` (per defecte `false`) | Amagar el mesurador dels enregistradors que no enregistren (fase 5, D-100). Del perfil |
 | `layout.players` | enter de `1` a `6` (per defecte `2`) | Nombre de reproductors |
-| `layout.recorders` | enter de `1` a `4` (per defecte `2`) | Nombre d'enregistradors |
+| `layout.recorders` | enter de `1` a `6` (per defecte `2`) | Nombre d'enregistradors |
 | `program.name` | text de com a molt 60 caràcters (per defecte `""`; `""` el treu) | Nom del programa: surt a la barra superior i a l'historial de reproducció (D-043). Els espais repetits i els salts de línia es treuen |
 | `recordingArchive` | `enabled` (per defecte `true`), `folder` (ruta completa; `""` = la per defecte), `keepDays` (de `0` a `3650`; per defecte `30`; `0` = no esborrar mai). També inclou `defaultFolder` i `maxKeepDays` (només es llegeixen); `folder` és sempre la carpeta que es fa servir | Historial d'enregistraments (fase 5, D-086): el motor escriu una còpia de cada enregistrament original a `folder\<nom del perfil>\AAAA-MM-DD\` (D-088; si es canvia el nom del perfil actiu, les còpies següents van a la carpeta amb el nom nou), alhora que el fitxer de treball. Res no toca la còpia (desar, descartar, l'editor). En arrencar, s'esborren els MP3 de les carpetes de dia (de tots els perfils) de fa més de `keepDays` dies (mai el dia d'avui ni un fitxer obert). És de l'**ordinador** (`config.json`), perquè depèn dels discos. S'aplica a partir del pròxim enregistrament |
 | `recents.clearOnExit` | `true`/`false` (per defecte `false`) | En tancar l'aplicació, es treuen de Recents els desats i els no trobats (els no desats es queden). Es fa en tornar a arrencar el motor, abans que la interfície vegi la llista: així també es fa si l'ordinador va caure. És de l'**ordinador** (`config.json`), com la llista |

@@ -112,6 +112,19 @@ public class SettingsTests : IDisposable
     }
 
     [Fact]
+    public void Es_poden_configurar_fins_a_6_enregistradors_en_files_de_3()
+    {
+        var s = Settings("""{ "v": 1, "id": 1, "cmd": "settings.set", "layout": { "recorders": 6 }, "ui": { "recordersPerRow": 3 } }""");
+
+        Assert.Equal(6, s["layout"]!["recorders"]!.GetValue<int>());
+        Assert.Equal(3, s["ui"]!["recordersPerRow"]!.GetValue<int>());
+        Assert.True(s["restartNeeded"]!.GetValue<bool>());
+        var saved = _repository.Load().Config;
+        Assert.Equal(6, saved.RecorderCount);
+        Assert.Equal(3, saved.RecordersPerRow);
+    }
+
+    [Fact]
     public void Amagar_el_mesurador_dels_enregistradors_inactius_es_desa_al_perfil()
     {
         var s = Settings("""{ "v": 1, "id": 1, "cmd": "settings.get" }""");
@@ -156,7 +169,8 @@ public class SettingsTests : IDisposable
     [Theory]
     [InlineData("""{ "v": 1, "id": 1, "cmd": "settings.set", "layout": { "players": 0 } }""")]
     [InlineData("""{ "v": 1, "id": 1, "cmd": "settings.set", "layout": { "players": 7 } }""")]
-    [InlineData("""{ "v": 1, "id": 1, "cmd": "settings.set", "layout": { "recorders": 5 } }""")]
+    [InlineData("""{ "v": 1, "id": 1, "cmd": "settings.set", "layout": { "recorders": 7 } }""")]
+    [InlineData("""{ "v": 1, "id": 1, "cmd": "settings.set", "ui": { "recordersPerRow": 7 } }""")]
     [InlineData("""{ "v": 1, "id": 1, "cmd": "settings.set", "layout": { "recorders": 2.5 } }""")]
     [InlineData("""{ "v": 1, "id": 1, "cmd": "settings.set", "ui": { "recordersPerRow": 0 } }""")]
     [InlineData("""{ "v": 1, "id": 1, "cmd": "settings.set", "ui": { "endWarningSeconds": 61 } }""")]

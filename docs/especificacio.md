@@ -396,7 +396,7 @@ Enregistrar programes i fonts de manera tan senzilla i ràpida com mp3DirectCut:
 - Format: **MP3, 320 kbps, CBR, estèreo**. És el valor per defecte; altres bitrates es poden configurar.
 - **Volum d'enregistrament**: de −∞ a +12 dB, per defecte 0 dB. S'aplica abans del mesurador i del fitxer (D-036).
 
-Nombre d'enregistradors configurable (inicialment fins a 4).
+Nombre d'enregistradors configurable: fins a 6 (fase 5, D-101; abans, 4), per exemple en dues files de 3.
 
 ## 8.3. Flux d'operació
 

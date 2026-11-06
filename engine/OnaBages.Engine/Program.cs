@@ -327,6 +327,10 @@ foreach (var recorder in state.Recorders)
     }
 }
 
+// Limitador de cada enregistrador (fase 5, pas 9a): el que hi ha al perfil.
+foreach (var recorder in state.Recorders)
+    recorder.SetLimiter(config.Read(c => c.LimitedRecorders.Contains(recorder.Id)), config.Read(c => c.RecorderLimiterCeilingDb));
+
 // Volum de la preescolta (config.json; depèn dels auriculars, per això es recorda).
 state.Cue.SetVolume(config.Read(c => c.CueVolumeDb));
 // Compressor/limitador de cada reproductor (fase 4, pas 4b): el que hi ha al perfil.

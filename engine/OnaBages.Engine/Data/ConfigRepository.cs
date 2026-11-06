@@ -674,6 +674,20 @@ public sealed class ConfigRepository
             }
         }
 
+        // Limitador dels enregistradors (fase 5, pas 9a; camp opcional, sense canvi de versió).
+        if (root["recorderLimiter"] is JsonObject limiter)
+        {
+            if (limiter["ceilingDb"] is JsonValue c && c.TryGetValue(out double ceiling) && double.IsFinite(ceiling))
+                config.RecorderLimiterCeilingDb = Math.Round(Math.Clamp(ceiling, Recorder.MinLimiterCeilingDb, Recorder.MaxLimiterCeilingDb), 1);
+            if (limiter["recorders"] is JsonArray limited)
+            {
+                foreach (var item in limited)
+                {
+                    if (Text(item) is { Length: > 0 } recorderId) config.LimitedRecorders.Add(recorderId);
+                }
+            }
+        }
+
         // Normalització de sonoritat (pas 5b; camp opcional, sense canvi de versió).
         if (root["normalization"] is JsonObject normalization)
         {
@@ -828,6 +842,11 @@ public sealed class ConfigRepository
             ["leadMs"] = config.TrimLeadMs,
             ["tailMs"] = config.TrimTailMs,
             ["players"] = new JsonArray(config.TrimPlayers.Order(StringComparer.Ordinal).Select(id => (JsonNode)id).ToArray()),
+        },
+        ["recorderLimiter"] = new JsonObject
+        {
+            ["ceilingDb"] = config.RecorderLimiterCeilingDb,
+            ["recorders"] = new JsonArray(config.LimitedRecorders.Order(StringComparer.Ordinal).Select(id => (JsonNode)id).ToArray()),
         },
         ["normalization"] = new JsonObject
         {

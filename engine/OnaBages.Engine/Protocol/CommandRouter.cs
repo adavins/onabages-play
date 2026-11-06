@@ -116,6 +116,7 @@ public sealed partial class CommandRouter
                 "recorder.stop" => RecorderCommand(msg, r => r.Stop()),
                 "recorder.configure" => RecorderConfigure(msg),
                 "recorder.setGain" => RecorderSetGain(msg),
+                "recorder.setLimiter" => RecorderSetLimiter(msg),
                 "recording.save" => RecordingSave(msg),
                 "recording.discard" => RecordingDiscard(msg),
                 "recording.remove" => RecordingRemove(msg),
@@ -374,8 +375,9 @@ public sealed partial class CommandRouter
         var program = msg["program"] as JsonObject;
         var loudness = msg["loudness"] as JsonObject;
         var trim = msg["trim"] as JsonObject;
-        if (ui is null && layout is null && program is null && loudness is null && trim is null)
-            throw new BadParamsException("Falta el camp 'ui', 'layout', 'program', 'loudness' o 'trim' amb els ajustos a canviar.");
+        var limiter = msg["recorderLimiter"] as JsonObject;
+        if (ui is null && layout is null && program is null && loudness is null && trim is null && limiter is null)
+            throw new BadParamsException("Falta el camp 'ui', 'layout', 'program', 'loudness', 'trim' o 'recorderLimiter' amb els ajustos a canviar.");
 
         double? zoom = OptionalNumber(ui?["zoom"], "ui.zoom", EngineConfig.MinZoom, EngineConfig.MaxZoom);
         int? perRow = OptionalInt(ui?["recordersPerRow"], "ui.recordersPerRow", 1, EngineConfig.MaxRecorders);
@@ -389,6 +391,7 @@ public sealed partial class CommandRouter
             throw new BadParamsException("'trim.thresholdDb' ha de ser -40, -50, -60, -70 o -80.");
         int? trimLead = OptionalInt(trim?["leadMs"], "trim.leadMs", 0, Player.MaxTrimMarginMs);
         int? trimTail = OptionalInt(trim?["tailMs"], "trim.tailMs", 0, Player.MaxTrimMarginMs);
+        double? ceiling = OptionalNumber(limiter?["ceilingDb"], "recorderLimiter.ceilingDb", Recorder.MinLimiterCeilingDb, Recorder.MaxLimiterCeilingDb);
 
         config.Update(c =>
         {
@@ -404,7 +407,16 @@ public sealed partial class CommandRouter
             if (trimThreshold is { } th) c.TrimThresholdDb = th;
             if (trimLead is { } lead) c.TrimLeadMs = lead;
             if (trimTail is { } tail) c.TrimTailMs = tail;
+            if (ceiling is { } ce) c.RecorderLimiterCeilingDb = Math.Round(ce, 1);
         });
+
+        // El sostre nou s'aplica de seguida a tots els enregistradors (també als que enregistren).
+        if (ceiling is not null)
+        {
+            var (limited, newCeiling) = config.Read(c => (c.LimitedRecorders.ToHashSet(), c.RecorderLimiterCeilingDb));
+            foreach (var recorder in _state.Recorders)
+                recorder.SetLimiter(limited.Contains(recorder.Id), newCeiling);
+        }
 
         // El retall nou s'aplica a tots els reproductors (a partir de la pista següent).
         if (trim is not null)
@@ -445,6 +457,13 @@ public sealed partial class CommandRouter
                 ["thresholds"] = new JsonArray(TrackLoudness.SilenceThresholdsDb.Select(t => (JsonNode)t).ToArray()),
                 ["maxMarginMs"] = Player.MaxTrimMarginMs,
             }),
+            // Limitador dels enregistradors (fase 5, pas 9a): sostre comú; cada un l'activa amb recorder.setLimiter.
+            ["recorderLimiter"] = new JsonObject
+            {
+                ["ceilingDb"] = config.Read(c => c.RecorderLimiterCeilingDb),
+                ["minCeilingDb"] = Recorder.MinLimiterCeilingDb,
+                ["maxCeilingDb"] = Recorder.MaxLimiterCeilingDb,
+            },
             // Presets del compressor/limitador dels reproductors (fase 4, pas 4b).
             ["processingPresets"] = ProcessingPresetsJson(),
             ["ui"] = new JsonObject { ["zoom"] = zoom, ["recordersPerRow"] = perRow, ["endWarningSeconds"] = warning },
@@ -878,6 +897,26 @@ public sealed partial class CommandRouter
 
         recorder.SetGain(db);
         SaveRecorderSettings(recorder);
+        return new JsonObject { ["recorder"] = RecorderJson.Recorder(recorder) };
+    }
+
+    /// <summary>
+    /// Limitador d'un enregistrador (fase 5, pas 9a; D-083): recorder, enabled. S'aplica de seguida, també a mig
+    /// enregistrament. El sostre és comú (settings.set recorderLimiter). Es desa al perfil.
+    /// </summary>
+    private JsonObject RecorderSetLimiter(JsonObject msg)
+    {
+        var recorder = GetRecorder(msg);
+        if (msg["enabled"] is not JsonValue v || !v.TryGetValue(out bool enabled))
+            throw new BadParamsException("'enabled' ha de ser true o false.");
+
+        double ceiling = _config?.Read(c => c.RecorderLimiterCeilingDb) ?? Recorder.DefaultLimiterCeilingDb;
+        recorder.SetLimiter(enabled, ceiling);
+        _config?.Update(c =>
+        {
+            if (enabled) c.LimitedRecorders.Add(recorder.Id);
+            else c.LimitedRecorders.Remove(recorder.Id);
+        });
         return new JsonObject { ["recorder"] = RecorderJson.Recorder(recorder) };
     }
 

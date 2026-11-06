@@ -148,6 +148,12 @@ public sealed class DynamicsProcessor
     public float TakeMaxReductionDb() => Interlocked.Exchange(ref _maxReductionCentiDb, 0) / 100f;
 
     /// <summary>
+    /// Quantes mostres per canal queden retingudes dins seu (l'anticipació del sostre): 0 si està desactivat.
+    /// En acabar un enregistrament, s'hi passen aquestes mostres de silenci perquè surti tot el so. Del mateix fil que <see cref="Process"/>.
+    /// </summary>
+    public int LatencyFrames => _wet > 0f ? _lookahead - 1 : 0;
+
+    /// <summary>
     /// Processa mostres estèreo intercalades (E, D, E, D...), al mateix lloc. Fil d'àudio.
     /// </summary>
     public void Process(Span<float> stereo)

@@ -20,7 +20,7 @@ const MAX_PROGRAM_NAME = 60;
 /**
  * @param {any} settings  objecte settings del motor
  * @param {{ players: number, recorders: number }} running  quants n'hi ha ara al motor
- * @returns {Promise<{ ui: object, layout: object, program: object, loudness: object, trim: object } | null>}
+ * @returns {Promise<{ ui: object, layout: object, program: object, loudness: object, trim: object, recorderLimiter: object } | null>}
  */
 export function editSettings(settings, running) {
   const options = (/** @type {number} */ max, /** @type {number} */ selected) =>
@@ -36,6 +36,12 @@ export function editSettings(settings, running) {
   const trim = settings.trim ?? { thresholdDb: -60, leadMs: 10, tailMs: 50, thresholds: [-40, -50, -60, -70, -80] };
   const trimOptions = (trim.thresholds ?? [-40, -50, -60, -70, -80])
     .map((/** @type {number} */ t) => `<option value="${t}"${t === trim.thresholdDb ? ' selected' : ''}>${String(t).replace('-', '−')} dBFS${t === -60 ? ' (recomanat)' : ''}</option>`)
+    .join('');
+  // Sostre del limitador dels enregistradors (fase 5, D-083). Si el desat no hi és, s'hi afegeix.
+  const ceiling = Number(settings.recorderLimiter?.ceilingDb ?? -1);
+  const ceilings = [...new Set([-0.1, -0.3, -0.5, -1, -2, -3, ceiling])].sort((a, b) => b - a);
+  const ceilingOptions = ceilings
+    .map((c) => `<option value="${c}"${c === ceiling ? ' selected' : ''}>${c.toFixed(1).replace('.', ',').replace('-', '−')} dB${c === -1 ? ' (recomanat)' : ''}</option>`)
     .join('');
   const loudnessOptions = targets
     .map((t) => `<option value="${t}"${t === target ? ' selected' : ''}>${String(t).replace('-', '−').replace('.', ',')} LUFS${t === -12 ? ' (recomanat)' : ''}</option>`)
@@ -113,6 +119,17 @@ export function editSettings(settings, running) {
         Als reproductors amb el retall de silencis activat (finestra Processament), cada pista comença al primer so
         menys el marge i s'acaba a l'últim més el marge. Compta com a so qualsevol mostra per sobre del llindar.
         Si hi ha soroll de fons per sobre del llindar, no es retalla res. S'aplica a partir de la pista següent.
+      </div>
+
+      <h3 class="obp-settings-section">Enregistradors</h3>
+      <div class="obp-settings-grid">
+        <label for="st-limiter">Limitador: sostre</label>
+        <select id="st-limiter" class="form-select form-select-sm">${ceilingOptions}</select>
+      </div>
+      <div class="form-text mb-3">
+        Als enregistradors amb el botó LIM encès, el que es desa no passa d'aquest nivell: el limitador abaixa el volum
+        just abans d'un cop, sense retallar-lo, i per sota del sostre no toca res. S'aplica de seguida.
+        Amb −1,0 dB, l'MP3 no passa de 0 dB en reproduir-lo; amb −0,1 dB, en pot passar una mica.
       </div>
 
       <h3 class="obp-settings-section">Fitxers</h3>
@@ -201,6 +218,7 @@ export function editSettings(settings, running) {
           layout: { players: Number(players.value), recorders: Number(recorders.value) },
           program: { name: $('#st-program').value.trim() },
           loudness: { targetLufs: Number($('#st-loudness').value) },
+          recorderLimiter: { ceilingDb: Number($('#st-limiter').value) },
           trim: {
             thresholdDb: Number($('#st-trim-threshold').value),
             leadMs: Number($('#st-trim-lead').value),

@@ -27,7 +27,11 @@ public sealed class PeakMeter
     /// <param name="samples">Mostres intercalades.</param>
     /// <param name="channels">Canals del bloc. Es mesuren els dos primers (un sol canal compta per als dos).</param>
     /// <param name="gain">Guany lineal que s'hi aplicarà després (p. ex. el volum d'enregistrament).</param>
-    public void AddInterleaved(ReadOnlySpan<float> samples, int channels, float gain = 1f)
+    /// <param name="ceiling">
+    /// Sostre lineal d'un limitador que s'hi aplicarà després (p. ex. el dels enregistradors, D-083): el pic no el
+    /// passa, perquè el limitador ho garanteix (i per sota del sostre no toca res). Per defecte, sense sostre.
+    /// </param>
+    public void AddInterleaved(ReadOnlySpan<float> samples, int channels, float gain = 1f, float ceiling = float.MaxValue)
     {
         float left = 0, right = 0;
         int second = channels > 1 ? 1 : 0;
@@ -38,7 +42,7 @@ public sealed class PeakMeter
             if (l > left) left = l;
             if (r > right) right = r;
         }
-        Add(left * gain, right * gain);
+        Add(Math.Min(left * gain, ceiling), Math.Min(right * gain, ceiling));
     }
 
     /// <summary>Retorna el pic des de l'última crida i el torna a posar a zero.</summary>

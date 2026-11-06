@@ -23,13 +23,19 @@ public static class MetersJson
         }
 
         var recorderLevels = new JsonObject();
+        // Abaixada del limitador de cada enregistrador (dB, ≥ 0; 0 si no s'enregistra).
+        var recorderReductions = new JsonObject();
         foreach (var r in recorders)
+        {
             recorderLevels[r.Id] = Levels(r.Meter.Take());
+            recorderReductions[r.Id] = Math.Round(r.TakeLimiterReductionDb(), 1);
+        }
 
         var ev = Messages.Event("meters");
         ev["players"] = playerLevels;
         ev["playerReduction"] = reductions;
         ev["recorders"] = recorderLevels;
+        ev["recorderReduction"] = recorderReductions;
         if (cue is not null)
             ev["cue"] = Levels(cue.TakePeaks());
         return ev;

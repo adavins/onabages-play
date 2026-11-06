@@ -13,6 +13,8 @@ public static class RecorderJson
         ["name"] = recorder.Name,
         ["folder"] = recorder.Folder,
         ["gainDb"] = recorder.GainDb,
+        // Limitador (fase 5, pas 9a): recorder.setLimiter; el sostre és de settings.recorderLimiter.
+        ["limiter"] = new JsonObject { ["enabled"] = recorder.LimiterEnabled, ["ceilingDb"] = recorder.LimiterCeilingDb },
         ["deviceId"] = recorder.DeviceId,
         ["file"] = recorder.FilePath,
         ["startedAt"] = recorder.StartedAt?.ToString("O"),

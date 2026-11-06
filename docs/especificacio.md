@@ -662,6 +662,8 @@ Fet: **encadenament amb fos entre pistes** (D-077, D-078): per reproductor, de 0
 
 Fet: **retall automàtic de silencis inicials i finals** (D-079, D-080, D-081): per reproductor, desactivat per defecte; llindar i marges configurables al perfil (per defecte −60 dBFS, 10 ms abans del so i 50 ms després). El fitxer no es toca i no es perd cap mostra de so.
 
+Fet: **limitador opcional als enregistradors** (D-083, D-084): botó LIM a cada enregistrador, desactivat per defecte; sostre comú al perfil (per defecte −1 dB, es pot triar −0,1 dB); es pot activar mentre s'enregistra.
+
 Candidates: equalitzador per reproductor (ajornat de la fase 4, D-073), botonera de talls (cartwall), detector de silenci, punts cue d'inici i final, biblioteca musical amb cerca, inicis programats, control MIDI o per *fader start*, usuaris.
 
 # 15. Proves i criteris de qualitat

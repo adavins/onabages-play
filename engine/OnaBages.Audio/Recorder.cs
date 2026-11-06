@@ -81,6 +81,19 @@ public sealed class Recorder : IDisposable
     /// <summary>Volum d'enregistrament màxim (+12 dB, per a fonts que entren fluixes).</summary>
     public const double MaxGainDb = 12;
 
+    // --- Limitador (fase 5, pas 9a; D-083) ---
+
+    /// <summary>Sostre per defecte del limitador: −1 dB, perquè l'MP3 descodificat tampoc no passi de 0 dBFS.</summary>
+    public const double DefaultLimiterCeilingDb = -1.0;
+    public const double MinLimiterCeilingDb = -6, MaxLimiterCeilingDb = 0;
+
+    // Els ajustos del limitador: els canvia el fil de les ordres i els llegeix el de codificació (una referència nova cada vegada).
+    private volatile DynamicsSettings _limiterSettings = LimiterSettings(false, DefaultLimiterCeilingDb);
+    // El limitador de l'enregistrament en curs (és del fil de codificació), per a l'indicador de reducció.
+    private volatile DynamicsProcessor? _limiter;
+    // Sostre del limitador per al mesurador (lineal; sense limitador, cap). El llegeix el fil de captura.
+    private volatile float _meterCeiling = float.MaxValue;
+
     /// <param name="id">Identificador ("1", "2"...).</param>
     /// <param name="openInput">Obre una entrada per identificador de dispositiu. Per defecte, WASAPI.</param>
     public Recorder(string id, Func<string, IAudioInput>? openInput = null)
@@ -229,6 +242,39 @@ public sealed class Recorder : IDisposable
         }
         RaiseStateChanged();
     }
+
+    /// <summary>El limitador és activat (el so que va al fitxer no passa de <see cref="LimiterCeilingDb"/>).</summary>
+    public bool LimiterEnabled { get; private set; }
+
+    /// <summary>Sostre del limitador (dBFS).</summary>
+    public double LimiterCeilingDb { get; private set; } = DefaultLimiterCeilingDb;
+
+    /// <summary>
+    /// Limitador del que es desa al fitxer (després del volum d'enregistrament): el so no passa mai del sostre.
+    /// Mira 1,5 ms endavant: abaixa el volum just abans d'un cop, sense retallar-lo. Sense compressió: per sota del
+    /// sostre, el so no canvia. Es pot activar i desactivar a mig enregistrament (amb una transició de 10 ms, sense clics).
+    /// El sostre fora de marge es porta al límit.
+    /// </summary>
+    public void SetLimiter(bool enabled, double ceilingDb)
+    {
+        lock (_sync)
+        {
+            LimiterEnabled = enabled;
+            LimiterCeilingDb = Math.Round(Math.Clamp(double.IsFinite(ceilingDb) ? ceilingDb : DefaultLimiterCeilingDb,
+                MinLimiterCeilingDb, MaxLimiterCeilingDb), 1);
+            _limiterSettings = LimiterSettings(enabled, LimiterCeilingDb);
+            _meterCeiling = enabled ? (float)Math.Pow(10, LimiterCeilingDb / 20) : float.MaxValue;
+            _changed = true;
+        }
+        RaiseStateChanged();
+    }
+
+    /// <summary>Quant ha abaixat el limitador des de l'última crida (dB, ≥ 0). 0 si no s'enregistra.</summary>
+    public float TakeLimiterReductionDb() => _limiter?.TakeMaxReductionDb() ?? 0f;
+
+    /// <summary>El limitador és el sostre del compressor dels reproductors, sense compressió (ràtio 1).</summary>
+    private static DynamicsSettings LimiterSettings(bool enabled, double ceilingDb) =>
+        new(enabled, InputGainDb: 0, ThresholdDb: 0, Ratio: 1, OutputGainDb: 0, StereoLink: true, CeilingDb: ceilingDb);
 
     /// <summary>
     /// Comença un enregistrament nou a la carpeta de treball, amb el nom de l'enregistrador.
@@ -404,7 +450,9 @@ public sealed class Recorder : IDisposable
 
             var encoderForThread = encoder;
             var fileForThread = file;
-            _encoderThread = new Thread(() => EncoderLoop(ring, encoderForThread, fileForThread, path))
+            var limiter = new DynamicsProcessor(input.SampleRate, _limiterSettings);
+            _limiter = limiter;
+            _encoderThread = new Thread(() => EncoderLoop(ring, encoderForThread, fileForThread, path, limiter))
             {
                 IsBackground = true, // el motor atura els enregistradors en tancar-se (Dispose)
                 Name = $"Enregistrador {Id}: codificació",
@@ -422,6 +470,7 @@ public sealed class Recorder : IDisposable
             // No ha arribat a començar (per qualsevol motiu): es desfà tot el que s'hagi creat.
             // Si l'entrada ja era oberta per al mesurador, es deixa oberta.
             _ring = null;
+            _limiter = null;
             if (openedNow) CloseInput();
             _stopEncoder = true;
             _encoderThread?.Join(TimeSpan.FromSeconds(2));
@@ -451,8 +500,8 @@ public sealed class Recorder : IDisposable
     {
         // El mesurador funciona sempre, s'enregistri o no.
         int channels = _inputChannels;
-        // El mesurador ja mostra el nivell amb el volum d'enregistrament aplicat (el que queda al fitxer).
-        if (!silent) Meter.AddInterleaved(samples, channels, _gain);
+        // El mesurador ja mostra el nivell amb el volum d'enregistrament i el limitador aplicats (el que queda al fitxer).
+        if (!silent) Meter.AddInterleaved(samples, channels, _gain, _meterCeiling);
 
         var ring = _ring;
         if (ring is null) return; // no s'enregistra
@@ -478,17 +527,32 @@ public sealed class Recorder : IDisposable
     }
 
     /// <summary>
-    /// Fil de codificació: memòria → estèreo → LAME → fitxer. Bolcat físic cada 2 s.
+    /// Fil de codificació: memòria → estèreo → volum → limitador → LAME → fitxer. Bolcat físic cada 2 s.
     /// En acabar (o si hi ha un error) tanca el fitxer; si tot ha anat bé, esborra el marcador.
     /// </summary>
-    private void EncoderLoop(SampleRingBuffer ring, LameEncoder encoder, FileStream file, string path)
+    private void EncoderLoop(SampleRingBuffer ring, LameEncoder encoder, FileStream file, string path, DynamicsProcessor limiter)
     {
         int channels = _inputChannels;
         var input = new float[ChunkFrames * channels];
         var stereo = new float[ChunkFrames * 2];
         var sinceFlush = Stopwatch.StartNew();
         float appliedGain = _gain;
+        var appliedLimiter = limiter.Settings;
         bool ok = false;
+
+        // Volum, limitador i, per acabar, el que encara passi de ±1 es retalla (com sempre).
+        void Process(int frames)
+        {
+            var settings = _limiterSettings;
+            if (!ReferenceEquals(settings, appliedLimiter))
+            {
+                limiter.Settings = settings;
+                appliedLimiter = settings;
+            }
+            appliedGain = ApplyGain(stereo, frames, appliedGain, _gain);
+            limiter.Process(stereo.AsSpan(0, frames * 2));
+            for (int i = 0; i < frames * 2; i++) stereo[i] = Math.Clamp(stereo[i], -1f, 1f);
+        }
 
         try
         {
@@ -499,7 +563,7 @@ public sealed class Recorder : IDisposable
                 {
                     int frames = read / channels;
                     ToStereo(input, frames, channels, stereo);
-                    appliedGain = ApplyGain(stereo, frames, appliedGain, _gain);
+                    Process(frames);
                     var mp3 = encoder.Encode(stereo, frames * 2);
                     file.Write(mp3);
                     Interlocked.Exchange(ref _fileSize, file.Position);
@@ -518,6 +582,15 @@ public sealed class Recorder : IDisposable
                     file.Flush(flushToDisk: true);
                     sinceFlush.Restart();
                 }
+            }
+
+            // El limitador encara té dins seu l'últim 1,5 ms de so: s'hi passa silenci perquè surti.
+            int pending = limiter.LatencyFrames;
+            if (pending > 0)
+            {
+                Array.Clear(stereo, 0, pending * 2);
+                Process(pending);
+                file.Write(encoder.Encode(stereo, pending * 2));
             }
 
             file.Write(encoder.Flush());
@@ -555,9 +628,9 @@ public sealed class Recorder : IDisposable
 
     /// <summary>
     /// Aplica el volum d'enregistrament a un bloc estèreo. Si ha canviat, passa del valor
-    /// anterior al nou al llarg del bloc (rampa: sense clics). Els valors que passen de ±1
-    /// (amb guany positiu) es retallen: el mesurador ja ho mostra com a saturació.
-    /// Retorna el guany aplicat al final del bloc.
+    /// anterior al nou al llarg del bloc (rampa: sense clics). Aquí no es retalla res: ho fa
+    /// el limitador (si és activat) i, després, es retalla el que encara passi de ±1 (el
+    /// mesurador ja ho mostra com a saturació). Retorna el guany aplicat al final del bloc.
     /// </summary>
     private static float ApplyGain(float[] stereo, int frames, float from, float to)
     {
@@ -568,8 +641,8 @@ public sealed class Recorder : IDisposable
         for (int i = 0; i < frames; i++)
         {
             gain += step;
-            stereo[i * 2] = Math.Clamp(stereo[i * 2] * gain, -1f, 1f);
-            stereo[i * 2 + 1] = Math.Clamp(stereo[i * 2 + 1] * gain, -1f, 1f);
+            stereo[i * 2] *= gain;
+            stereo[i * 2 + 1] *= gain;
         }
         return to;
     }
@@ -588,6 +661,7 @@ public sealed class Recorder : IDisposable
         _stopEncoder = true;
         _encoderThread?.Join(TimeSpan.FromSeconds(60)); // buidar 10 s de memòria triga molt menys
         _encoderThread = null;
+        _limiter = null;
 
         if (_inputError is not null)
             CloseInput();

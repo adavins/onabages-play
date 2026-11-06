@@ -5,6 +5,7 @@
 // - Enregistrar: comença de seguida, sempre en un fitxer nou (també des de «Pendent»).
 // - Aturar: cal prémer-lo dues vegades (la primera el «arma» uns segons), per evitar aturades accidentals.
 // - Pendent: Escoltar (preescolta), Desar (diàleg de Windows) o Descartar (paperera, amb confirmació).
+// - LIM (fase 5, D-083): limitador del que es desa al fitxer; es pot activar i desactivar en qualsevol moment.
 
 import { RECORDER_STATES, stateBadge } from './states.js';
 import { deviceWarning } from './device-line.js';
@@ -25,6 +26,9 @@ const STOP_CONFIRM_MS = 3000;
 /** Quant temps es mostra un missatge (error d'una ordre, avís en desar...). */
 const MESSAGE_MS = 6000;
 
+/** Escala de la barra del limitador (dB): un limitador abaixa poc, i així es veu bé. */
+const LIMITER_SCALE_DB = 12;
+
 /** Estats des dels quals es pot començar un enregistrament (docs/protocol.md, 4.3). */
 const CAN_START = ['idle', 'pending', 'error'];
 
@@ -42,6 +46,8 @@ export class RecorderPanel {
   #stopArmedTimer;
   /** Fitxer de l'últim enregistrament començat (per reiniciar l'indicador de saturació). */
   /** @type {string | null} */ #lastFile = null;
+  /** Reducció del limitador que es mostra (cau a poc a poc, perquè es pugui llegir). */
+  #shownReduction = 0;
 
   /**
    * @param {Store} store
@@ -61,7 +67,10 @@ export class RecorderPanel {
         <button class="panel-title rec-title js-title" type="button" title="Canviar el nom i la carpeta">
           <i class="bi bi-record-circle"></i> <span class="js-name"></span> <i class="bi bi-pencil rec-edit"></i>
         </button>
-        <span class="js-state"></span>
+        <span class="panel-header-right">
+          <button class="btn btn-sm dsp-btn js-lim" type="button"><i class="d-none"></i><span>LIM</span></button>
+          <span class="js-state"></span>
+        </span>
       </div>
       <div class="card-body panel-body">
         <div class="js-device-slot"></div>
@@ -69,6 +78,11 @@ export class RecorderPanel {
         <div class="js-meter-slot"></div>
         <div class="input-off js-input-off">Entrada no disponible: el mesurador s'activarà quan torni.</div>
         <div class="js-fader-slot"></div>
+        <div class="gr-row js-gr d-none" title="Quant abaixa ara el limitador (només mentre s'enregistra)">
+          <span class="gr-caption">Limitador</span>
+          <div class="gr-bar"><div class="gr-fill js-gr-fill"></div></div>
+          <span class="gr-value js-gr-value">0,0 dB</span>
+        </div>
 
         <div class="rec-info">
           <div class="elapsed js-elapsed">0:00</div>
@@ -119,6 +133,11 @@ export class RecorderPanel {
     this.#el['fader-slot'].appendChild(this.#fader.element);
 
     this.#el.title.addEventListener('click', () => this.#editSettings());
+    // LIM: activa o desactiva el limitador (de seguida, també a mig enregistrament).
+    this.#el.lim.addEventListener('click', () => {
+      const enabled = !!this.#store.recorders.get(this.#id)?.limiter?.enabled;
+      this.#send('recorder.setLimiter', { enabled: !enabled });
+    });
     this.#el.start.addEventListener('click', () => this.#send('recorder.start'));
     this.#el.stop.addEventListener('click', () => this.#stopPressed());
     this.#el.preview.addEventListener('click', () => this.#preview());
@@ -150,6 +169,17 @@ export class RecorderPanel {
     this.#meter.setActive(!inputOff);
     el['input-off'].classList.toggle('d-none', !inputOff);
     this.#fader.update(r.gainDb ?? 0);
+
+    // Limitador (D-083): botó encès (color i marca ✓) i barra de reducció.
+    const limiter = r.limiter ?? {};
+    const ceiling = formatDb(limiter.ceilingDb ?? -1);
+    el.lim.classList.toggle('on', !!limiter.enabled);
+    el.lim.setAttribute('aria-pressed', String(!!limiter.enabled));
+    el.lim.title = limiter.enabled
+      ? `Limitador ACTIVAT: el que es desa no passa de ${ceiling} dB. Clica per desactivar-lo (de seguida, també mentre s'enregistra). El sostre es canvia a ⚙ Configuració.`
+      : `Limitador desactivat. Clica per activar-lo: el que es desi no passarà de ${ceiling} dB (de seguida, també mentre s'enregistra).`;
+    /** @type {HTMLElement} */ (el.lim.querySelector('i')).className = limiter.enabled ? 'bi bi-check-lg' : 'd-none';
+    el.gr.classList.toggle('d-none', !limiter.enabled);
 
     // Temps, fitxer, mida i espai lliure.
     el.elapsed.textContent = formatDuration(r.elapsed ?? 0);
@@ -191,9 +221,14 @@ export class RecorderPanel {
     el.error.textContent = r.error ?? '';
   }
 
-  /** Nivells nous del motor (esdeveniment meters): [esquerre, dret] en dBFS. */
-  updateMeter(/** @type {number[] | undefined} */ levels) {
+  /** Nivells nous del motor (esdeveniment meters): [esquerre, dret] en dBFS, i quant abaixa el limitador (dB). */
+  updateMeter(/** @type {number[] | undefined} */ levels, /** @type {number | undefined} */ reduction) {
     if (levels) this.#meter.update(levels);
+    if (reduction !== undefined && !this.#el.gr.classList.contains('d-none')) {
+      this.#shownReduction = Math.max(reduction, this.#shownReduction - 0.4);
+      this.#el['gr-fill'].style.width = `${Math.min(100, (this.#shownReduction / LIMITER_SCALE_DB) * 100)}%`;
+      this.#el['gr-value'].textContent = `${this.#shownReduction.toFixed(1).replace('.', ',')} dB`;
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -284,6 +319,11 @@ export class RecorderPanel {
     clearTimeout(this.#messageTimer);
     this.#messageTimer = window.setTimeout(() => { this.#el.message.textContent = ''; }, MESSAGE_MS);
   }
+}
+
+/** «−1,0»: dB amb un decimal, coma i signe menys de debò. */
+function formatDb(/** @type {number} */ db) {
+  return db.toFixed(1).replace('.', ',').replace('-', '−');
 }
 
 /** @param {HTMLElement} button @param {boolean} enabled */

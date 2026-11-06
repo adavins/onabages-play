@@ -103,6 +103,14 @@ public sealed class EngineConfig
     /// <summary>Marge després de l'últim so (ms), per a la cua.</summary>
     public int TrimTailMs { get; set; } = 50;
 
+    // --- Limitador dels enregistradors (fase 5, pas 9a; del perfil) ---
+
+    /// <summary>Enregistradors amb el limitador activat (per defecte, cap).</summary>
+    public HashSet<string> LimitedRecorders { get; } = [];
+
+    /// <summary>Sostre del limitador, comú a tots els enregistradors (dBFS).</summary>
+    public double RecorderLimiterCeilingDb { get; set; } = Recorder.DefaultLimiterCeilingDb;
+
     // --- Normalització de sonoritat (fase 4, pas 5b; del perfil) ---
 
     /// <summary>Reproductors que normalitzen (per defecte, cap: D-070).</summary>

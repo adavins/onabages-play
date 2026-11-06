@@ -18,7 +18,10 @@ const FALL_DB_PER_SECOND = 24;
 /** Quant temps es queda la marca del pic. */
 const HOLD_MS = 1500;
 
-/** A partir d'aquí es considera saturació (pràcticament 0 dBFS). */
+/**
+ * Per sobre d'aquí es considera saturació: 0 dBFS (el motor arrodoneix a 0,1 dB). Un limitador amb el sostre
+ * a −0,1 dB (enregistradors, D-083) no satura i no ha d'encendre l'indicador.
+ */
 const CLIP_DB = -0.1;
 
 /** L'indicador de saturació s'apaga sol al cap d'aquest temps sense saturar (D-033). */
@@ -89,7 +92,7 @@ export class LevelMeter {
         ch.holdDb = db;
         ch.holdAt = now;
       }
-      if (db >= CLIP_DB) {
+      if (db > CLIP_DB) {
         this.#clipAt = now;
         this.#clip.classList.add('on');
       }

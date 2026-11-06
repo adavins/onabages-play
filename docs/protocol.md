@@ -76,7 +76,7 @@ Tots els missatges són objectes JSON amb el camp `"v": 1`.
 | `devices.list` | `kind`: `"output"`, `"input"` o `"all"` (per defecte); `includeInactive`: `true` per incloure també els desactivats i desconnectats (per defecte, `false`) | `{ devices: [ … ] }` (vegeu 4.1) | fase 1 |
 | `hardware.report` | — | `{ report: { … } }`: resum de l'arrencada (vegeu 4.4) | fase 1 |
 | `settings.get` | — | `{ settings: { profile: { id, name }, ui: { zoom, recordersPerRow, endWarningSeconds }, layout: { players, recorders }, program: { name }, folders: { history, logs }, restartNeeded } }`: ajustos desats a `config.json` i al perfil actiu (vegeu 4.9) | fase 2 (`layout`, `recordersPerRow`, `endWarningSeconds`, `restartNeeded`: pas 9; `program`: pas 10); `profile`: fase 4 |
-| `settings.set` | `ui`, `layout`, `program`, `trim` (`{ "thresholdDb": -60, "leadMs": 10, "tailMs": 50 }`: llindar −40, −50, −60, −70 o −80; marges de 0 a 2.000 ms) i/o `loudness` (`{ "targetLufs": -12 }`, de −24 a −6; s'aplica a tots els reproductors a partir de la pista següent): només els ajustos a canviar, p. ex. `{ "ui": { "zoom": 1.25 } }` (vegeu 4.9) | `{ settings }` amb tots els ajustos. Es desa de seguida. Si algun valor és fora de marge, `bad_params` i no es canvia res | fase 2 |
+| `settings.set` | `ui`, `layout`, `program`, `trim` (`{ "thresholdDb": -60, "leadMs": 10, "tailMs": 50 }`: llindar −40, −50, −60, −70 o −80; marges de 0 a 2.000 ms) `recorderLimiter` (`{ "ceilingDb": -1 }`, de −6 a 0: sostre del limitador dels enregistradors; s'aplica de seguida, també a mig enregistrament) i/o `loudness` (`{ "targetLufs": -12 }`, de −24 a −6; s'aplica a tots els reproductors a partir de la pista següent): només els ajustos a canviar, p. ex. `{ "ui": { "zoom": 1.25 } }` (vegeu 4.9) | `{ settings }` amb tots els ajustos. Es desa de seguida. Si algun valor és fora de marge, `bad_params` i no es canvia res | fase 2 |
 
 ### 4.1. Dispositius
 
@@ -147,7 +147,8 @@ Per defecte hi ha dos enregistradors, `"1"` i `"2"`; se'n poden configurar fins 
 | `recorder.setDevice` | `recorder`, `deviceId` (una **entrada**) | tots menys `recording` | `{ recorder }` |
 | `recorder.start` | `recorder`; opcionals, **només per a aquest enregistrament**: `folder` (ruta completa) i `name` (per al nom del fitxer). Per defecte, els de l'enregistrador (`recorder.configure`) | `idle`, `pending`, `error`. Comença de seguida, sense preguntar res; l'enregistrament pendent passa a recents (4.6). **Mai no sobreescriu cap fitxer** | `{ recorder }` |
 | `recorder.configure` | `recorder`; `name` i/o `folder` (ruta completa). Un `name` buit torna al de per defecte (`Enregistrador N`) | tots. S'aplica a partir del pròxim enregistrament. Es desa a `config.json` | `{ recorder }` |
-| `recorder.setGain` | `recorder`, `db`: volum d'enregistrament de `-60` (silenci) a `+12`; per defecte `0`. Fora de marge, es queda al límit | tots. S'aplica de seguida (també a mig enregistrament), amb una rampa curta sense clics. El que passa de 0 dBFS es retalla. Es desa a `config.json` | `{ recorder }` |
+| `recorder.setGain` | `recorder`, `db`: volum d'enregistrament de `-60` (silenci) a `+12`; per defecte `0`. Fora de marge, es queda al límit | tots. S'aplica de seguida (també a mig enregistrament), amb una rampa curta sense clics. El que passa de 0 dBFS es retalla (si el limitador és activat, abans es limita) | `{ recorder }` |
+| `recorder.setLimiter` | `recorder`, `enabled` (true/false) | tots. Limitador del que es desa al fitxer (fase 5, D-083), després del volum: el so no passa del sostre `settings.recorderLimiter.ceilingDb` (per defecte −1 dB). Mira 1,5 ms endavant i abaixa just abans d'un cop, sense retallar-lo; per sota del sostre no toca res (sense compressió). S'aplica de seguida, també a mig enregistrament (transició de 10 ms, sense clics). Desactivat per defecte. Es desa al perfil | `{ recorder }` |
 | `recorder.stop` | `recorder` | `recording`. La interfície **sempre** ha de demanar confirmació abans d'enviar-la | `{ recorder }` |
 
 Fitxer: `<carpeta>\<nom>_AAAA-MM-DD_HH-MM-SS.mp3` (si ja existeix, s'hi afegeix `_2`, `_3`...). MP3 320 kbps CBR estèreo, a la freqüència de l'entrada. Mentre s'enregistra hi ha un marcador `<fitxer>.mp3.rec` (JSON) que s'esborra en aturar correctament.
@@ -167,7 +168,8 @@ Objecte `recorder` (també a `state.get` i a l'esdeveniment `recorder.state`):
 ```
 
 - `state`: `idle` (inactiu), `recording`, `pending` (fitxer acabat, a `file`), `error`.
-- `name`, `folder`, `gainDb`: vegeu `recorder.configure` i `recorder.setGain`. El mesurador (5.2) ja mostra el nivell **amb el volum aplicat**: el que queda al fitxer.
+- `name`, `folder`, `gainDb`: vegeu `recorder.configure` i `recorder.setGain`. El mesurador (5.2) ja mostra el nivell **amb el volum aplicat** i, si el limitador és activat, sense passar del seu sostre: el que queda al fitxer (D-085).
+- `limiter`: `{ enabled, ceilingDb }`: limitador (`recorder.setLimiter`; el sostre és de `settings.recorderLimiter`).
 - `elapsed`: segons enregistrats. `fileSize`: bytes escrits. `freeDiskBytes`: espai lliure a la unitat del fitxer mentre s'enregistra, i a la de `folder` quan no (`null` si no se sap, p. ex. en una unitat de xarxa). `lowDiskSpace`: queda menys de l'equivalent a 2 hores d'enregistrament (uns 288 MB a 320 kbps).
 - `samplesLost`: mostres perdudes perquè el disc no ha anat prou ràpid. `captureGlitches`: vegades que Windows ha avisat que s'han perdut dades de captura. Tots dos han de ser 0.
 - `inputActive`: l'entrada és oberta i el mesurador funciona. **L'entrada s'obre en triar-la, no en començar a enregistrar** (per veure el nivell abans d'enregistrar); `recorder.start` fa servir la mateixa entrada i comença a l'instant. Si l'entrada es perd quan no s'enregistra, no és cap error: `inputActive` passa a `false` i el motor la torna a obrir quan torna (cada 3 s ho prova).
@@ -332,6 +334,7 @@ Objecte `settings` (resultat de `settings.get` i `settings.set`):
 | `layout.players` | enter de `1` a `6` (per defecte `2`) | Nombre de reproductors |
 | `layout.recorders` | enter de `1` a `4` (per defecte `2`) | Nombre d'enregistradors |
 | `program.name` | text de com a molt 60 caràcters (per defecte `""`; `""` el treu) | Nom del programa: surt a la barra superior i a l'historial de reproducció (D-043). Els espais repetits i els salts de línia es treuen |
+| `recorderLimiter.ceilingDb` | de `-6` a `0`, amb un decimal (per defecte `-1`) | Sostre del limitador dels enregistradors (fase 5, D-083), comú a tots; cada un l'activa amb `recorder.setLimiter`. També inclou `minCeilingDb` i `maxCeilingDb` (només es llegeixen) |
 
 - **On es desa cada cosa (fase 4, D-057):** `ui.zoom` és de l'ordinador (`config.json`); la resta (`ui.recordersPerRow`, `ui.endWarningSeconds`, `layout`, `program`), com també els dispositius dels reproductors, enregistradors i preescolta, els ajustos dels enregistradors i les últimes llistes, és del **perfil actiu** (`perfils\<id>\perfil.json` i `perfils\<id>\llistes\`). On aquest document diu que alguna cosa «es desa a `config.json`», vol dir a la configuració: al fitxer que li toca segons aquesta regla.
 - `folders` només es llegeix (no es pot canviar amb `settings.set`): carpetes de l'historial de reproducció (D-043) i dels registres del motor (D-045), perquè la interfície les pugui obrir.
@@ -496,10 +499,12 @@ Objecte `processing` (al reproductor, a `player.setProcessing` i a cada preset):
   "players":   { "1": [-12.3, -11.8], "2": [-90, -90] },
   "recorders": { "1": [-18.0, -17.5], "2": [-90, -90] },
   "cue": [-24.1, -23.9],
-  "playerReduction": { "1": 6.4, "2": 0 } }
+  "playerReduction": { "1": 6.4, "2": 0 },
+  "recorderReduction": { "1": 0, "2": 1.2 } }
 ```
 
 - `playerReduction`: quant abaixa el compressor/limitador de cada reproductor (dB, ≥ 0; el màxim des de l'esdeveniment anterior), per a l'indicador de reducció. `0` si està desactivat o no sona (fase 4, 4.13).
+- `recorderReduction`: el mateix per al limitador de cada enregistrador (fase 5, D-083). `0` si està desactivat o no s'enregistra.
 
 - Per a cada element, `[esquerre, dret]` en **dBFS**: el pic més alt des de l'esdeveniment anterior (uns 40 ms). `-90` vol dir silenci.
 - Reproductors: el que surt, **després del volum**. Preescolta: igual, el que surt pels auriculars. Enregistradors: el que entra, **amb el volum d'enregistrament aplicat**, també quan no s'enregistra (si `inputActive`).

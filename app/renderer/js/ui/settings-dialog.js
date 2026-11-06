@@ -19,6 +19,17 @@ const MAX_PROGRAM_NAME = 60;
 /** Dies màxims de l'historial d'enregistraments, com accepta el motor. */
 const MAX_ARCHIVE_DAYS = 3650;
 
+/** Pestanyes de la finestra (fase 5, D-091). */
+const TABS = [
+  { id: 'general', label: 'General' },
+  { id: 'players', label: 'Reproductors' },
+  { id: 'recorders', label: 'Enregistradors' },
+  { id: 'files', label: 'Fitxers i dreceres' },
+];
+
+/** L'última pestanya que s'ha mirat: en tornar a obrir la finestra, s'hi torna (mentre l'aplicació és oberta). */
+let lastTab = 'general';
+
 /**
  * @param {any} settings  objecte settings del motor
  * @param {{ players: number, recorders: number }} running  quants n'hi ha ara al motor
@@ -54,9 +65,18 @@ export function editSettings(settings, running) {
   const dialog = document.createElement('dialog');
   dialog.className = 'obp-dialog obp-form obp-settings';
   dialog.innerHTML = `
-    <form method="dialog">
+    <form method="dialog" novalidate>
       <h2 class="obp-dialog-title"><i class="bi bi-gear"></i> Configuració</h2>
 
+      <ul class="nav nav-tabs nav-fill flex-nowrap obp-settings-tabs" role="tablist">
+        ${TABS.map((t) => `
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" type="button" role="tab" data-tab="${t.id}">${escapeHtml(t.label)}</button>
+          </li>`).join('')}
+      </ul>
+
+      <div class="obp-settings-body">
+      <div class="obp-settings-panel" role="tabpanel" data-tab="general">
       <h3 class="obp-settings-section">Programa</h3>
       <label class="visually-hidden" for="st-program">Nom del programa</label>
       <input id="st-program" class="form-control" type="text" maxlength="${MAX_PROGRAM_NAME}"
@@ -81,10 +101,12 @@ export function editSettings(settings, running) {
         El nombre de reproductors i enregistradors s'aplicarà quan tornis a obrir l'aplicació
         (ara n'hi ha ${running.players} i ${running.recorders}). Si en treus algun, la seva configuració no s'esborra.
       </div>
+      </div>
 
-      <h3 class="obp-settings-section">Reproductors</h3>
+      <div class="obp-settings-panel" role="tabpanel" data-tab="players">
+      <h3 class="obp-settings-section">Avís de final de pista</h3>
       <div class="obp-settings-grid">
-        <label for="st-warning">Avís de final de pista</label>
+        <label for="st-warning">Avisar</label>
         <div class="input-group input-group-sm">
           <input id="st-warning" class="form-control" type="number" min="0" max="${MAX_END_WARNING}" step="1"
                  value="${escapeHtml(settings.ui.endWarningSeconds)}">
@@ -93,8 +115,9 @@ export function editSettings(settings, running) {
       </div>
       <div class="form-text mb-3">El temps restant es posa vermell i parpelleja. 0 = sense avís.</div>
 
+      <h3 class="obp-settings-section">Normalització (NORM)</h3>
       <div class="obp-settings-grid">
-        <label for="st-loudness">Normalització: objectiu</label>
+        <label for="st-loudness">Objectiu</label>
         <select id="st-loudness" class="form-select form-select-sm">${loudnessOptions}</select>
       </div>
       <div class="form-text mb-3">
@@ -103,8 +126,9 @@ export function editSettings(settings, running) {
         Amb el compressor SqrSoft, −12 LUFS deixa la música forta gairebé igual i apuja les pistes fluixes.
       </div>
 
+      <h3 class="obp-settings-section">Retall de silencis</h3>
       <div class="obp-settings-grid">
-        <label for="st-trim-threshold">Silencis: llindar</label>
+        <label for="st-trim-threshold">Llindar</label>
         <select id="st-trim-threshold" class="form-select form-select-sm">${trimOptions}</select>
         <label for="st-trim-lead">Marge abans del so</label>
         <div class="input-group input-group-sm">
@@ -124,10 +148,12 @@ export function editSettings(settings, running) {
         menys el marge i s'acaba a l'últim més el marge. Compta com a so qualsevol mostra per sobre del llindar.
         Si hi ha soroll de fons per sobre del llindar, no es retalla res. S'aplica a partir de la pista següent.
       </div>
+      </div>
 
-      <h3 class="obp-settings-section">Enregistradors</h3>
+      <div class="obp-settings-panel" role="tabpanel" data-tab="recorders">
+      <h3 class="obp-settings-section">Limitador (LIM)</h3>
       <div class="obp-settings-grid">
-        <label for="st-limiter">Limitador: sostre</label>
+        <label for="st-limiter">Sostre</label>
         <select id="st-limiter" class="form-select form-select-sm">${ceilingOptions}</select>
       </div>
       <div class="form-text mb-3">
@@ -136,6 +162,7 @@ export function editSettings(settings, running) {
         Amb −1,0 dB, l'MP3 no passa de 0 dB en reproduir-lo; amb −0,1 dB, en pot passar una mica.
       </div>
 
+      <h3 class="obp-settings-section">Recents</h3>
       <div class="form-check form-switch mb-1">
         <input id="st-clear-recents" class="form-check-input" type="checkbox" role="switch"${settings.recents?.clearOnExit ? ' checked' : ''}>
         <label class="form-check-label" for="st-clear-recents">Netejar Recents en tancar l'aplicació</label>
@@ -145,6 +172,7 @@ export function editSettings(settings, running) {
         te n'oblidis. Els fitxers no es toquen.
       </div>
 
+      <h3 class="obp-settings-section">Historial d'enregistraments</h3>
       <div class="form-check form-switch mb-1">
         <input id="st-archive" class="form-check-input" type="checkbox" role="switch"${archive.enabled ? ' checked' : ''}>
         <label class="form-check-label" for="st-archive">Historial: desar una còpia de cada enregistrament</label>
@@ -171,7 +199,9 @@ export function editSettings(settings, running) {
         descartar ni editar. Millor en un altre disc. Les còpies de fa més dels dies triats s'esborren en obrir
         l'aplicació (0 = no s'esborren mai). Els canvis s'apliquen a partir del pròxim enregistrament.
       </div>
+      </div>
 
+      <div class="obp-settings-panel" role="tabpanel" data-tab="files">
       <h3 class="obp-settings-section">Fitxers</h3>
       <div class="d-flex flex-wrap gap-2 mb-1">
         <button class="btn btn-sm btn-outline-secondary js-open-history" type="button">
@@ -187,6 +217,8 @@ export function editSettings(settings, running) {
       <dl class="obp-info-list obp-shortcuts">
         ${SHORTCUTS_HELP.map(([keys, action]) => `<dt><kbd>${escapeHtml(keys)}</kbd></dt><dd>${escapeHtml(action)}</dd>`).join('')}
       </dl>
+      </div>
+      </div>
 
       <div class="error-text mb-2 js-error"></div>
       <div class="obp-dialog-buttons">
@@ -212,6 +244,31 @@ export function editSettings(settings, running) {
   showRestart();
 
   $('.js-cancel').addEventListener('click', () => dialog.close('cancel'));
+
+  // Pestanyes: només se'n veu una. Les altres continuen al formulari (es desen igual).
+  const showTab = (/** @type {string} */ id) => {
+    lastTab = id;
+    for (const button of dialog.querySelectorAll('.obp-settings-tabs .nav-link')) {
+      const active = /** @type {HTMLElement} */ (button).dataset.tab === id;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-selected', String(active));
+    }
+    for (const panel of dialog.querySelectorAll('.obp-settings-panel')) {
+      panel.classList.toggle('d-none', /** @type {HTMLElement} */ (panel).dataset.tab !== id);
+    }
+  };
+  for (const button of dialog.querySelectorAll('.obp-settings-tabs .nav-link')) {
+    button.addEventListener('click', () => showTab(/** @type {HTMLElement} */ (button).dataset.tab ?? 'general'));
+  }
+  showTab(lastTab);
+
+  /** Si un camp no és vàlid: s'obre la seva pestanya, es diu per què i s'hi posa el cursor. */
+  const invalid = (/** @type {HTMLInputElement} */ field, /** @type {string} */ message) => {
+    const panel = /** @type {HTMLElement | null} */ (field.closest('.obp-settings-panel'));
+    if (panel?.dataset.tab) showTab(panel.dataset.tab);
+    error.textContent = message;
+    field.focus();
+  };
 
   // Historial d'enregistraments: carpeta (triar, per defecte, obrir) i dies. Apagat, les opcions s'enfosqueixen.
   const archiveSwitch = $('#st-archive');
@@ -253,21 +310,20 @@ export function editSettings(settings, running) {
   $('.js-archive-open').addEventListener('click', () => openFolder(chosenArchiveFolder || archive.defaultFolder));
   $('.js-open-logs').addEventListener('click', () => openFolder(settings.folders?.logs));
 
-  // Abans de tancar amb «Desar», es comprova l'avís de final (és l'únic camp que s'escriu a mà).
+  // Abans de tancar amb «Desar», es comproven els camps que s'escriuen a mà. La validació del navegador no es fa
+  // servir (novalidate): amb un camp no vàlid en una pestanya amagada, no es podria desar i no es veuria per què.
   $('.js-save').addEventListener('click', (e) => {
     const seconds = Number(warning.value);
     if (!Number.isInteger(seconds) || seconds < 0 || seconds > MAX_END_WARNING) {
       e.preventDefault();
-      error.textContent = `L'avís de final ha de ser un nombre de segons entre 0 i ${MAX_END_WARNING}.`;
-      warning.focus();
+      invalid(warning, `L'avís de final ha de ser un nombre de segons entre 0 i ${MAX_END_WARNING}.`);
       return;
     }
     // Els dies de l'historial també s'escriuen a mà.
     const days = Number($('#st-archive-days').value);
     if (!Number.isInteger(days) || days < 0 || days > MAX_ARCHIVE_DAYS) {
       e.preventDefault();
-      error.textContent = `Els dies de l'historial han de ser un nombre entre 0 (no esborrar mai) i ${MAX_ARCHIVE_DAYS}.`;
-      $('#st-archive-days').focus();
+      invalid($('#st-archive-days'), `Els dies de l'historial han de ser un nombre entre 0 (no esborrar mai) i ${MAX_ARCHIVE_DAYS}.`);
       return;
     }
     // Els marges del retall de silencis també s'escriuen a mà.
@@ -275,8 +331,7 @@ export function editSettings(settings, running) {
       const ms = Number($(id).value);
       if (!Number.isInteger(ms) || ms < 0 || ms > MAX_TRIM_MARGIN) {
         e.preventDefault();
-        error.textContent = `Els marges del retall han de ser un nombre de mil·lisegons entre 0 i ${MAX_TRIM_MARGIN}.`;
-        $(id).focus();
+        invalid($(id), `Els marges del retall han de ser un nombre de mil·lisegons entre 0 i ${MAX_TRIM_MARGIN}.`);
         return;
       }
     }

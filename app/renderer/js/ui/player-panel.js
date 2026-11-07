@@ -69,6 +69,7 @@ export class PlayerPanel {
         <span class="panel-header-left">${HANDLE_HTML}<span class="panel-title"><i class="bi bi-music-note-list"></i> Reproductor ${escapeHtml(id)}</span></span>
         <span class="panel-header-right">
           <button class="btn btn-sm dsp-btn norm-btn js-norm" type="button"><i class="d-none"></i><span class="norm-label">NORM</span></button>
+          <button class="btn btn-sm dsp-btn level-btn js-level" type="button"><i class="d-none"></i><span>NIV</span></button>
           <button class="btn btn-sm dsp-btn js-dsp" type="button"><i class="d-none"></i><span class="dsp-label">DSP</span></button>
           <span class="js-state"></span>
         </span>
@@ -165,6 +166,11 @@ export class PlayerPanel {
     this.#el.open.addEventListener('click', () => this.#open());
     this.#el.edit.addEventListener('click', () => this.#edit());
     this.#el.dsp.addEventListener('click', () => openProcessingDialog(this.#store, this.#request, this.#id));
+    // NIV (fase 5, pas 30c; D-136): l'anivellador. Amb una pista carregada s'aplica de seguida (el motor la torna a obrir on és).
+    this.#el.level.addEventListener('click', () => {
+      const enabled = !!this.#store.players.get(this.#id)?.leveler?.enabled;
+      this.#send('player.setLeveler', { enabled: !enabled });
+    });
     // NORM: activa o desactiva la normalització (a partir de la pista següent).
     this.#el.norm.addEventListener('click', () => {
       const enabled = !!this.#store.players.get(this.#id)?.normalization?.enabled;
@@ -210,6 +216,16 @@ export class PlayerPanel {
       ? `Normalització ACTIVADA: cada pista s'iguala a ${target} LUFS abans del DSP. Clica per desactivar-la (a partir de la pista següent).`
       : `Normalització desactivada. Clica per igualar el volum de les pistes a ${target} LUFS (a partir de la pista següent).`;
     /** @type {HTMLElement} */ (el.norm.querySelector('i')).className = norm.enabled ? 'bi bi-check-lg' : 'd-none';
+
+    // Anivellador (D-136): botó encès (color i marca ✓). Amb el NIV, el NORM no s'aplica: es diu a l'ajuda del NORM.
+    const level = p.leveler ?? {};
+    el.level.classList.toggle('on', !!level.enabled);
+    el.level.setAttribute('aria-pressed', String(!!level.enabled));
+    el.level.title = level.enabled
+      ? `Anivellador ACTIVAT: iguala el volum de la parla mentre sona (p. ex. una entrevista amb una veu fluixa i una de forta), cap a ${target} LUFS, com a molt +${level.maxBoostDb ?? 12} dB. Clica per desactivar-lo (de seguida).`
+      : `Anivellador desactivat. Clica per igualar el volum de la parla mentre sona (cap a ${target} LUFS). S'aplica de seguida, també a la pista que sona.`;
+    /** @type {HTMLElement} */ (el.level.querySelector('i')).className = level.enabled ? 'bi bi-check-lg' : 'd-none';
+    if (level.enabled && norm.enabled) el.norm.title += '\nAmb el NIV activat, la normalització no s\'aplica (l\'anivellador ja porta la pista a aquest nivell).';
     this.#deviceSelect.update(this.#store, p.deviceId, playing);
     el['device-warning'].innerHTML = deviceWarning(this.#store, p.deviceId);
 
@@ -230,7 +246,12 @@ export class PlayerPanel {
     const normText = typeof normGain === 'number'
       ? `Norm. ${normGain > 0 ? '+' : normGain < 0 ? '−' : ''}${Math.abs(normGain).toFixed(1).replace('.', ',')} dB`
       : '';
-    el.format.textContent = [p.format, normText].filter(Boolean).join(' · ');
+    // Anivellador: el guany del moment que sona (10 vegades per segon, de player.position), p. ex. «Niv. +8,5 dB».
+    const levelGain = p.levelerGainDb !== undefined ? p.levelerGainDb : p.leveler?.gainDb;
+    const levelText = typeof levelGain === 'number'
+      ? `Niv. ${levelGain > 0 ? '+' : levelGain < 0 ? '−' : ''}${Math.abs(levelGain).toFixed(1).replace('.', ',')} dB`
+      : '';
+    el.format.textContent = [p.format, normText, levelText].filter(Boolean).join(' · ');
     el.format.title = el.format.textContent;
 
     // Mentre s'arrossega la barra, es mostra la posició on s'anirà.

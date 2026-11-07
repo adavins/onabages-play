@@ -37,7 +37,7 @@ let lastTab = 'general';
  * @param {{ players: number, recorders: number }} running  quants n'hi ha ara al motor
  * @param {{ profileName: string, hasPin: boolean, set: (pin: string | null) => Promise<void> }} pin
  *   PIN del perfil actiu (pas 13c): `set` el desa de seguida al motor (null el treu)
- * @returns {Promise<{ ui: object, layout: object, program: object, loudness: object, trim: object, fadeOut: object, recorderLimiter: object, silenceAlarm: object, recordingArchive: object, recents: object } | null>}
+ * @returns {Promise<{ ui: object, layout: object, program: object, loudness: object, trim: object, fadeOut: object, recorderLimiter: object, silenceAlarm: object, leveler: object, recordingArchive: object, recents: object } | null>}
  */
 export function editSettings(settings, running, pin) {
   const options = (/** @type {number} */ max, /** @type {number} */ selected) =>
@@ -79,6 +79,11 @@ export function editSettings(settings, running, pin) {
   const silenceSecondsOptions = [...new Set([10, 15, 20, 30, 45, 60, 90, 120, 180, 300, silenceSeconds])].sort((a, b) => a - b)
     .map((v) => `<option value="${v}"${v === silenceSeconds ? " selected" : ""}>${v < 60 ? v + " s" : (v % 60 ? Math.floor(v / 60) + " min " + (v % 60) + " s" : v / 60 + " min")}${v === 30 ? " (recomanat)" : ""}</option>`)
     .join("");
+  // Anivellador (fase 5, pas 30c; D-136): el màxim que pot pujar.
+  const levelerMax = Number(settings.leveler?.maxBoostDb ?? 12);
+  const levelerOptions = [...new Set([6, 9, 12, 15, 18, 20, levelerMax])].sort((a, b) => a - b)
+    .map((v) => `<option value="${v}"${v === levelerMax ? ' selected' : ''}>+${v} dB${v === 12 ? ' (recomanat)' : ''}</option>`)
+    .join('');
   const ceilingOptions = ceilings
     .map((c) => `<option value="${c}"${c === ceiling ? ' selected' : ''}>${c.toFixed(1).replace('.', ',').replace('-', '−')} dB${c === -1 ? ' (recomanat)' : ''}</option>`)
     .join('');
@@ -183,6 +188,18 @@ export function editSettings(settings, running, pin) {
         Als reproductors amb el botó NORM encès, cada pista s'apuja o s'abaixa fins a aquest nivell
         (com a molt +${escapeHtml(settings.loudness?.maxBoostDb ?? 10)} dB), abans del DSP. S'aplica a partir de la pista següent.
         Amb el compressor SqrSoft, −12 LUFS deixa la música forta gairebé igual i apuja les pistes fluixes.
+      </div>
+
+      <h3 class="obp-settings-section">Anivellador (NIV)</h3>
+      <div class="obp-settings-grid">
+        <label for="st-leveler">Pujar com a molt</label>
+        <select id="st-leveler" class="form-select form-select-sm">${levelerOptions}</select>
+      </div>
+      <div class="form-text mb-3">
+        Als reproductors amb el botó NIV encès, el volum de la parla s'iguala mentre sona, cap a l'objectiu de la
+        normalització (p. ex. una entrevista amb una veu fluixa i una de forta). Va a poc a poc, mira un segon endavant,
+        no puja les pauses ni el soroll de fons i no satura. Si la veu fluixa té molt soroll a sota, pujar-la també el puja:
+        per això té un màxim. Amb el NIV, el NORM no s'aplica. S'aplica a partir de la pista següent.
       </div>
 
       <h3 class="obp-settings-section">Retall de silencis</h3>
@@ -487,6 +504,7 @@ export function editSettings(settings, running, pin) {
           layout: { players: Number(players.value), recorders: Number(recorders.value) },
           program: { name: $('#st-program').value.trim() },
           loudness: { targetLufs: Number($('#st-loudness').value) },
+          leveler: { maxBoostDb: Number($('#st-leveler').value) },
           recorderLimiter: { ceilingDb: Number($('#st-limiter').value) },
           silenceAlarm: {
             enabled: $('#st-silence').checked,

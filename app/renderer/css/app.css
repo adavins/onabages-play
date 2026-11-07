@@ -26,6 +26,7 @@
   --obp-cue: #f07c1a;              /* preescolta (taronja): panell, rètol i fila que hi sona */
   --obp-cart: #20c997;             /* botonera (verd blavós): el que hi sona */
   --obp-norm: #2dd4bf;             /* normalització (verd blavós): botó NORM */
+  --obp-level: #60a5fa;            /* anivellador (blau): botó NIV */
   --obp-dsp: #8b5cf6;              /* compressor/limitador (lila): botó DSP i reducció */
 
   /* Mides de la distribució */
@@ -2203,3 +2204,7 @@ body.engine-offline .side-content {
   line-height: 1.4;
 }
 .pl-mono-warn { color: var(--obp-warn); background: none; border: 1px solid var(--obp-warn); }
+
+/* Botó NIV (anivellador, fase 5, pas 30c; D-136): el mateix estil que NORM, encès en blau. */
+.level-btn.on,
+.level-btn.on:hover { color: #000; background: var(--obp-level); border-color: var(--obp-level); }

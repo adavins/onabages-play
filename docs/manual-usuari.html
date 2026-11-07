@@ -512,6 +512,12 @@
     <li><strong>Eliminar:</strong> treu la selecció. <strong>Conservar:</strong> es queda només amb la selecció.</li>
     <li><strong>Fos d'entrada</strong> / <strong>Fos de sortida</strong>: a la selecció, del silenci al volum normal o al
       revés.</li>
+    <li id="normalitzar"><strong>Normalitzar</strong> (<kbd>N</kbd>): puja o baixa el volum de la selecció (o de tot el fitxer,
+      si no hi ha selecció) perquè el so més fort arribi al <strong>pic objectiu</strong> (per defecte −1 dBFS), sense passar-lo
+      mai. Abans d'aplicar-ho, el diàleg diu el pic d'ara i quant canviarà (p. ex. «+10,5 dB → pic −1,5 dBFS»). Va de
+      1,5 dB en 1,5 dB, com els fosos (sense perdre qualitat), i per això pot quedar una mica per sota de l'objectiu. Com
+      a molt puja +24 dB. Serveix, per exemple, per igualar una entrevista fluixa amb la resta del programa. L'últim
+      objectiu es recorda.</li>
     <li>Tot es pot desfer (<kbd>Ctrl</kbd> + <kbd>Z</kbd>) i refer (<kbd>Ctrl</kbd> + <kbd>Y</kbd>).</li>
   </ul>
   <p id="editor-marques"><strong>Marques d'un enregistrament:</strong> si l'enregistrament té <a href="#marques">marques</a>,
@@ -536,7 +542,7 @@
   <ul>
     <li>Pots <strong>escoltar</strong>, <strong>seleccionar</strong> (també entre marques), <strong>moure les marques</strong> i
       <strong>desar trossos</strong> amb «Desar la selecció…». Les marques que mous es mantenen encara que en posis de noves.</li>
-    <li>No pots retallar, fer fosos ni desar-lo sencer: aquests botons estan desactivats fins que s'aturi.</li>
+    <li>No pots retallar, fer fosos, normalitzar ni desar-lo sencer: aquests botons estan desactivats fins que s'aturi.</li>
     <li><strong>Actualitzar</strong> (o <kbd>F5</kbd>) hi afegeix el que s'ha enregistrat després i les marques noves, sense
       perdre el zoom, el cursor ni la selecció.</li>
     <li>Quan l'enregistrament s'atura, l'editor s'actualitza sol i ja el pots editar sencer.</li>
@@ -600,6 +606,7 @@
     <tr><td><kbd>Maj</kbd> + <kbd>Espai</kbd></td><td>Reproduir la selecció</td></tr>
     <tr><td><kbd>Supr</kbd></td><td>Eliminar la selecció</td></tr>
     <tr><td><kbd>E</kbd> · <kbd>S</kbd></td><td>Fos d'entrada · Fos de sortida (a la selecció)</td></tr>
+    <tr><td><kbd>N</kbd></td><td>Normalitzar (la selecció o, sense selecció, tot el fitxer)</td></tr>
     <tr><td><kbd>M</kbd> · <kbd>Re Pàg</kbd> · <kbd>Av Pàg</kbd></td><td>Seleccionar entre marques · Marca anterior · Marca següent</td></tr>
     <tr><td><kbd>Ctrl</kbd> + <kbd>Z</kbd> · <kbd>Ctrl</kbd> + <kbd>Y</kbd></td><td>Desfer · Refer</td></tr>
     <tr><td><kbd>Ctrl</kbd> + <kbd>S</kbd> · <kbd>Ctrl</kbd> + <kbd>Maj</kbd> + <kbd>S</kbd></td><td>Desar · Desar com…</td></tr>

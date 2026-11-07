@@ -40,6 +40,7 @@ const els = {
   keep: /** @type {HTMLButtonElement} */ ($('ed-keep')),
   fadeIn: /** @type {HTMLButtonElement} */ ($('ed-fade-in')),
   fadeOut: /** @type {HTMLButtonElement} */ ($('ed-fade-out')),
+  normalize: /** @type {HTMLButtonElement} */ ($('ed-normalize')),
   undo: /** @type {HTMLButtonElement} */ ($('ed-undo')),
   redo: /** @type {HTMLButtonElement} */ ($('ed-redo')),
   zoomIn: /** @type {HTMLButtonElement} */ ($('ed-zoom-in')),
@@ -373,6 +374,8 @@ function renderControls() {
   els.keep.disabled = !hasSel;
   els.fadeIn.disabled = !hasSel;
   els.fadeOut.disabled = !hasSel;
+  // Normalitzar (pas 26b): la selecció o, sense, tot el fitxer. Cal la forma d'ona sencera (el pic en surt).
+  els.normalize.disabled = !ready || (editor.peaksDone ?? 0) < (editor.originalFrames ?? 0);
   els.undo.disabled = !ready || !editor.canUndo;
   els.redo.disabled = !ready || !editor.canRedo;
   els.zoomIn.disabled = !ready;
@@ -388,7 +391,7 @@ function renderControls() {
   const live = !!editor?.live;
   els.refresh.disabled = !ready;
   if (live) {
-    for (const b of [els.save, els.saveAs, els.trimStart, els.trimEnd, els.del, els.keep, els.fadeIn, els.fadeOut, els.undo, els.redo]) b.disabled = true;
+    for (const b of [els.save, els.saveAs, els.trimStart, els.trimEnd, els.del, els.keep, els.fadeIn, els.fadeOut, els.normalize, els.undo, els.redo]) b.disabled = true;
   }
   els.device.disabled = !connected;
 
@@ -663,6 +666,76 @@ async function fadeSelection(/** @type {'editor.fadeIn' | 'editor.fadeOut'} */ c
   await send(cmd, { start: sel.start * fs, end: sel.end * fs });
 }
 
+/** Objectius del diàleg de normalització (dBFS de pic). */
+const NORMALIZE_TARGETS = [0, -0.5, -1, -2, -3, -6, -9, -12];
+
+/** dB amb coma i signe menys de debò, p. ex. «−1,5». Amb plus, també el signe + (per a un canvi). */
+function dbText(/** @type {number} */ db, plus = false) {
+  const text = Math.abs(db).toFixed(1).replace(".", ",");
+  return db < 0 ? "−" + text : (plus && db > 0 ? "+" + text : text);
+}
+
+/**
+ * Normalitzar (pas 26b; D-123): diàleg amb l'objectiu, que diu abans d'aplicar-ho el pic d'ara i quant canviarà.
+ * Sense selecció, tot el fitxer. El motor ho calcula (editor.normalize amb preview) i ho aplica; es pot desfer.
+ */
+async function normalize() {
+  if (!editor?.open || els.normalize.disabled) return;
+  const fs = editor.frameSeconds;
+  const sel = wave.selection;
+  const range = sel ? { start: sel.start * fs, end: sel.end * fs } : {};
+  const first = await send("editor.normalize", { ...range, preview: true });
+  if (!first?.normalize) return;
+
+  const target = first.normalize.targetDb;
+  const targets = [...new Set([...NORMALIZE_TARGETS, target])].sort((a, b) => b - a);
+  const what = sel ? `la selecció (${formatTime(sel.start * fs)} – ${formatTime(sel.end * fs)})` : "tot el fitxer";
+  const dialog = document.createElement("dialog");
+  dialog.className = "obp-dialog";
+  dialog.innerHTML = `
+    <form method="dialog">
+      <h2 class="obp-dialog-title"><i class="bi bi-bar-chart-steps"></i> Normalitzar</h2>
+      <div class="obp-dialog-message">Puja o baixa el volum de ${escapeHtml(what)} perquè el so més fort arribi a
+        l'objectiu, sense passar-lo. Sense perdre qualitat: es pot desfer.</div>
+      <label class="form-label" for="ed-norm-target">Pic objectiu</label>
+      <select id="ed-norm-target" class="form-select form-select-sm">
+        ${targets.map((t) => `<option value="${t}"${t === target ? " selected" : ""}>${dbText(t)} dBFS${t === -1 ? " (recomanat)" : ""}</option>`).join("")}
+      </select>
+      <div class="ed-norm-plan js-plan" role="status"></div>
+      <div class="obp-dialog-buttons">
+        <button class="btn btn-secondary" value="cancel">Cancel·lar</button>
+        <button class="btn btn-info js-apply" value="apply"><i class="bi bi-bar-chart-steps"></i> Normalitzar</button>
+      </div>
+    </form>`;
+  document.body.appendChild(dialog);
+  const select = /** @type {HTMLSelectElement} */ (dialog.querySelector("#ed-norm-target"));
+  const planEl = /** @type {HTMLElement} */ (dialog.querySelector(".js-plan"));
+  const applyBtn = /** @type {HTMLButtonElement} */ (dialog.querySelector(".js-apply"));
+
+  /** @param {any} plan */
+  const showPlan = (plan) => {
+    const none = plan.gainDb === 0;
+    planEl.innerHTML = `Pic d'ara: <strong>${dbText(plan.peakDb)} dBFS</strong>. `
+      + (none
+        ? "Ja és a l'objectiu (els canvis són de 1,5 dB en 1,5 dB): no cal canviar res."
+        : `Canvi: <strong>${dbText(plan.gainDb, true)} dB</strong> → pic ${dbText(plan.resultPeakDb)} dBFS.`)
+      + (plan.limited ? ` <span class="text-warning"><i class="bi bi-exclamation-triangle-fill"></i> Com a molt es puja +${dbText(plan.maxGainDb)} dB: és gairebé silenci.</span>` : "");
+    applyBtn.disabled = none;
+  };
+  showPlan(first.normalize);
+  select.addEventListener("change", async () => {
+    const r = await send("editor.normalize", { ...range, targetDb: Number(select.value), preview: true });
+    if (r?.normalize) showPlan(r.normalize);
+  });
+  dialog.showModal();
+  const choice = await new Promise((resolve) => dialog.addEventListener("close", () => resolve(dialog.returnValue)));
+  dialog.remove();
+  if (choice !== "apply") return;
+
+  const result = await send("editor.normalize", { ...range, targetDb: Number(select.value) });
+  if (result?.changed) showMessage(`Normalitzat: ${dbText(result.normalize.gainDb, true)} dB (pic ${dbText(result.normalize.resultPeakDb)} dBFS). Ctrl+Z per desfer-ho.`);
+}
+
 async function keepSelection() {
   const sel = wave.selection;
   if (!sel || !editor?.open) return;
@@ -737,6 +810,7 @@ function setupButtons() {
   els.keep.addEventListener('click', keepSelection);
   els.fadeIn.addEventListener('click', () => fadeSelection('editor.fadeIn'));
   els.fadeOut.addEventListener('click', () => fadeSelection('editor.fadeOut'));
+  els.normalize.addEventListener('click', normalize);
   els.undo.addEventListener('click', () => send('editor.undo'));
   els.redo.addEventListener('click', () => send('editor.redo'));
   els.zoomIn.addEventListener('click', () => wave.zoom(0.5));
@@ -776,6 +850,8 @@ function setupKeyboard() {
     // Fosos: E (entrada) i S (sortida), sense Ctrl (Ctrl+S és desar).
     else if (!ctrl && e.key.toLowerCase() === 'e') action = () => fadeSelection('editor.fadeIn');
     else if (!ctrl && e.key.toLowerCase() === 's') action = () => fadeSelection('editor.fadeOut');
+    // Normalitzar (pas 26b): N obre el diàleg.
+    else if (!ctrl && e.key.toLowerCase() === 'n') action = normalize;
     // Marques (pas 23c): Re Pàg / Av Pàg hi salten; M selecciona el tros entre les del voltant.
     else if (e.key === 'PageUp') action = () => goToMark(-1);
     else if (e.key === 'PageDown') action = () => goToMark(1);
@@ -795,7 +871,7 @@ function setupKeyboard() {
     // Enregistrament en curs (pas 24c): F5 actualitza; les tecles d'editar i desar no fan res (els botons ho expliquen).
     if (e.key === 'F5' && editor?.live) action = () => refresh();
     const editKey = e.key === 'Delete' || e.key === 'Backspace' || (ctrl && ['s', 'z', 'y'].includes(e.key.toLowerCase()))
-      || (!ctrl && ['e', 's'].includes(e.key.toLowerCase()));
+      || (!ctrl && ['e', 's', 'n'].includes(e.key.toLowerCase()));
     if (editor?.live && editKey) action = null;
 
     if (action && !(editor?.busy)) {

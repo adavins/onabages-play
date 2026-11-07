@@ -394,7 +394,7 @@ export class Waveform {
       for (let f = Math.max(0, f0); f < Math.min(total, f1); f++) {
         const original = map[f];
         if (original >= this.#peaksDone) { missing = true; continue; }
-        const v = peaks[original * 2 + channel] * (this.#gains ? this.#gains[original] : 1);
+        const v = Math.min(255, peaks[original * 2 + channel] * (this.#gains ? this.#gains[original] : 1));
         if (v > max) max = v;
       }
 
@@ -467,7 +467,7 @@ export class Waveform {
       for (let f = f0; f < Math.min(total, f1); f += stepF) {
         const original = this.#map[f];
         if (original >= this.#peaksDone) continue;
-        const v = Math.max(this.#peaks[original * 2], this.#peaks[original * 2 + 1]) * (this.#gains ? this.#gains[original] : 1);
+        const v = Math.min(255, Math.max(this.#peaks[original * 2], this.#peaks[original * 2 + 1]) * (this.#gains ? this.#gains[original] : 1));
         if (v > max) max = v;
       }
       const h = Math.max(0.5, (max / 255) * (mid - 1));

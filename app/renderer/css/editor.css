@@ -209,3 +209,9 @@
 .editor-body.engine-offline .ed-controls {
   opacity: 0.45;
 }
+
+/* Diàleg de normalització (fase 5, pas 26b): què canviarà. */
+.ed-norm-plan {
+  margin-top: 0.75rem;
+  min-height: 2.5em;
+}

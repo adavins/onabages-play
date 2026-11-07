@@ -396,6 +396,29 @@ public sealed class Recorder : IDisposable
     }
 
     /// <summary>
+    /// Mou la marca <paramref name="number"/> a <paramref name="seconds"/> de l'enregistrament (fase 5, pas 24b; D-118), mentre
+    /// s'enregistra o quan és pendent: des de l'editor, que no pot escriure el fitxer de marques mentre l'enregistrador n'és
+    /// l'amo (el reescriuria amb la marca següent). Com a molt fins on s'ha enregistrat. Les marques queden <b>ordenades per
+    /// temps</b> (si passa per davant d'una altra, es renumeren), igual que quan es llegeixen del fitxer: així el número és el
+    /// mateix a l'enregistrador i a l'editor.
+    /// </summary>
+    public void MoveMark(int number, double seconds)
+    {
+        lock (_sync)
+        {
+            if (State is not (RecorderState.Recording or RecorderState.Pending))
+                throw new RecorderCommandException("Aquest enregistrador no té cap enregistrament amb marques.");
+            if (number < 1 || number > _marks.Count)
+                throw new RecorderCommandException($"No hi ha cap marca {number}.");
+            _marks[number - 1] = _marks[number - 1] with { Seconds = Math.Clamp(seconds, 0, Elapsed.TotalSeconds) };
+            _marks.Sort((a, b) => a.Seconds.CompareTo(b.Seconds));
+            _changed = true;
+        }
+        RaiseStateChanged();
+        WriteMarksFile("La marca s'ha mogut, però no s'ha pogut desar al disc");
+    }
+
+    /// <summary>
     /// Desa totes les marques al fitxer de marques (i al de la còpia de l'historial). Fora de _sync; mai des del fil d'àudio.
     /// Si no es pot, les marques es queden a la memòria (es tornarà a provar la vegada següent) i es diu amb <paramref name="failure"/>.
     /// </summary>

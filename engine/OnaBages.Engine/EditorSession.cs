@@ -142,18 +142,8 @@ public sealed class EditorSession : IDisposable
         lock (_sync)
         {
             var edit = RequireReady();
-            if (Live) throw new EditorStateException("Mentre s'enregistra, les marques encara no es poden moure des de l'editor.");
-            if (number < 1 || number > _marks.Count)
-                throw new EditorStateException($"No hi ha cap marca {number}.");
-            double fs = edit.Index.FrameSeconds;
-            if (!RecordingMarks.MapToEdited(_marks, edit.Segments, fs, edit.Index.FrameCount).Any(m => m.Number == number))
-                throw new EditorStateException($"La marca {number} és en un tros eliminat.");
-
-            // Temps de la versió editada → temps de l'original (amb els decimals del fotograma).
-            double frame = Math.Clamp(seconds / fs, 0, edit.FrameCount);
-            int whole = Math.Min((int)Math.Floor(frame), edit.FrameCount - 1);
-            double original = (edit.ToOriginal(whole) + (frame - whole)) * fs;
-
+            if (Live) throw new EditorStateException("Mentre s'enregistra, les marques es mouen a través de l'enregistrador.");
+            double original = OriginalSecondsOf(edit, number, seconds);
             var previous = _marks[number - 1];
             _marks[number - 1] = previous with { Seconds = original };
             try
@@ -167,6 +157,42 @@ public sealed class EditorSession : IDisposable
             }
         }
         RaiseChanged();
+    }
+
+    /// <summary>
+    /// On hauria d'anar la marca <paramref name="number"/> en temps de l'original si es mou a <paramref name="seconds"/> de
+    /// la versió editada (pas 24b: per demanar-ho a l'enregistrador, que és l'amo de les marques mentre enregistra o té el
+    /// fitxer pendent). Comprova que la marca existeixi i es vegi.
+    /// </summary>
+    public double OriginalSecondsOfMark(int number, double seconds)
+    {
+        lock (_sync) return OriginalSecondsOf(RequireReady(), number, seconds);
+    }
+
+    /// <summary>Torna a llegir les marques del fitxer (pas 24b: després que l'enregistrador n'hagi mogut una).</summary>
+    public void ReloadMarks()
+    {
+        lock (_sync)
+        {
+            if (Edit is null || Path is null) return;
+            _marks = RecordingMarks.Read(Path);
+        }
+        RaiseChanged();
+    }
+
+    /// <summary>Temps de la versió editada → temps de l'original, per a la marca <paramref name="number"/> (dins de _sync).</summary>
+    private double OriginalSecondsOf(Mp3Edit edit, int number, double seconds)
+    {
+        if (number < 1 || number > _marks.Count)
+            throw new EditorStateException($"No hi ha cap marca {number}.");
+        double fs = edit.Index.FrameSeconds;
+        if (!RecordingMarks.MapToEdited(_marks, edit.Segments, fs, edit.Index.FrameCount).Any(m => m.Number == number))
+            throw new EditorStateException($"La marca {number} és en un tros eliminat.");
+
+        // Amb els decimals del fotograma.
+        double frame = Math.Clamp(seconds / fs, 0, edit.FrameCount);
+        int whole = Math.Min((int)Math.Floor(frame), edit.FrameCount - 1);
+        return (edit.ToOriginal(whole) + (frame - whole)) * fs;
     }
 
     /// <summary>Qualsevol canvi (també el progrés, com a molt 4 vegades per segon).</summary>
@@ -432,7 +458,6 @@ public sealed class EditorSession : IDisposable
             {
                 if (_job != job) return; // l'han cancel·lat o n'ha començat una altra
                 _job = null;
-                Busy = null;
                 Progress = 1;
                 if (result is not null) onDone(result);
                 else
@@ -441,6 +466,9 @@ public sealed class EditorSession : IDisposable
                     if (busy == "opening") { Path = null; Edit = null; }
                     onFailed?.Invoke();
                 }
+                // L'últim: l'estat es llegeix sense bloqueig (EditorJson), i qui veu «no ocupat» ha de trobar el resultat
+                // ja posat. Abans es deixava d'estar ocupat primer i, de tant en tant, es veia un fitxer obert sense Edit.
+                Busy = null;
             }
             RaiseChanged();
         });

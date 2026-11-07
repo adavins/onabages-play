@@ -90,7 +90,9 @@ public static class RecordingMarks
         for (int i = 0; i < marks.Count; i++)
         {
             double frame = marks[i].Seconds / frameSeconds; // fotograma de l'original (amb decimals)
-            // Una marca just al final del fitxer (o una mica més enllà) és de l'últim fotograma.
+            // Més enllà del final (pas 24b: una marca posada després de la fotografia d'un enregistrament en curs): no hi és.
+            if (frame > originalFrames) continue;
+            // Una marca just al final del fitxer és de l'últim fotograma.
             int whole = Math.Min((int)Math.Floor(frame), Math.Max(0, originalFrames - 1));
             long before = 0; // fotogrames de la versió editada abans del tros
             foreach (var s in segments)

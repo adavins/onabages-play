@@ -93,12 +93,11 @@ public class EditorLiveTests : IDisposable
         Assert.InRange(editor["duration"]!.GetValue<double>(), 3.4, 4.1);
         Assert.Equal(1.0, editor["marks"]![0]!["seconds"]!.GetValue<double>(), 1);
 
-        // No es pot editar ni desar a sobre ni moure marques (encara).
+        // No es pot editar ni desar a sobre (les marques sí que es poden moure: vegeu les proves del pas 24b).
         Assert.Equal("bad_state", ErrorCode(Send("editor.delete", new JsonObject { ["start"] = 0, ["end"] = 1 })));
         Assert.Equal("bad_state", ErrorCode(Send("editor.fadeIn", new JsonObject { ["start"] = 0, ["end"] = 1 })));
         Assert.Equal("bad_state", ErrorCode(Send("editor.save", new JsonObject { ["overwrite"] = true })));
         Assert.Equal("bad_state", ErrorCode(Send("editor.save", new JsonObject { ["path"] = Path.Combine(_folder, "x.mp3") })));
-        Assert.Equal("bad_state", ErrorCode(Send("editor.moveMark", new JsonObject { ["number"] = 1, ["seconds"] = 2 })));
         _recorder.Stop();
     }
 
@@ -146,7 +145,7 @@ public class EditorLiveTests : IDisposable
 
         RecordAndWait(3.0, before + 2.5);
         _recorder.Mark();
-        RecordAndWait(0.5, before + 2.9); // perquè la marca quedi dins de la fotografia
+        RecordAndWait(0.5, 6.3); // 6,5 s enregistrats i la marca a 6 s: que quedi dins de la fotografia
         Editor(Send("editor.refresh"));
         var editor = WaitIdle();
 
@@ -162,6 +161,89 @@ public class EditorLiveTests : IDisposable
         Assert.Equal(6.5, editor["duration"]!.GetValue<double>(), 1);
         // Ja és un fitxer normal: es pot editar.
         Assert.True(Send("editor.delete", new JsonObject { ["start"] = 0, ["end"] = 1 })["ok"]!.GetValue<bool>());
+    }
+
+    // --- Pas 24b (D-118): les marques es mouen a través de l'enregistrador ---
+
+    private static double[] Seconds(JsonObject editor) =>
+        editor["marks"]!.AsArray().Select(m => Math.Round(m!["seconds"]!.GetValue<double>(), 2)).ToArray();
+
+    [Fact]
+    public void Moure_una_marca_mentre_s_enregistra_no_es_perd_amb_la_marca_seguent()
+    {
+        _recorder.Start();
+        RecordAndWait(1.0, 0);
+        _recorder.Mark();
+        RecordAndWait(2.0, 2.5);
+        Editor(Send("editor.open", new JsonObject { ["path"] = _recorder.FilePath! }));
+        WaitIdle();
+
+        var editor = Editor(Send("editor.moveMark", new JsonObject { ["number"] = 1, ["seconds"] = 2.0 }));
+
+        Assert.Equal([2.0], Seconds(editor));
+        Assert.Equal(2.0, Math.Round(_recorder.Marks.Single().Seconds, 2));
+        // L'enregistrador hi posa una marca nova i reescriu el fitxer: la moguda s'hi manté.
+        _input!.PushTone(1.0);
+        _recorder.Mark();
+        Assert.Equal([2.0, 4.0], RecordingMarks.Read(_recorder.FilePath!).Select(m => Math.Round(m.Seconds, 2)));
+        // La nova és després de la fotografia: a l'editor no hi surt (fins que s'actualitzi).
+        Assert.Equal([2.0], Seconds(Editor(Send("editor.get"))));
+        _recorder.Stop();
+    }
+
+    [Fact]
+    public void Si_passa_per_davant_d_una_altra_es_renumeren_igual_a_tot_arreu()
+    {
+        _recorder.Start();
+        RecordAndWait(1.0, 0);
+        _recorder.Mark();               // 1 a 1 s
+        _input!.PushTone(1.0);
+        _recorder.Mark();               // 2 a 2 s
+        RecordAndWait(1.0, 2.5);
+        Editor(Send("editor.open", new JsonObject { ["path"] = _recorder.FilePath! }));
+        WaitIdle();
+
+        var editor = Editor(Send("editor.moveMark", new JsonObject { ["number"] = 1, ["seconds"] = 2.5 }));
+
+        // La que era a 2 s passa a ser la 1, a l'editor i a l'enregistrador.
+        Assert.Equal([2.0, 2.5], Seconds(editor));
+        Assert.Equal([1, 2], editor["marks"]!.AsArray().Select(m => m!["number"]!.GetValue<int>()));
+        Assert.Equal([2.0, 2.5], _recorder.Marks.Select(m => Math.Round(m.Seconds, 2)));
+        // Posar nom a la 2 des del panell de l'enregistrador: és la de 2,5 s.
+        _recorder.NameMark(2, "Moguda");
+        Assert.Equal("Moguda", RecordingMarks.Read(_recorder.FilePath!).Single(m => Math.Round(m.Seconds, 2) == 2.5).Name);
+        _recorder.Stop();
+    }
+
+    [Fact]
+    public void Amb_l_enregistrament_pendent_tambe_passa_per_l_enregistrador()
+    {
+        _recorder.Start();
+        _input!.PushTone(1.0);
+        _recorder.Mark();
+        _input.PushTone(1.0);
+        _recorder.Stop();
+        Editor(Send("editor.open", new JsonObject { ["path"] = _recorder.FilePath! }));
+        Assert.False(WaitIdle()["live"]!.GetValue<bool>());
+
+        Editor(Send("editor.moveMark", new JsonObject { ["number"] = 1, ["seconds"] = 0.5 }));
+        _recorder.NameMark(1, "Inici"); // abans, això tornava a escriure la marca on era
+
+        var mark = RecordingMarks.Read(_recorder.FilePath!).Single();
+        Assert.Equal(0.5, mark.Seconds, 2);
+        Assert.Equal("Inici", mark.Name);
+    }
+
+    [Fact]
+    public void Una_marca_no_es_pot_moure_mes_enlla_del_que_s_ha_enregistrat()
+    {
+        _recorder.Start();
+        _input!.PushTone(1.0);
+        _recorder.Mark();
+        Assert.Throws<RecorderCommandException>(() => _recorder.MoveMark(2, 0.5));
+        _recorder.MoveMark(1, 99);
+        Assert.Equal(_recorder.Elapsed.TotalSeconds, _recorder.Marks.Single().Seconds, 2);
+        _recorder.Stop();
     }
 
     [Fact]

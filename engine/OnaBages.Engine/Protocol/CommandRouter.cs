@@ -327,7 +327,22 @@ public sealed partial class CommandRouter
     {
         int number = (int)RequireNumber(msg, "number", "el número de la marca (1, 2...)");
         double seconds = RequireNumber(msg, "seconds", "la posició en segons");
-        _state.Editor.MoveMark(number, seconds);
+        var editor = _state.Editor;
+        // Si el fitxer és d'un enregistrador que enregistra o el té pendent (pas 24b; D-118), les marques són seves: ho fa ell
+        // (si l'editor escrivís el fitxer, l'enregistrador el tornaria a escriure amb la marca següent o en posar-hi nom).
+        var owner = editor.Path is { } path
+            ? _state.Recorders.FirstOrDefault(r => r.State is RecorderState.Recording or RecorderState.Pending
+                && string.Equals(r.FilePath, path, StringComparison.OrdinalIgnoreCase))
+            : null;
+        if (owner is not null)
+        {
+            owner.MoveMark(number, editor.OriginalSecondsOfMark(number, seconds));
+            editor.ReloadMarks();
+        }
+        else
+        {
+            editor.MoveMark(number, seconds);
+        }
         return EditorState();
     }
 

@@ -2153,3 +2153,31 @@ body.engine-offline .side-content {
 /* Icona de la franja lateral mentre sona alguna cosa a la botonera (amb el panell plegat o en una altra pestanya). */
 .side-btn.cart-on,
 .side-btn.cart-on:hover { color: #000; background: var(--obp-cart); }
+
+/* Botonera: arrossegar i editar (pas 28d; D-130). */
+.cart-btn.cart-drop { outline: 2px dashed var(--obp-cart); outline-offset: 1px; filter: brightness(1.2); }
+.cart-btn.cart-empty:hover { border-color: var(--bs-secondary-color); }
+.cart-hint { color: var(--bs-secondary-color); font-size: 0.8rem; }
+
+.cart-colors { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.cart-color { cursor: pointer; }
+.cart-color input { position: absolute; opacity: 0; pointer-events: none; }
+.cart-color span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.35rem;
+  background: var(--cart-color);
+  border: 2px solid transparent;
+  color: #fff;
+}
+.cart-color span .bi { visibility: hidden; }
+.cart-color input:checked + span { border-color: #fff; }
+.cart-color input:checked + span .bi { visibility: visible; }
+.cart-color input:focus-visible + span { outline: 2px solid var(--bs-primary); outline-offset: 2px; }
+.cart-file { display: flex; align-items: center; gap: 0.5rem; }
+.cart-file .js-file { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cart-dialog { width: min(26rem, 92vw); }
+.cart-dialog .obp-dialog-buttons { margin-top: 1.25rem; }

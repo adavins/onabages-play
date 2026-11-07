@@ -8,11 +8,27 @@
 // - Pàgines: 1, 2, 3, 4 (la que es veu es recorda).
 // - Teclat numèric (handleKey): 1–9 i 0 fan sonar els 10 primers botons de la pàgina; + i − canvien de pàgina;
 //   la coma (o el punt) atura-ho tot.
+// - Assignar (pas 28d; D-130): arrossegar àudios a un botó (des d'Àudios, d'una llista o de l'Explorador de Windows).
+//   Si se'n deixen anar diversos, omplen aquell botó i els buits següents de la pàgina.
+// - Botó dret: Editar… (nom, color, volum, fitxer), Escoltar per la preescolta, Treure; en un de buit, Triar un fitxer….
 
 import { deviceWarning } from './device-line.js';
 import { DeviceSelect } from './device-select.js';
 import { LevelMeter } from './meter.js';
-import { escapeHtml, formatDuration } from './format.js';
+import { escapeHtml, fileName, formatDuration } from './format.js';
+import { draggedPaths, PATHS_DRAG_TYPE } from './drag-types.js';
+import { showContextMenu } from './context-menu.js';
+import { editCartButton } from './cart-button-dialog.js';
+import { togglePreview } from './cue-actions.js';
+
+/** @type {any} API de preload.js */
+const bridge = /** @type {any} */ (window).onabages;
+
+/** Pistes arrossegades des de la llista d'un reproductor (playlist-view.js): porten les rutes. */
+const PLAYLIST_DRAG_TYPE = 'application/x-obp-items';
+
+/** Llargada màxima del nom d'un botó (com al motor). */
+const MAX_NAME = 40;
 
 /** @typedef {import('../store.js').Store} Store */
 /** @typedef {(cmd: string, params?: object) => Promise<any>} Request */
@@ -59,6 +75,7 @@ export class CartPanel {
         <div class="cart-shared js-shared"><i class="bi bi-info-circle"></i> Surt per la mateixa sortida que un reproductor</div>
         <div class="cart-pages js-pages" role="tablist" aria-label="Pàgines de la botonera"></div>
         <div class="cart-grid js-grid"></div>
+        <div class="cart-hint js-hint"><i class="bi bi-hand-index"></i> Arrossega àudios als botons (des d'Àudios, d'una llista o de l'Explorador de Windows). Botó dret: editar.</div>
         <div class="cart-bottom">
           <div class="js-meter-slot cart-meter"></div>
           <button class="btn btn-sm btn-outline-danger js-stop-all" type="button" title="Aturar tot el que sona a la botonera (coma del teclat numèric)">
@@ -88,6 +105,11 @@ export class CartPanel {
       const button = /** @type {HTMLElement} */ (e.target).closest('[data-index]');
       if (button) this.#press(Number(/** @type {HTMLElement} */ (button).dataset.index));
     });
+    this.#el.grid.addEventListener('contextmenu', (e) => {
+      const button = /** @type {HTMLElement} */ (e.target).closest('[data-index]');
+      if (button) this.#menu(e, Number(/** @type {HTMLElement} */ (button).dataset.index));
+    });
+    this.#setupDrop();
 
     this.render();
   }
@@ -127,6 +149,7 @@ export class CartPanel {
 
     this.#renderGrid();
     this.renderPlaying();
+    el.hint.classList.toggle('d-none', (c.buttons?.length ?? 0) > 0);
   }
 
   /** Construeix la graella de la pàgina (només quan canvien els botons o la pàgina; la posició va a renderPlaying). */
@@ -149,9 +172,9 @@ export class CartPanel {
       const keyLabel = KEY_LABELS[index] ? `<span class="cart-key">${KEY_LABELS[index]}</span>` : '';
       if (!b) {
         button.classList.add('cart-empty');
-        button.disabled = true;
+        button.setAttribute('aria-label', `Botó ${index + 1}, buit`);
         button.innerHTML = keyLabel;
-        button.title = 'Botó buit';
+        button.title = 'Botó buit: arrossega-hi un àudio, o botó dret per triar-ne un';
         return button;
       }
       if (b.color) button.style.setProperty('--cart-color', b.color);
@@ -225,6 +248,115 @@ export class CartPanel {
   }
 
   // -------------------------------------------------------------------------
+
+  /** El botó assignat d'aquesta pàgina, si n'hi ha. */
+  #buttonAt(/** @type {number} */ index) {
+    return (this.#store.cart?.buttons ?? []).find((/** @type {any} */ x) => x.page === this.#page && x.index === index);
+  }
+
+  /** Botó dret: el menú d'un botó assignat o d'un de buit. */
+  #menu(/** @type {MouseEvent} */ e, /** @type {number} */ index) {
+    const b = this.#buttonAt(index);
+    if (!b) {
+      showContextMenu(e, [{ label: 'Triar un fitxer…', icon: 'bi-folder2-open', action: () => this.#chooseFile(index) }]);
+      return;
+    }
+    const previewing = this.#store.isPreviewing(b.path);
+    showContextMenu(e, [
+      { label: 'Editar…', icon: 'bi-pencil', action: () => this.#edit(index) },
+      { label: previewing ? 'Aturar la preescolta' : 'Escoltar per la preescolta', icon: 'bi-headphones', action: () => this.#preview(b.path) },
+      { separator: true },
+      { label: 'Treure el fitxer del botó', icon: 'bi-x-lg', action: () => this.#clear(index) },
+    ]);
+  }
+
+  async #chooseFile(/** @type {number} */ index) {
+    const [path] = (await bridge?.openAudioFiles({ title: `Fitxer del botó ${index + 1}`, single: true })) ?? [];
+    if (path) this.#assign(index, [path]);
+  }
+
+  async #edit(/** @type {number} */ index) {
+    const b = this.#buttonAt(index);
+    const c = this.#store.cart;
+    if (!b || !c) return;
+    const page = this.#page;
+    const changes = await editCartButton(b, { minGainDb: c.minGainDb ?? -30, maxGainDb: c.maxGainDb ?? 10, maxName: MAX_NAME });
+    if (!changes) return;
+    // Un fitxer nou substitueix el botó (el motor el torna a llegir); el nom, el color i el volum es tornen a posar.
+    if (changes.path !== b.path && !(await this.#send('cart.assign', { page, index, path: changes.path, name: changes.name || undefined }))) return;
+    await this.#send('cart.configure', {
+      page, index, color: changes.color, gainDb: changes.gainDb,
+      ...(changes.name ? { name: changes.name } : {}),
+    });
+  }
+
+  async #preview(/** @type {string} */ path) {
+    const error = await togglePreview(this.#store, this.#request, path);
+    if (error) this.#showMessage(error);
+  }
+
+  async #clear(/** @type {number} */ index) {
+    const b = this.#buttonAt(index);
+    if (b && await this.#send('cart.clear', { page: this.#page, index })) this.#showMessage(`S'ha buidat el botó «${b.name}».`);
+  }
+
+  /**
+   * Assigna fitxers a partir d'un botó: el primer, al botó; la resta, als buits següents de la pàgina.
+   * Si n'hi ha més que buits, els que sobren es diuen.
+   */
+  async #assign(/** @type {number} */ index, /** @type {string[]} */ paths) {
+    const c = this.#store.cart;
+    if (!c || paths.length === 0) return;
+    const total = (c.rows ?? 4) * (c.columns ?? 4);
+    const page = this.#page;
+    const targets = [index];
+    for (let i = index + 1; i < total && targets.length < paths.length; i++) {
+      if (!this.#buttonAt(i)) targets.push(i);
+    }
+    for (const [n, target] of targets.entries()) {
+      if (!(await this.#send('cart.assign', { page, index: target, path: paths[n] }))) return;
+    }
+    const left = paths.length - targets.length;
+    if (left > 0) this.#showMessage(`No hi ha prou botons buits en aquesta pàgina: ${left} fitxer${left === 1 ? '' : 's'} sense botó (${paths.slice(targets.length).map(fileName).join(', ')}).`);
+  }
+
+  /** Arrossegar àudios als botons. */
+  #setupDrop() {
+    const grid = this.#el.grid;
+    const accepts = (/** @type {DragEvent} */ e) => {
+      const types = e.dataTransfer?.types ?? [];
+      return types.includes('Files') || types.includes(PATHS_DRAG_TYPE) || types.includes(PLAYLIST_DRAG_TYPE);
+    };
+    const target = (/** @type {DragEvent} */ e) => /** @type {HTMLElement | null} */ (/** @type {HTMLElement} */ (e.target).closest('[data-index]'));
+    const clearMark = () => grid.querySelectorAll('.cart-drop').forEach((el) => el.classList.remove('cart-drop'));
+
+    grid.addEventListener('dragover', (e) => {
+      if (!accepts(e) || !target(e)) return;
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+      const t = target(e);
+      if (!t?.classList.contains('cart-drop')) {
+        clearMark();
+        t?.classList.add('cart-drop');
+      }
+    });
+    grid.addEventListener('dragleave', (e) => {
+      if (!grid.contains(/** @type {Node | null} */ (e.relatedTarget))) clearMark();
+    });
+    grid.addEventListener('drop', (e) => {
+      const t = target(e);
+      clearMark();
+      if (!t || !e.dataTransfer) return;
+      e.preventDefault();
+      // Des d'Àudios (rutes), d'una llista (pistes amb la ruta) o de l'Explorador de Windows (fitxers).
+      let paths = draggedPaths(e.dataTransfer);
+      if (paths.length === 0 && e.dataTransfer.types.includes(PLAYLIST_DRAG_TYPE)) {
+        try { paths = JSON.parse(e.dataTransfer.getData(PLAYLIST_DRAG_TYPE)).paths ?? []; } catch { paths = []; }
+      }
+      if (paths.length === 0) paths = [...e.dataTransfer.files].map((f) => bridge?.pathForFile(f)).filter(Boolean);
+      this.#assign(Number(t.dataset.index), paths.filter((p) => typeof p === 'string' && p));
+    });
+  }
 
   #showPage(/** @type {number} */ page) {
     this.#page = page;

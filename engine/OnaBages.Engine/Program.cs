@@ -335,8 +335,13 @@ catch (Exception ex)
     catch (Exception ex2) { log.LogError("No s'han pogut llegir els dispositius: {Message}", ex2.Message); }
 }
 
-// Botonera (fase 5, pas 28a): els botons del perfil, abans d'obrir-ne la sortida (l'inici de cada un es llegeix en segon pla).
-foreach (var b in config.Read(c => c.CartButtons.ToList()))
+// Comparació del maquinari amb la configuració desada (especificació 5.6).
+LogHardwareReport(hardware.Start(devicesAtStart));
+
+// Botonera (fase 5, pas 28a): els botons del perfil. Ha d'anar DESPRÉS de hardware.Start, que és qui llegeix la configuració
+// (abans, la llista era buida: D-131). La sortida ja és oberta, i l'inici de cada botó es llegeix en segon pla a la seva freqüència.
+var cartButtons = config.Read(c => c.CartButtons.ToList());
+foreach (var b in cartButtons)
 {
     try
     {
@@ -348,9 +353,8 @@ foreach (var b in config.Read(c => c.CartButtons.ToList()))
         log.LogWarning("Botonera: no s'ha pogut carregar el botó {Page}/{Index}: {Message}", b.Page + 1, b.Index + 1, ex.Message);
     }
 }
-
-// Comparació del maquinari amb la configuració desada (especificació 5.6).
-LogHardwareReport(hardware.Start(devicesAtStart));
+if (cartButtons.Count > 0)
+    log.LogInformation("Botonera: {Count} botons", cartButtons.Count);
 
 // «Netejar Recents en tancar l'aplicació» (fase 5, pas 11a): es fa en arrencar (amb la configuració ja llegida), abans que la interfície vegi la
 // llista (així també es fa si l'ordinador va caure). Només els desats i els no trobats: els no desats es queden.

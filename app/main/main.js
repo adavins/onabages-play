@@ -311,12 +311,13 @@ const PLAYLIST_EXTENSIONS = ['obpl', 'm3u', 'm3u8'];
 let lastAudioFolder = undefined;
 
 /** Diàleg per triar fitxers d'àudio (un o diversos). Recorda l'última carpeta mentre l'aplicació és oberta. */
-ipcMain.handle('dialog:open-audio', async () => {
+// Opcions (pas 28d): title (per defecte, el de les llistes) i single (un sol fitxer, p. ex. per a un botó de la botonera).
+ipcMain.handle('dialog:open-audio', async (_event, options = {}) => {
   if (!mainWindow) return [];
   const result = await dialog.showOpenDialog(mainWindow, {
-    title: 'Afegir pistes a la llista',
+    title: typeof options?.title === 'string' ? options.title : 'Afegir pistes a la llista',
     defaultPath: lastAudioFolder,
-    properties: ['openFile', 'multiSelections'],
+    properties: options?.single ? ['openFile'] : ['openFile', 'multiSelections'],
     filters: [
       { name: 'Àudio', extensions: AUDIO_EXTENSIONS },
       { name: 'Llistes (s\'hi afegeixen les seves pistes)', extensions: PLAYLIST_EXTENSIONS },

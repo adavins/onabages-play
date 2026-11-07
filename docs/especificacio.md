@@ -671,7 +671,9 @@ Fet: **documentació integrada** (D-092–D-094): manual d'usuari i documentaci�
 
 Fet: **alarma de silenci als enregistradors** (D-121, D-122): mentre s'enregistra, si el que entra al fitxer és per sota de −50 dBFS durant 30 s (configurable al perfil), el panell parpelleja en vermell i surt un avís. No atura mai l'enregistrament.
 
-Candidates: equalitzador per reproductor (ajornat de la fase 4, D-073), botonera de talls (cartwall), punts cue d'inici i final, biblioteca musical amb cerca, inicis programats, control MIDI o per *fader start*, usuaris.
+Fet: **botonera d'instantanis** (D-127–D-130): pestanya del panell lateral amb 4 pàgines de 4 × 4 botons i sortida pròpia (pot ser la d'un reproductor); sona a l'instant (l'inici de cada tall és a la memòria) i fins a 8 talls alhora; s'omple arrossegant àudios; color, nom i volum per botó; teclat numèric. Al perfil.
+
+Candidates: equalitzador per reproductor (ajornat de la fase 4, D-073), punts cue d'inici i final, biblioteca musical amb cerca, inicis programats, control MIDI o per *fader start*, usuaris.
 
 # 15. Proves i criteris de qualitat
 

@@ -24,7 +24,7 @@ contextBridge.exposeInMainWorld('onabages', {
   },
 
   /** Diàleg de Windows per triar fitxers d'àudio (un o diversos). Retorna les rutes (buit si es cancel·la). */
-  openAudioFiles: () => ipcRenderer.invoke('dialog:open-audio'),
+  openAudioFiles: (options) => ipcRenderer.invoke('dialog:open-audio', options),
 
   /** Diàleg per obrir una llista (.obpl, .m3u, .m3u8). Retorna la ruta, o null. */
   openPlaylistFile: () => ipcRenderer.invoke('dialog:open-playlist'),

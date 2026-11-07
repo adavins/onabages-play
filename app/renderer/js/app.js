@@ -201,8 +201,9 @@ async function onConnectionStatus(e) {
     setStatus('connected');
     try {
       const hello = await client.request('engine.hello');
-      engineVersion = `${hello.version} · protocol ${hello.protocol}`;
-      els.details.textContent = engineVersion;
+      engineVersion = `versió ${hello.version} · protocol ${hello.protocol}`;
+      // La versió no es mostra a la barra (D-138): queda a l'ajuda de l'indicador del motor.
+      els.status.title = `Motor connectat (${engineVersion})`;
 
       const { settings } = await client.request('settings.get');
       applySettings(settings);
@@ -236,7 +237,10 @@ async function onConnectionStatus(e) {
 
 /** @param {{ uptime: number }} ev */
 function showUptime(ev) {
-  els.details.textContent = `${engineVersion} · en marxa ${formatDuration(ev.uptime)}`;
+  // Compacte (D-138): icona del cronòmetre i el temps; la frase sencera, a l'ajuda.
+  const uptime = formatDuration(ev.uptime);
+  els.details.innerHTML = `<i class="bi bi-stopwatch"></i> ${uptime}`;
+  els.details.title = `Motor en marxa des de fa ${uptime}${engineVersion ? ` (${engineVersion})` : ''}`;
 }
 
 /**
@@ -249,8 +253,15 @@ function setStatus(state, message) {
   els.status.className = `status ${s.cls}`;
   /** @type {HTMLElement} */ (els.status.querySelector('i')).className = `bi ${s.icon}`;
   /** @type {HTMLElement} */ (els.status.querySelector('.label')).textContent = message ?? s.text;
-  els.status.title = message ? s.text : '';
-  if (state !== 'connected') els.details.textContent = '';
+  els.status.title = state === 'connected' ? `Motor connectat${engineVersion ? ` (${engineVersion})` : ''}` : message ? s.text : '';
+  // Connectat (l'estat normal): només el requadre verd amb ✓, i el text a l'ajuda (D-138). Connectant o amb error, el text
+  // es continua veient: és quan l'operador ho ha d'entendre de lluny.
+  els.status.classList.toggle('status-compact', state === 'connected' && !message);
+  els.status.setAttribute('aria-label', message ?? s.text);
+  if (state !== 'connected') {
+    els.details.textContent = '';
+    els.details.title = '';
+  }
 
   // Sense motor, l'estat dels panells és antic: es mostren apagats.
   document.body.classList.toggle('engine-offline', state !== 'connected');

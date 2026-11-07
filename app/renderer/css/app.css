@@ -2211,3 +2211,8 @@ body.engine-offline .side-content {
 
 /* Capçalera del reproductor: només el número (amb tants botons, «Reproductor 1» no hi cabia; D-137). */
 .player-number { font-size: 1.15em; }
+
+/* Barra superior (D-138): connectat, l'estat del motor és només el requadre verd amb ✓ (el text, a l'ajuda). */
+.status.status-compact { padding: 0.3rem 0.5rem; }
+.status.status-compact .label { display: none; }
+.engine .details .bi { margin-right: 0.15rem; }

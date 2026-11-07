@@ -321,10 +321,31 @@ public sealed class Player : IDisposable
     }
 
     /// <summary>Guany per a una pista amb la configuració d'ara (dB), o null si no se n'hi aplica cap.</summary>
+    /// Si sona un sol canal pels dos (D-132), sona 3 dB més fort del que s'ha mesurat (amb el canal buit): es compta.
     private double? NormalizationFor(PlaylistItem item) =>
         Normalize && item.LoudnessLufs is { } lufs
-            ? Math.Round(Math.Min(MaxNormalizationBoostDb, NormalizationTargetLufs - lufs), 1)
+            ? Math.Round(Math.Min(MaxNormalizationBoostDb, NormalizationTargetLufs - lufs - ChannelFixLoudnessDb(item)), 1)
             : null;
+
+    /// <summary>Quant més fort sona la pista amb la correcció de canals: un canal pels dos, el doble de potència (+3 dB).</summary>
+    private static double ChannelFixLoudnessDb(PlaylistItem item) =>
+        item.ChannelFix is ChannelFix.UseLeft or ChannelFix.UseRight ? 10 * Math.Log10(2) : 0;
+
+    // Correcció de canals que ja s'ha aplicat (Tick només la torna a posar si canvia: el botó o una anàlisi que arriba tard).
+    private string? _channelFixItem;
+    private ChannelFix _channelFixApplied;
+
+    /// <summary>Posa al fil d'àudio la correcció de canals de la pista que sona, si ha canviat (dins de _sync).</summary>
+    private void UpdateChannelFix()
+    {
+        if (_stream is null || CurrentItemId is null) return;
+        var fix = Playlist.Find(CurrentItemId)?.ChannelFix ?? ChannelFix.None;
+        if (fix == _channelFixApplied && CurrentItemId == _channelFixItem) return;
+        _channelFixItem = CurrentItemId;
+        _channelFixApplied = fix;
+        // Si ja n'hi ha una de programada (una pista que encadena), és la que val: no es trepitja.
+        if (!_stream.ChannelFixScheduled) _stream.ChannelFix = fix;
+    }
 
     /// <summary>Abaixada màxima del compressor/limitador des de l'última crida (dB, ≥ 0), per a l'indicador.</summary>
     public float TakeGainReductionDb()
@@ -615,6 +636,9 @@ public sealed class Player : IDisposable
                     _changed = true;
                 }
 
+                // Canals (D-132): si s'ha premut el botó o l'anàlisi ha arribat mentre sonava, de seguida.
+                UpdateChannelFix();
+
                 if (State == PlayerState.Playing && _stream.PlayedOut)
                     FinishList();
             }
@@ -736,6 +760,9 @@ public sealed class Player : IDisposable
         var ring = new SampleRingBuffer(_output.SampleRate * 2 * BufferSeconds);
         _ring = ring;
         _stream = new PlayerStream(ring, _output.SampleRate, _output.Channels, GainFor(VolumeDb), Dynamics);
+        _stream.ChannelFix = item.ChannelFix; // D-132
+        _channelFixItem = item.Id;
+        _channelFixApplied = item.ChannelFix;
 
         var output = _output;
         output.Stopped += error =>
@@ -819,7 +846,9 @@ public sealed class Player : IDisposable
         _keptPosition = startAt;
         _trackStartFrame = 0;
         Playlist.ClearCueIf(item.Id);
-        stream.SwitchTo(ring, (int)((long)_crossfadeMs * sampleRate / 1000));
+        stream.SwitchTo(ring, (int)((long)_crossfadeMs * sampleRate / 1000), item.ChannelFix);
+        _channelFixItem = item.Id;
+        _channelFixApplied = item.ChannelFix;
         // L'estat continua sent «sonant», però la pista ha canviat: s'ha d'avisar la interfície.
         _changed = true;
     }
@@ -951,6 +980,7 @@ public sealed class Player : IDisposable
                     itemId = next.Id;
                     gain = nextGain;
                     _transitions.Enqueue(new Transition(startFrame, next, nextSource.Duration, normalization, nextSource.Start));
+                    stream.ScheduleChannelFix(startFrame, next.ChannelFix); // els canals de la següent, just on comença (D-132)
                     ResetTail(); // la durada del fos es torna a llegir per a cada pista
                     continue;
                 }

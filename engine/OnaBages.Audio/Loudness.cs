@@ -7,12 +7,37 @@ namespace OnaBages.Audio;
 public readonly record struct SoundBounds(int ThresholdDb, double Start, double End);
 
 /// <summary>
+/// Canal sense so d'un fitxer estèreo (fase 5, pas 29a; D-132): el fitxer és estèreo però només sona per un canal.
+/// </summary>
+public enum EmptyChannel { None, Left, Right }
+
+/// <summary>
 /// Anàlisi d'una pista: sonoritat (LUFS integrats, null si és silenci), pic de mostra (0..1 o més) i
 /// on comença i on acaba el so per a cada llindar de <see cref="TrackLoudness.SilenceThresholdsDb"/>
 /// (per al retall de silencis; un llindar sense cap mostra per sobre no hi és).
 /// </summary>
-public sealed record TrackLoudness(double? Lufs, float Peak, IReadOnlyList<SoundBounds>? Sound = null)
+public sealed record TrackLoudness(double? Lufs, float Peak, IReadOnlyList<SoundBounds>? Sound = null,
+    EmptyChannel EmptyChannel = EmptyChannel.None)
 {
+    /// <summary>Un canal és buit si el seu pic no passa d'aquí (dBFS)...</summary>
+    public const double EmptyChannelMaxDb = -50;
+
+    /// <summary>... i l'altre és, com a mínim, tants dB més fort (el soroll d'un canal obert no compta com a buit).</summary>
+    public const double EmptyChannelGapDb = 30;
+
+    /// <summary>I l'altre ha de tenir so de debò (pic per sobre d'aquí): un fitxer gairebé mut no té «un canal buit».</summary>
+    public const double EmptyChannelOtherMinDb = -40;
+
+    /// <summary>Quin canal és buit, a partir del pic de cada un (0..1). Si tots dos són silenci, cap.</summary>
+    public static EmptyChannel FindEmptyChannel(float leftPeak, float rightPeak)
+    {
+        double left = 20 * Math.Log10(Math.Max(leftPeak, 1e-10f));
+        double right = 20 * Math.Log10(Math.Max(rightPeak, 1e-10f));
+        if (left <= EmptyChannelMaxDb && right >= EmptyChannelOtherMinDb && right - left >= EmptyChannelGapDb) return EmptyChannel.Left;
+        if (right <= EmptyChannelMaxDb && left >= EmptyChannelOtherMinDb && left - right >= EmptyChannelGapDb) return EmptyChannel.Right;
+        return EmptyChannel.None;
+    }
+
     /// <summary>
     /// Llindars de silenci que es poden triar (dBFS de pic). Es mesuren tots alhora: si es canvia el
     /// llindar, no cal tornar a analitzar les pistes.
@@ -49,6 +74,7 @@ public sealed record TrackLoudness(double? Lufs, float Peak, IReadOnlyList<Sound
         var edges = new SoundEdges[thresholds.Length];
         for (int k = 0; k < edges.Length; k++) edges[k] = new SoundEdges(rate);
         long frame = 0;
+        float leftPeak = 0, rightPeak = 0; // per saber si un canal és buit (pas 29a)
 
         var buffer = new float[rate / 2 * 2]; // 0,5 s
         int read;
@@ -58,7 +84,10 @@ public sealed record TrackLoudness(double? Lufs, float Peak, IReadOnlyList<Sound
             meter.Add(buffer.AsSpan(0, read));
             for (int i = 0; i + 1 < read; i += 2, frame++)
             {
-                float peak = Math.Max(Math.Abs(buffer[i]), Math.Abs(buffer[i + 1]));
+                float l = Math.Abs(buffer[i]), r = Math.Abs(buffer[i + 1]);
+                if (l > leftPeak) leftPeak = l;
+                if (r > rightPeak) rightPeak = r;
+                float peak = Math.Max(l, r);
                 // Del llindar més baix (−80) al més alt (−40): si no passa d'un, tampoc dels de més amunt.
                 for (int k = thresholds.Length - 1; k >= 0; k--)
                 {
@@ -79,7 +108,8 @@ public sealed record TrackLoudness(double? Lufs, float Peak, IReadOnlyList<Sound
             var (start, end) = edges[k].Finish() ?? (first[k], last[k]);
             sound.Add(new SoundBounds(SilenceThresholdsDb[k], (double)start / rate, (double)(end + 1) / rate));
         }
-        return new TrackLoudness(meter.IntegratedLufs is { } lufs ? Math.Round(lufs, 2) : null, meter.SamplePeak, sound);
+        return new TrackLoudness(meter.IntegratedLufs is { } lufs ? Math.Round(lufs, 2) : null, meter.SamplePeak, sound,
+            FindEmptyChannel(leftPeak, rightPeak));
     }
 
     /// <summary>Un tros de so més curt que això, sol entre silencis, és un espetec i no compta (ms).</summary>

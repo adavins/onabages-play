@@ -46,6 +46,10 @@ public static class PlaylistJson
         ["problem"] = item.Problem,
         ["loop"] = item.Loop,
         ["autoNext"] = item.AutoNext,
+        // Canals (fase 5, D-132): el buit detectat, la tria de l'operador i com sona.
+        ["emptyChannel"] = item.EmptyChannel switch { EmptyChannel.Left => "left", EmptyChannel.Right => "right", _ => null },
+        ["bothChannels"] = item.BothChannels,
+        ["channelFix"] = item.ChannelFix switch { ChannelFix.UseLeft => "left", ChannelFix.UseRight => "right", ChannelFix.Mix => "mix", _ => null },
         ["color"] = item.Color,
         ["collapsed"] = item.Collapsed,
     };

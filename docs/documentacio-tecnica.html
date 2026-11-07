@@ -301,6 +301,11 @@ npm start
   <ul>
     <li><strong>Compressor/limitador</strong> (<code>DynamicsProcessor</code>): com el SqrSoft del Winamp, amb anticipació
       d'1,5 ms. El limitador dels enregistradors és el mateix amb ràtio 1 (només el sostre).</li>
+    <li><strong>Canal buit</strong> (D-132): l'anàlisi (<code>TrackLoudness.FindEmptyChannel</code>) guarda el pic de cada canal.
+      La correcció (<code>ChannelFix</code>) la fa el fil d'àudio (<code>PlayerStream.FixChannels</code>): la de la pista d'ara
+      es pot canviar en qualsevol moment, la de la pista que encadena s'hi programa per fotograma
+      (<code>ScheduleChannelFix</code>) i la del canvi a mà va amb <code>SwitchTo</code>. <code>Player.Tick</code> només la
+      torna a posar si canvia (el botó, o una anàlisi que arriba tard).</li>
     <li><strong>Normalització</strong> (<code>Loudness</code>): mesura LUFS de cada pista; el guany s'aplica a partir de la
       pista següent.</li>
     <li><strong>Retall de silencis:</strong> la pista s'obre al primer so menys un marge i el lector no dona més mostres

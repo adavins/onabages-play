@@ -12,14 +12,14 @@ namespace OnaBages.Engine.Data;
 ///
 /// El nom surt de la ruta, la mida i la data del fitxer d'àudio: si el fitxer canvia, ja no es troba i
 /// es torna a mesurar. Els que fa més de <see cref="KeepDays"/> dies que no es fan servir s'esborren.
-/// Contingut (text): «OBLU3;lufs;pic;so» (lufs buit si la pista és silenci). «so» (retall de silencis,
+/// Contingut (text): «OBLU4;lufs;pic;so;canal» (lufs buit si la pista és silenci; canal: el buit, «L», «R» o res; fase 5, D-132). «so» (retall de silencis,
 /// fase 5) és una llista «llindar:inici:final» separada per «|», amb els segons amb 6 decimals.
 /// Les mesures de versions anteriors (sense «so», o amb els espetecs comptats) no es fan servir: es tornen a mesurar. Mai no llança excepcions.
 /// </summary>
 public sealed class LoudnessCacheFile(string? folder = null) : ILoudnessCache
 {
     public const int KeepDays = 60;
-    private const string Header = "OBLU3"; // 3: sense els espetecs aïllats (D-082)
+    private const string Header = "OBLU4"; // 3: sense els espetecs aïllats (D-082); 4: amb el canal buit (D-132)
 
     public static string DefaultFolder => Path.Combine(RuntimeFile.DirectoryPath, "cache", "sonoritat");
 
@@ -48,7 +48,7 @@ public sealed class LoudnessCacheFile(string? folder = null) : ILoudnessCache
             string? path = PathFor(audioPath);
             if (path is null || !File.Exists(path)) return null;
             string[] parts = File.ReadAllText(path).Trim().Split(';');
-            if (parts.Length != 4 || parts[0] != Header) return null;
+            if (parts.Length != 5 || parts[0] != Header) return null;
             double? lufs = parts[1].Length == 0 ? null : double.Parse(parts[1], CultureInfo.InvariantCulture);
             float peak = float.Parse(parts[2], CultureInfo.InvariantCulture);
             var sound = new List<SoundBounds>();
@@ -61,7 +61,8 @@ public sealed class LoudnessCacheFile(string? folder = null) : ILoudnessCache
                     double.Parse(b[2], CultureInfo.InvariantCulture)));
             }
             File.SetLastWriteTimeUtc(path, DateTime.UtcNow); // s'ha fet servir: no s'esborrarà aviat
-            return new TrackLoudness(lufs, peak, sound);
+            var empty = parts[4] switch { "L" => EmptyChannel.Left, "R" => EmptyChannel.Right, _ => EmptyChannel.None };
+            return new TrackLoudness(lufs, peak, sound, empty);
         }
         catch (Exception)
         {
@@ -78,7 +79,7 @@ public sealed class LoudnessCacheFile(string? folder = null) : ILoudnessCache
             Directory.CreateDirectory(Folder);
             string sound = string.Join('|', (loudness.Sound ?? []).Select(b =>
                 string.Create(CultureInfo.InvariantCulture, $"{b.ThresholdDb}:{b.Start:0.000000}:{b.End:0.000000}")));
-            string text = string.Create(CultureInfo.InvariantCulture, $"{Header};{loudness.Lufs};{loudness.Peak};{sound}");
+            string text = string.Create(CultureInfo.InvariantCulture, $"{Header};{loudness.Lufs};{loudness.Peak};{sound};{EmptyCode(loudness.EmptyChannel)}");
             string temp = path + ".tmp";
             File.WriteAllText(temp, text);
             File.Move(temp, path, overwrite: true);
@@ -88,6 +89,13 @@ public sealed class LoudnessCacheFile(string? folder = null) : ILoudnessCache
             // La memòria cau és només per anar més de pressa.
         }
     }
+
+    private static string EmptyCode(EmptyChannel channel) => channel switch
+    {
+        EmptyChannel.Left => "L",
+        EmptyChannel.Right => "R",
+        _ => "",
+    };
 
     /// <summary>Esborra les mesures que fa més de <see cref="KeepDays"/> dies que no es fan servir.</summary>
     public void DeleteOld()

@@ -905,12 +905,12 @@ public sealed partial class CommandRouter
         return new JsonObject { ["playlist"] = PlaylistJson.Playlist(player) };
     }
 
-    /// <summary>"itemId" i, opcionals, "loop", "autoNext", "cue" (bool). Els que no s'envien no canvien.</summary>
+    /// <summary>"itemId" i, opcionals, "loop", "autoNext", "cue" i "bothChannels" (bool). Els que no s'envien no canvien.</summary>
     private JsonObject PlaylistSetFlags(JsonObject msg)
     {
         var player = GetPlayer(msg);
         string id = ExistingItem(player, RequireString(msg, "itemId"))!;
-        player.Playlist.SetFlags(id, ReadBool(msg["loop"]), ReadBool(msg["autoNext"]), ReadBool(msg["cue"]));
+        player.Playlist.SetFlags(id, ReadBool(msg["loop"]), ReadBool(msg["autoNext"]), ReadBool(msg["cue"]), ReadBool(msg["bothChannels"]));
         return new JsonObject { ["playlist"] = PlaylistJson.Playlist(player) };
     }
 

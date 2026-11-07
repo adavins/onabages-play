@@ -25,6 +25,9 @@ public enum TrackStatus
 /// <param name="Collapsed">Separador plegat: la interfície n'amaga les pistes fins al separador següent.</param>
 /// <param name="LoudnessLufs">Sonoritat (LUFS), quan ja s'ha mesurat (fase 4, pas 5b). Null = encara no, o silenci.</param>
 /// <param name="Sound">On hi ha so per a cada llindar (retall de silencis, fase 5), quan ja s'ha analitzat.</param>
+/// <param name="EmptyChannel">El canal sense so, si la pista és estèreo però només sona per un (fase 5, pas 29a; D-132).</param>
+/// <param name="BothChannels">Tria de l'operador (botó del reproductor): true, sonar pels dos canals; false, no tocar-ho;
+/// null, automàtic (es corregeix si té un canal buit). Es desa amb la llista.</param>
 public sealed record PlaylistItem(
     string Id,
     string Path,
@@ -39,14 +42,30 @@ public sealed record PlaylistItem(
     string? Color = null,
     bool Collapsed = false,
     double? LoudnessLufs = null,
-    IReadOnlyList<SoundBounds>? Sound = null);
+    IReadOnlyList<SoundBounds>? Sound = null,
+    EmptyChannel EmptyChannel = EmptyChannel.None,
+    bool? BothChannels = null)
+{
+    /// <summary>
+    /// Com ha de sonar (D-132): amb un canal buit, el bo pels dos (tret que l'operador ho hagi desactivat); sense, i
+    /// amb el botó activat, els dos canals barrejats (així no es perd res de cap dels dos).
+    /// </summary>
+    public ChannelFix ChannelFix => BothChannels switch
+    {
+        false => ChannelFix.None,
+        _ when EmptyChannel == EmptyChannel.Left => ChannelFix.UseRight,
+        _ when EmptyChannel == EmptyChannel.Right => ChannelFix.UseLeft,
+        true => ChannelFix.Mix,
+        _ => ChannelFix.None,
+    };
+}
 
 /// <summary>
 /// Un element per afegir a una llista (p. ex. llegit d'una llista desada): un fitxer amb les seves marques
 /// o, si <paramref name="SectionTitle"/> no és null, un separador de secció.
 /// </summary>
 public sealed record PlaylistEntry(string Path, bool Loop = false, bool AutoNext = false,
-    string? SectionTitle = null, string? Color = null, bool Collapsed = false)
+    string? SectionTitle = null, string? Color = null, bool Collapsed = false, bool? BothChannels = null)
 {
     public bool IsSection => SectionTitle is not null;
 
@@ -58,8 +77,8 @@ public sealed record PlaylistEntry(string Path, bool Loop = false, bool AutoNext
     /// Un fitxer. Si el nom és només guions baixos o guions (com «______.mp3», el separador que es feia
     /// servir al Winamp), es converteix en un separador de secció.
     /// </summary>
-    public static PlaylistEntry ForFile(string path, bool loop = false, bool autoNext = false) =>
-        Playlist.IsSeparatorFileName(path) ? Section(Playlist.DefaultSectionTitle) : new(path, loop, autoNext);
+    public static PlaylistEntry ForFile(string path, bool loop = false, bool autoNext = false, bool? bothChannels = null) =>
+        Playlist.IsSeparatorFileName(path) ? Section(Playlist.DefaultSectionTitle) : new(path, loop, autoNext, BothChannels: bothChannels);
 }
 
 /// <summary>
@@ -182,7 +201,8 @@ public sealed class Playlist
                         Name: System.IO.Path.GetFileNameWithoutExtension(entry.Path),
                         Duration: null, Format: null,
                         Status: TrackStatus.Analyzing, Problem: null,
-                        Loop: entry.Loop, AutoNext: entry.AutoNext && !entry.Loop);
+                        Loop: entry.Loop, AutoNext: entry.AutoNext && !entry.Loop,
+                        BothChannels: entry.BothChannels);
                 _items.Insert(index++, item);
                 added.Add(item);
             }
@@ -277,8 +297,9 @@ public sealed class Playlist
 
     /// <summary>Canvia les marques d'una pista. Els paràmetres null no es toquen.</summary>
     /// <param name="cue">true: aquesta és la següent (treu el cue de qualsevol altra). false: treu-lo.</param>
+    /// <param name="bothChannels">Sonar pels dos canals (true) o no tocar-ho (false); D-132.</param>
     /// <exception cref="KeyNotFoundException">Si la pista no és a la llista.</exception>
-    public void SetFlags(string id, bool? loop = null, bool? autoNext = null, bool? cue = null)
+    public void SetFlags(string id, bool? loop = null, bool? autoNext = null, bool? cue = null, bool? bothChannels = null)
     {
         lock (_sync)
         {
@@ -286,7 +307,7 @@ public sealed class Playlist
             if (index < 0) throw new KeyNotFoundException(id);
 
             var item = _items[index];
-            if (item.IsSection && (loop == true || autoNext == true || cue == true))
+            if (item.IsSection && (loop == true || autoNext == true || cue == true || bothChannels is not null))
                 throw new PlayerCommandException("Un separador de secció no sona: no pot tenir cue, bucle ni avanç automàtic.");
             bool newLoop = loop ?? item.Loop;
             // Bucle i avanç automàtic no poden anar junts (D-034): amb el bucle no es pot activar
@@ -294,7 +315,7 @@ public sealed class Playlist
             if (autoNext == true && newLoop)
                 throw new PlayerCommandException("Aquesta pista té el bucle activat: no pot tenir també l'avanç automàtic.");
             bool newAutoNext = loop == true ? false : autoNext ?? item.AutoNext;
-            _items[index] = item with { Loop = newLoop, AutoNext = newAutoNext };
+            _items[index] = item with { Loop = newLoop, AutoNext = newAutoNext, BothChannels = bothChannels ?? item.BothChannels };
             if (cue == true) CueId = id;
             else if (cue == false && CueId == id) CueId = null;
         }
@@ -350,7 +371,7 @@ public sealed class Playlist
 
     /// <summary>Resultat de l'anàlisi en segon pla: sonoritat i on hi ha so (fase 5; D-079).</summary>
     public void SetAnalysis(string id, TrackLoudness analysis) =>
-        Update(id, item => item with { LoudnessLufs = analysis.Lufs, Sound = analysis.Sound });
+        Update(id, item => item with { LoudnessLufs = analysis.Lufs, Sound = analysis.Sound, EmptyChannel = analysis.EmptyChannel });
 
     /// <summary>El reproductor no ha pogut obrir la pista en anar-la a fer sonar.</summary>
     public void MarkError(string id, string problem) =>

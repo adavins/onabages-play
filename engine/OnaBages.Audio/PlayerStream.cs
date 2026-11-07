@@ -4,6 +4,12 @@ using NAudio.Wave;
 namespace OnaBages.Audio;
 
 /// <summary>
+/// Com sonen els canals d'una pista (fase 5, pas 29a; D-132): tal com són, el canal esquerre o el dret pels dos, o els
+/// dos barrejats (meitat i meitat) pels dos.
+/// </summary>
+public enum ChannelFix { None, UseLeft, UseRight, Mix }
+
+/// <summary>
 /// El tros de reproductor que corre al <b>fil d'àudio</b> de Windows.
 /// Només copia mostres de la memòria intermèdia cap a la sortida i compta.
 /// No llegeix el disc, no crea objectes, no espera i no escriu registres.
@@ -26,6 +32,16 @@ public sealed class PlayerStream : IWaveProvider
     private SampleRingBuffer? _outgoing; // només el fa servir el fil d'àudio
     private int _fadeTotal, _fadeDone;    // idem
     private readonly float[] _scratch;    // idem: la pista que s'acaba, abans de barrejar-la
+
+    // --- Canals (pas 29a; D-132) ---
+    // La de la pista que sona (la pot canviar el reproductor en qualsevol moment: el botó té efecte de seguida); la que
+    // tindrà la pista que encadena, a partir d'un fotograma exacte; la de la pista nova d'un canvi a mà; i, durant el fos
+    // d'aquest canvi, la de la pista que s'acaba.
+    private volatile int _channelFix;
+    private long _scheduledFixFrame = -1;   // Interlocked; -1 = cap
+    private volatile int _scheduledFix;
+    private int _pendingFix;                // va amb _pendingRing
+    private int _outgoingFix;               // només el fil d'àudio
 
     private long _framesPlayed;
     private int _underruns;
@@ -54,6 +70,26 @@ public sealed class PlayerStream : IWaveProvider
         get => _gain;
         set => _gain = value;
     }
+
+    /// <summary>Com sonen els canals de la pista d'ara. S'aplica de seguida (al bloc següent).</summary>
+    public ChannelFix ChannelFix
+    {
+        get => (ChannelFix)_channelFix;
+        set => _channelFix = (int)value;
+    }
+
+    /// <summary>
+    /// La pista que encadena (bucle o avanç automàtic) sonarà amb <paramref name="fix"/> a partir del fotograma
+    /// <paramref name="atFrame"/> (comptat com <see cref="FramesPlayed"/>). Fil de lectura.
+    /// </summary>
+    public void ScheduleChannelFix(long atFrame, ChannelFix fix)
+    {
+        _scheduledFix = (int)fix;
+        Interlocked.Exchange(ref _scheduledFixFrame, atFrame);
+    }
+
+    /// <summary>Hi ha un canvi de canals programat que encara no ha arribat.</summary>
+    public bool ChannelFixScheduled => Interlocked.Read(ref _scheduledFixFrame) >= 0;
 
     /// <summary>Pic del que surt (després del volum), per al mesurador.</summary>
     public PeakMeter Meter { get; } = new();
@@ -99,9 +135,10 @@ public sealed class PlayerStream : IWaveProvider
     /// de la que sonava ja no rep més dades (el seu fil de lectura s'ha aturat): se'n fan servir les que hi ha.
     /// <see cref="FramesPlayed"/> torna a començar de zero. Fil de les ordres.
     /// </summary>
-    public void SwitchTo(SampleRingBuffer ring, int fadeFrames)
+    public void SwitchTo(SampleRingBuffer ring, int fadeFrames, ChannelFix fix = ChannelFix.None)
     {
         _pendingFadeFrames = Math.Max(1, fadeFrames);
+        _pendingFix = (int)fix;
         Volatile.Write(ref _pendingRing, ring);
     }
 
@@ -178,6 +215,9 @@ public sealed class PlayerStream : IWaveProvider
         if (pending is null) return;
         _outgoing = _ring;
         _ring = pending;
+        _outgoingFix = _channelFix;
+        _channelFix = _pendingFix;
+        Interlocked.Exchange(ref _scheduledFixFrame, -1);
         _fadeTotal = _pendingFadeFrames;
         _fadeDone = 0;
         Interlocked.Exchange(ref _framesPlayed, 0);
@@ -196,6 +236,7 @@ public sealed class PlayerStream : IWaveProvider
         {
             int piece = Math.Min(frames - done, _scratch.Length / 2);
             int got = outgoing.Read(_scratch.AsSpan(0, piece * 2)) / 2;
+            ApplyChannelFix(_scratch.AsSpan(0, got * 2), _outgoingFix);
             for (int f = 0; f < piece; f++)
             {
                 double t = (_fadeDone + done + f + 0.5) / _fadeTotal;
@@ -252,9 +293,16 @@ public sealed class PlayerStream : IWaveProvider
         TakePendingSwitch();
         TakeFadeOutRequest();
 
-        int framesRead = _outChannels == 2
-            ? _ring.Read(output[..(frames * 2)]) / 2
-            : ReadIntoWiderOutput(output, frames);
+        int framesRead;
+        if (_outChannels == 2)
+        {
+            framesRead = _ring.Read(output[..(frames * 2)]) / 2;
+            FixChannels(output[..(framesRead * 2)], framesRead);
+        }
+        else
+        {
+            framesRead = ReadIntoWiderOutput(output, frames);
+        }
 
         if (framesRead < frames)
         {
@@ -308,6 +356,43 @@ public sealed class PlayerStream : IWaveProvider
         _currentGain = target;
     }
 
+    /// <summary>
+    /// Fil d'àudio: aplica als <paramref name="frames"/> fotogrames de la pista d'ara (que comencen <paramref name="offset"/>
+    /// fotogrames després del principi del bloc) la correcció de canals i, si dins hi comença una pista encadenada amb una
+    /// altra correcció, la canvia just en aquell fotograma.
+    /// </summary>
+    private void FixChannels(Span<float> stereo, int frames, int offset = 0)
+    {
+        long first = Interlocked.Read(ref _framesPlayed) + offset;
+        long at = Interlocked.Read(ref _scheduledFixFrame);
+        int split = frames;
+        if (at >= 0 && at < first + frames) split = (int)Math.Max(0, at - first);
+        ApplyChannelFix(stereo[..(split * 2)], _channelFix);
+        if (split < frames)
+        {
+            _channelFix = _scheduledFix;
+            Interlocked.Exchange(ref _scheduledFixFrame, -1);
+            ApplyChannelFix(stereo[(split * 2)..(frames * 2)], _channelFix);
+        }
+    }
+
+    /// <summary>Fil d'àudio, sense objectes nous: un canal pels dos, o els dos barrejats.</summary>
+    private static void ApplyChannelFix(Span<float> stereo, int fix)
+    {
+        switch ((ChannelFix)fix)
+        {
+            case ChannelFix.UseLeft:
+                for (int i = 0; i + 1 < stereo.Length; i += 2) stereo[i + 1] = stereo[i];
+                break;
+            case ChannelFix.UseRight:
+                for (int i = 0; i + 1 < stereo.Length; i += 2) stereo[i] = stereo[i + 1];
+                break;
+            case ChannelFix.Mix:
+                for (int i = 0; i + 1 < stereo.Length; i += 2) stereo[i] = stereo[i + 1] = (stereo[i] + stereo[i + 1]) * 0.5f;
+                break;
+        }
+    }
+
     private int ReadIntoWiderOutput(Span<float> output, int frames)
     {
         int framesRead = 0;
@@ -315,6 +400,7 @@ public sealed class PlayerStream : IWaveProvider
         {
             int chunk = Math.Min(frames - framesRead, _stereo.Length / 2);
             int got = _ring.Read(_stereo.AsSpan(0, chunk * 2)) / 2;
+            FixChannels(_stereo.AsSpan(0, got * 2), got, framesRead);
             MixOutgoing(_stereo.AsSpan(0, got * 2), got);
             Dynamics.Process(_stereo.AsSpan(0, got * 2));
             for (int i = 0; i < got; i++)

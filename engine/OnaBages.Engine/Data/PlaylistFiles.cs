@@ -72,6 +72,7 @@ public static class PlaylistFiles
                 ["relativePath"] = Path.GetRelativePath(folder, item.Path),
                 ["loop"] = item.Loop,
                 ["autoNext"] = item.AutoNext,
+                ["bothChannels"] = item.BothChannels, // fase 5, D-132: null = automàtic
             });
         }
 
@@ -195,7 +196,8 @@ public static class PlaylistFiles
                 if (File.Exists(fromList)) chosen = fromList;
             }
 
-            entries.Add(PlaylistEntry.ForFile(chosen, Bool(node?["loop"]), Bool(node?["autoNext"])));
+            bool? bothChannels = node?["bothChannels"] is JsonValue bc && bc.TryGetValue(out bool bcv) ? bcv : null;
+            entries.Add(PlaylistEntry.ForFile(chosen, Bool(node?["loop"]), Bool(node?["autoNext"]), bothChannels));
         }
         return entries;
     }

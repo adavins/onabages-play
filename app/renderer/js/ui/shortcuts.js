@@ -1,19 +1,23 @@
 // @ts-check
 // Dreceres de teclat generals (D-041). Mapa fix; poder-lo canviar queda per a una fase posterior.
 //
-//   F1, F2… F6        Play / Pausa del reproductor 1, 2… 6 (en pausa, continua)
-//   Maj+F1… Maj+F6    Stop del reproductor 1… 6
+//   F1, F2… F6        Play / Pausa del 1r, 2n… 6è reproductor de la pantalla (en pausa, continua)
+//   Maj+F1… Maj+F6    Stop del 1r… 6è reproductor
+//
+// Van per la posició, d'esquerra a dreta (D-105): si es mou el Reproductor 2 al primer lloc, F1 és el seu.
 //
 // Funcionen sempre, encara que la llista no estigui seleccionada; no mentre hi ha una finestra
 // (diàleg) oberta. Les de la llista (C, D, B, A, P, Supr) només van amb la llista seleccionada.
+
+import { orderedIds } from './panel-order.js';
 
 /** @typedef {import('../store.js').Store} Store */
 /** @typedef {(cmd: string, params?: object) => Promise<any>} Request */
 
 /** Per a la finestra «Configuració»: [tecles, què fan]. */
 export const SHORTCUTS_HELP = [
-  ['F1, F2… F6', 'Play / Pausa del reproductor 1, 2… 6'],
-  ['Maj + F1… F6', 'Stop del reproductor 1… 6'],
+  ['F1, F2… F6', "Play / Pausa del 1r, 2n… 6è reproductor (d'esquerra a dreta)"],
+  ['Maj + F1… F6', 'Stop del 1r… 6è reproductor'],
   ['Ctrl + / Ctrl − / Ctrl 0', 'Escala de la interfície'],
   ['A la llista: P', 'Preescoltar la pista seleccionada'],
   ['A la llista: C · D · B · A', 'Cue · Duplicar · Bucle · Avanç automàtic'],
@@ -22,9 +26,9 @@ export const SHORTCUTS_HELP = [
   ['A la llista: ← / →', 'Plegar / desplegar la secció seleccionada'],
 ];
 
-/** Text per a l'ajuda dels botons Play i Stop d'un reproductor (p. ex. «F1»). */
-export function playKey(/** @type {string} */ playerId) {
-  return Number(playerId) <= 6 ? `F${playerId}` : '';
+/** Text per a l'ajuda dels botons d'un reproductor segons la seva posició (0 = el primer → «F1»). */
+export function playKey(/** @type {number} */ position) {
+  return position < 6 ? `F${position + 1}` : '';
 }
 
 /**
@@ -40,8 +44,8 @@ export function setupShortcuts(store, request, onMessage) {
     e.preventDefault();
     if (e.repeat) return; // mantenir premuda la tecla no ha de fer Play-Pausa-Play...
 
-    const id = match[1];
-    const player = store.players.get(id);
+    const id = orderedIds(store.players.keys(), store.settings?.ui?.playerOrder)[Number(match[1]) - 1];
+    const player = id ? store.players.get(id) : undefined;
     if (!player) return;
 
     let cmd;

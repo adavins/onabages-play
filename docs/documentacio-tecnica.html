@@ -377,6 +377,12 @@ npm start
       (<code>js/editor/</code>).</li>
     <li><strong>Estils:</strong> colors i mides en variables CSS i en <code>rem</code>, perquè el zoom ho escali tot. Els estats
       es mostren amb color + icona + text. Les accions que interrompen demanen confirmació.</li>
+    <li><strong>Ordre dels panells</strong> (<code>js/ui/panel-order.js</code>, D-105): arrossegament HTML5 natiu des de la nansa
+      <code>.panel-handle</code>, amb un tipus propi per a cada classe de panell (<code>application/x-obp-panel-player</code> /
+      <code>-recorder</code>), de manera que un reproductor no es pot deixar anar sobre un enregistrador ni interfereix amb
+      l'arrossegament de pistes. L'ordre es desa al perfil (<code>ui.playerOrder</code> / <code>ui.recorderOrder</code>) i
+      s'aplica amb la propietat CSS <code>order</code>: els panells no es treuen mai del document. Les dreceres F1–F6 van per la
+      posició (<code>orderedIds</code>).</li>
     <li><strong>Procés principal</strong> (<code>main.js</code>): arrenca el motor, crea les finestres i en recorda la posició,
       fa créixer la finestra amb el panell lateral, i atén les peticions de <code>preload.js</code>.</li>
   </ul>

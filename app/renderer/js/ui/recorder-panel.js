@@ -16,6 +16,7 @@ import { editRecorderSettings } from './recorder-settings.js';
 import { saveRecording, discardRecording } from './recording-actions.js';
 import { togglePreview } from './cue-actions.js';
 import { escapeHtml, fileName, formatBytes, formatDuration } from './format.js';
+import { HANDLE_HTML } from './panel-order.js';
 
 /** @typedef {import('../store.js').Store} Store */
 /** @typedef {(cmd: string, params?: object) => Promise<any>} Request */
@@ -62,11 +63,12 @@ export class RecorderPanel {
     this.element = document.createElement('section');
     this.element.className = 'card panel recorder';
     this.element.setAttribute('aria-label', `Enregistrador ${id}`);
+    this.element.dataset.panelId = id; // per canviar-lo de lloc (panel-order.js)
     this.element.innerHTML = `
       <div class="card-header panel-header">
-        <button class="panel-title rec-title js-title" type="button" title="Canviar el nom i la carpeta">
+        <span class="panel-header-left">${HANDLE_HTML}<button class="panel-title rec-title js-title" type="button" title="Canviar el nom i la carpeta">
           <i class="bi bi-record-circle"></i> <span class="js-name"></span> <i class="bi bi-pencil rec-edit"></i>
-        </button>
+        </button></span>
         <span class="panel-header-right">
           <button class="btn btn-sm dsp-btn js-lim" type="button"><i class="d-none"></i><span>LIM</span></button>
           <span class="js-state"></span>

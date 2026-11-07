@@ -11,7 +11,8 @@ import { RecentsPanel } from './ui/recents-panel.js';
 import { CuePanel } from './ui/cue-panel.js';
 import { ExplorerTab } from './ui/explorer-tab.js';
 import { editSettings } from './ui/settings-dialog.js';
-import { setupShortcuts } from './ui/shortcuts.js';
+import { setupShortcuts, playKey } from './ui/shortcuts.js';
+import { orderedIds, applyOrder, setupPanelDrag } from './ui/panel-order.js';
 import { choose } from './ui/dialogs.js';
 import { setupProfileMenu } from './ui/profile-menu.js';
 import { setupHelpMenu } from './ui/help-menu.js';
@@ -88,6 +89,9 @@ setupHelpMenu(els.help);
 setupLockButton();
 setupProfileMenu({ button: els.profile, request, onSettings: applySettings, onSwitch: restartForProfile });
 setupShortcuts(store, request, (playerId, text) => playerPanels.get(playerId)?.showMessage(text));
+// Canviar de lloc els panells arrossegant-los per la nansa (pas 16b, D-105).
+setupPanelDrag(els.players, 'player', (from, to) => swapPanels('player', from, to));
+setupPanelDrag(els.recorders, 'recorder', (from, to) => swapPanels('recorder', from, to));
 init();
 
 // ---------------------------------------------------------------------------
@@ -300,6 +304,7 @@ function buildPanels() {
 
   els.players.replaceChildren(...[...playerPanels.values()].map((p) => p.element));
   els.recorders.replaceChildren(...[...recorderPanels.values()].map((r) => r.element));
+  applyPanelOrder();
   els.recents.replaceWith(recentsPanel.element);
   els.recents = recentsPanel.element;
   els.cue.replaceWith(cuePanel.element);
@@ -327,6 +332,49 @@ function renderAll() {
 let zoomTimer;
 
 /** @param {number} zoom */
+/**
+ * Posa els panells en l'ordre desat al perfil, i a cada reproductor la drecera de la seva posició
+ * (F1 = el de més a l'esquerra; D-105).
+ */
+function applyPanelOrder() {
+  const ui = store.settings?.ui;
+  const players = orderedIds(playerPanels.keys(), ui?.playerOrder);
+  applyOrder(playerPanels, players);
+  players.forEach((id, position) => playerPanels.get(id)?.setKey(playKey(position)));
+  applyOrder(recorderPanels, orderedIds(recorderPanels.keys(), ui?.recorderOrder));
+}
+
+/**
+ * S'ha deixat anar un panell a sobre d'un altre del mateix tipus: s'intercanvien de lloc.
+ * Es veu de seguida i després es desa al perfil. Només canvia on es veuen: el so no es toca.
+ * @param {'player' | 'recorder'} kind
+ * @param {string} fromId
+ * @param {string} toId
+ */
+async function swapPanels(kind, fromId, toId) {
+  if (!store.settings) return;
+  const field = kind === 'player' ? 'playerOrder' : 'recorderOrder';
+  const panels = kind === 'player' ? playerPanels : recorderPanels;
+  const before = store.settings.ui[field];
+  const order = orderedIds(panels.keys(), before);
+  const a = order.indexOf(fromId);
+  const b = order.indexOf(toId);
+  if (a < 0 || b < 0) return;
+  [order[a], order[b]] = [order[b], order[a]];
+
+  store.settings.ui[field] = order;
+  applyPanelOrder();
+  try {
+    const result = await client?.request('settings.set', { ui: { [field]: order } });
+    if (result) store.settings = result.settings;
+  } catch (err) {
+    // No s'ha pogut desar: tornen on eren, perquè la pantalla digui el mateix que el perfil.
+    console.warn("No s'ha pogut desar l'ordre dels panells", err);
+    store.settings.ui[field] = before;
+    applyPanelOrder();
+  }
+}
+
 async function saveZoom(zoom) {
   zoomChanged(zoom);
   els.zoom.textContent = `Zoom ${Math.round(zoom * 100)} %`;
@@ -360,6 +408,7 @@ function zoomChanged(zoom) {
  */
 function applySettings(settings) {
   store.settings = settings;
+  applyPanelOrder();
   applyZoom(settings.ui.zoom);
   zoomChanged(settings.ui.zoom);
   // Perfil actiu (fase 4). El programa només es mostra a part si es diu diferent que el perfil.

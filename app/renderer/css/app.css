@@ -659,6 +659,50 @@ body.engine-offline .side-content {
   min-width: 0;
 }
 
+/* Canviar de lloc els panells (js/ui/panel-order.js; D-105) ----------------- */
+
+.panel-header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+/* Nansa ⋮⋮: només des d'aquí s'arrossega el panell (no es mou res per accident). */
+.panel-handle {
+  flex: none;
+  margin-left: -0.3rem;
+  padding: 0 0.1rem;
+  border-radius: 0.2rem;
+  color: inherit;
+  opacity: 0.45;
+  cursor: grab;
+}
+
+.panel-handle:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.panel-handle:active {
+  cursor: grabbing;
+}
+
+/* Si només n'hi ha un, no té amb qui canviar-se. */
+.panel:only-child .panel-handle {
+  display: none;
+}
+
+/* El que s'arrossega es queda esvaït al seu lloc; on es deixarà anar, vora discontínua. */
+.panel.panel-dragging {
+  opacity: 0.4;
+}
+
+.panel.swap-target {
+  outline: 2px dashed var(--bs-info);
+  outline-offset: 2px;
+}
+
 /* Compressor/limitador del reproductor (js/ui/processing-dialog.js; D-068) ------ */
 
 /* Botons DSP i NORM: desactivats, discrets; activats, plens de color i amb una marca ✓. */

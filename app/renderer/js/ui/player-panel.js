@@ -10,7 +10,7 @@ import { LevelMeter } from './meter.js';
 import { VolumeFader } from './fader.js';
 import { PlaylistView, sectionOf } from './playlist-view.js';
 import { escapeHtml, formatDuration } from './format.js';
-import { playKey } from './shortcuts.js';
+import { HANDLE_HTML } from './panel-order.js';
 import { openProcessingDialog } from './processing-dialog.js';
 
 /** @typedef {import('../store.js').Store} Store */
@@ -60,9 +60,10 @@ export class PlayerPanel {
     this.element = document.createElement('section');
     this.element.className = 'card panel player';
     this.element.setAttribute('aria-label', `Reproductor ${id}`);
+    this.element.dataset.panelId = id; // per canviar-lo de lloc (panel-order.js)
     this.element.innerHTML = `
       <div class="card-header panel-header">
-        <span class="panel-title"><i class="bi bi-music-note-list"></i> Reproductor ${escapeHtml(id)}</span>
+        <span class="panel-header-left">${HANDLE_HTML}<span class="panel-title"><i class="bi bi-music-note-list"></i> Reproductor ${escapeHtml(id)}</span></span>
         <span class="panel-header-right">
           <button class="btn btn-sm dsp-btn norm-btn js-norm" type="button"><i class="d-none"></i><span class="norm-label">NORM</span></button>
           <button class="btn btn-sm dsp-btn js-dsp" type="button"><i class="d-none"></i><span class="dsp-label">DSP</span></button>
@@ -139,13 +140,6 @@ export class PlayerPanel {
       this.#showElapsed = !this.#showElapsed;
       this.render();
     });
-    // Les dreceres de teclat, a l'ajuda dels botons.
-    const key = playKey(id);
-    if (key) {
-      this.#el.play.title = `Play (${key})`;
-      this.#el.pause.title = `Pausa (${key})`;
-      this.#el.stop.title = `Stop (Maj+${key})`;
-    }
     this.#el.restart.addEventListener('click', () => this.#send('player.seek', { position: 0 }));
     this.#el.play.addEventListener('click', () => this.#send('player.play'));
     this.#el.pause.addEventListener('click', () => this.#pauseOrResume());
@@ -283,6 +277,16 @@ export class PlayerPanel {
   }
 
   /** Avís breu al panell (p. ex. una drecera de teclat que el motor ha rebutjat). */
+  /**
+   * La drecera d'aquest reproductor (p. ex. «F1»), a l'ajuda dels botons. Va per la posició a la pantalla
+   * (D-105): canvia quan el reproductor es mou de lloc. Buit = cap.
+   */
+  setKey(/** @type {string} */ key) {
+    this.#el.play.title = key ? `Play (${key})` : 'Play';
+    this.#el.pause.title = key ? `Pausa (${key})` : 'Pausa';
+    this.#el.stop.title = key ? `Stop (Maj+${key})` : 'Stop';
+  }
+
   showMessage(/** @type {string} */ text) {
     this.#showMessage(text);
   }

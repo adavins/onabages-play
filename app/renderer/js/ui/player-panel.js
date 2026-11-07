@@ -10,6 +10,7 @@ import { LevelMeter } from './meter.js';
 import { VolumeFader } from './fader.js';
 import { PlaylistView, sectionOf } from './playlist-view.js';
 import { escapeHtml, formatDuration, clockText } from './format.js';
+import { channelState } from './channels.js';
 import { HANDLE_HTML } from './panel-order.js';
 import { openProcessingDialog } from './processing-dialog.js';
 
@@ -88,6 +89,9 @@ export class PlayerPanel {
         </div>
 
         <div class="remaining-row">
+          <button class="btn btn-sm dsp-btn mono-btn js-mono" type="button" aria-pressed="false">
+            <i class="bi bi-exclamation-triangle-fill d-none js-mono-warn"></i><span>MONO</span>
+          </button>
           <div class="remaining js-remaining" role="button" title="Temps restant">--:--</div>
           <div class="end-time js-endtime">
             <span class="end-time-label">Acaba</span>
@@ -145,6 +149,7 @@ export class PlayerPanel {
     this.#playlist = new PlaylistView(id, request, (text) => this.#showMessage(text), store);
     this.#el['playlist-slot'].appendChild(this.#playlist.element);
 
+    this.#el.mono.addEventListener('click', () => this.#toggleMono());
     this.#el.remaining.addEventListener('click', () => {
       this.#showElapsed = !this.#showElapsed;
       this.render();
@@ -252,6 +257,7 @@ export class PlayerPanel {
     el.progress.style.width = hasTrack ? `${Math.min(100, (position / p.duration) * 100)}%` : '0%';
     el.seek.classList.toggle('seekable', hasTrack && CAN_SEEK.includes(p.state));
     el.seek.classList.toggle('dragging', this.#dragFraction !== null);
+    this.#renderMono(p);
 
     // Cada botó, només quan el motor l'accepta (docs/protocol.md, 4.2).
     setEnabled(el.restart, hasTrack && CAN_SEEK.includes(p.state));
@@ -339,6 +345,37 @@ export class PlayerPanel {
   }
 
   /** Ha canviat la llista (esdeveniment playlist.changed). */
+  /** La pista carregada (la que sona, en pausa o a punt), o undefined. */
+  #currentItem(/** @type {any} */ p) {
+    return this.#store.playlists.get(this.#id)?.items?.find((/** @type {any} */ i) => i.id === p.currentItemId);
+  }
+
+  /**
+   * Botó MONO (pas 29b; D-133): encès si la pista carregada sona pels dos canals (un canal buit corregit sol, o activat a
+   * mà); amb ⚠ si té un canal buit i s'ha desactivat la correcció.
+   */
+  #renderMono(/** @type {any} */ p) {
+    const button = this.#el.mono;
+    const item = this.#currentItem(p);
+    const { on, warn, text } = channelState(item);
+    button.classList.toggle('on', on);
+    button.classList.toggle('mono-warn', warn);
+    button.setAttribute('aria-pressed', String(on));
+    this.#el['mono-warn'].classList.toggle('d-none', !warn);
+    /** @type {HTMLButtonElement} */ (button).disabled = !item;
+    button.title = !item
+      ? 'MONO: fer sonar la pista pels dos canals (quan n\'hi hagi una de carregada)'
+      : `${text}\nClica per ${on ? 'deixar-la tal com és (estèreo)' : 'fer-la sonar pels dos canals'}. Es recorda per a aquesta pista de la llista.`;
+  }
+
+  /** MONO: activa o desactiva la correcció de la pista carregada (de seguida, també si sona). */
+  #toggleMono() {
+    const p = this.#store.players.get(this.#id);
+    const item = p && this.#currentItem(p);
+    if (!item) return;
+    this.#send('playlist.setFlags', { itemId: item.id, bothChannels: !channelState(item).on });
+  }
+
   renderPlaylist() {
     this.render();
   }

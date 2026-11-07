@@ -2181,3 +2181,25 @@ body.engine-offline .side-content {
 .cart-file .js-file { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cart-dialog { width: min(26rem, 92vw); }
 .cart-dialog .obp-dialog-buttons { margin-top: 1.25rem; }
+
+/* Pistes amb un canal buit (fase 5, pas 29b; D-133) ------------------------------------------- */
+
+/* Botó MONO, a l'esquerra del comptador: encès (groc) si la pista sona pels dos canals; amb ⚠ si té un canal buit sense corregir. */
+.remaining-row > .mono-btn { grid-column: 1; justify-self: end; }
+.mono-btn.on,
+.mono-btn.on:hover { color: #000; background: var(--obp-warn); border-color: var(--obp-warn); }
+.mono-btn.mono-warn { color: var(--obp-warn); border-color: var(--obp-warn); }
+.mono-btn:disabled { opacity: 0.35; }
+
+/* Marca a la fila de la llista. */
+.pl-mono {
+  flex: none;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 0 0.25rem;
+  border-radius: 0.2rem;
+  color: #000;
+  background: var(--obp-warn);
+  line-height: 1.4;
+}
+.pl-mono-warn { color: var(--obp-warn); background: none; border: 1px solid var(--obp-warn); }

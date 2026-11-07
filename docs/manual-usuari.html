@@ -326,6 +326,26 @@
     <li>El llindar i els marges es canvien a ⚙ Configuració &gt; Reproductors.</li>
   </ul>
 
+  <h3 id="mono">Pistes que només sonen per un canal (MONO)</h3>
+  <p>Hi ha fitxers estèreo que només tenen so per un canal (l'altre és buit): sonarien només per un costat. L'aplicació
+    ho detecta sola en afegir la pista a la llista, abans que soni, i la fa sonar <strong>pels dos canals</strong>. El fitxer
+    no es toca.</p>
+  <ul>
+    <li>A la fila de la llista surt la marca <strong>MONO</strong> (groga), i al reproductor el botó <strong>MONO</strong>,
+      a l'esquerra del comptador, s'encén quan aquesta pista és la carregada. Si hi passes el ratolí, diu quin canal té
+      so.</li>
+    <li>El botó <strong>MONO</strong> canvia la pista carregada, també mentre sona (de seguida):
+      <ul>
+        <li>si està encès, la deixa tal com és (estèreo). Si la pista té un canal buit, el botó i la fila mostren
+          <i class="bi bi-exclamation-triangle-fill"></i> «1 canal»: sonarà només per un costat;</li>
+        <li>si està apagat, la fa sonar en mono. En una pista normal, els dos canals es barregen i surten pels dos.</li>
+      </ul></li>
+    <li>El que tries amb el botó es recorda per a aquella pista de la llista (també en desar la llista).</li>
+    <li>Un canal compta com a buit si el seu so més fort no passa de −50 dBFS i l'altre és molt més fort. Un canal amb
+      només soroll de fons no compta com a buit.</li>
+    <li>Amb la normalització (NORM), una pista corregida sona igual de forta que les altres.</li>
+  </ul>
+
   <h3 id="avis-final">Avís de final de pista</h3>
   <p>Els últims segons de cada pista, el temps restant es posa vermell i parpelleja, perquè sàpigues que s'acaba. Per defecte
     són 10 segons; es canvia a ⚙ Configuració &gt; Reproductors (0 = sense avís).</p>

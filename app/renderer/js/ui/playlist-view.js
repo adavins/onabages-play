@@ -16,6 +16,7 @@
 //   plega la secció; una secció plegada s'arrossega amb totes les seves pistes.
 
 import { escapeHtml, formatDuration, clockText } from './format.js';
+import { channelState } from './channels.js';
 import { showContextMenu } from './context-menu.js';
 import { PATHS_DRAG_TYPE, draggedPaths } from './drag-types.js';
 import { choose, showInfo } from './dialogs.js';
@@ -292,13 +293,20 @@ export class PlaylistView {
     }
     const silence = this.#silenceText(item);
     if (silence) lines.push(silence);
+    // Canals (pas 29b; D-133): un canal buit (corregit o no) o mono activat a mà.
+    const channels = channelState(item);
+    if (channels.on || channels.warn) lines.push(`Canals: ${channels.text}`);
     const tooltip = lines.join('\n');
+    const mono = channels.warn
+      ? `<span class="pl-mono pl-mono-warn" title="${escapeHtml(channels.text)}"><i class="bi bi-exclamation-triangle-fill"></i> 1 canal</span>`
+      : channels.on ? `<span class="pl-mono" title="${escapeHtml(channels.text)}">MONO</span>` : '';
 
     return `
       <div class="${classes.join(' ')}" data-id="${escapeHtml(item.id)}" draggable="true" title="${escapeHtml(tooltip)}">
         ${flag('loop', item.loop, 'bi-repeat', 'Bucle: la pista es repeteix fins a Stop')}
         <span class="pl-num">${number}</span>
         <span class="pl-name">${escapeHtml(item.name)}</span>
+        ${mono}
         ${status}
         ${previewButton(previewing, 'data-flag="preview"', 'pl-flag pl-flag-preview')}
         ${flag('cue', item.id === cueId, 'bi-flag-fill', 'Cue: serà la següent a sonar')}

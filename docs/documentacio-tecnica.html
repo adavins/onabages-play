@@ -263,7 +263,8 @@ npm start
       (JSON), mai dins de l'MP3. Es desen senceres a cada marca, des del fil de les ordres (no el d'àudio), i segueixen
       el fitxer en desar-lo, descartar-lo i a l'historial. A l'editor (<code>EditorSession</code>), el motor les passa a
       la versió editada amb els trossos que es queden (<code>RecordingMarks.MapToEdited</code>) i, en desar, les desa
-      ajustades al costat del fitxer nou; la interfície només les dibuixa.</li>
+      ajustades al costat del fitxer nou; la interfície només les dibuixa. «Desar la selecció» (<code>editor.saveSelection</code>)
+      fa servir el mateix <code>Mp3Edit.Save</code> amb només els trossos de la selecció i no toca l'edició.</li>
     <li><strong>Historial d'enregistraments:</strong> el mateix fil escriu els mateixos bytes a una còpia
       (<code>RecordingArchive</code>). Un error a la còpia no afecta mai l'enregistrament principal.</li>
     <li>Es compten les mostres perdudes i els avisos de Windows, i s'escriuen al registre amb la posició.</li>

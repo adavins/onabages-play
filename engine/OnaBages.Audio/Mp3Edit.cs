@@ -229,8 +229,10 @@ public sealed class Mp3Edit
     /// lloc del de destinació: si alguna cosa falla, el fitxer de destinació (o l'original) queda intacte.
     /// </summary>
     /// <param name="progress">Es crida de tant en tant amb la fracció feta (0..1).</param>
+    /// <param name="only">Només aquests trossos de l'original (p. ex. els d'una selecció, <see cref="SegmentsBetween"/>;
+    /// fase 5, pas 23d). Per defecte, tota la versió editada. L'edició no canvia.</param>
     /// <exception cref="Mp3EditException">Si l'original ha canviat, no es pot llegir o no es pot escriure la destinació.</exception>
-    public void Save(string target, Action<double>? progress = null, CancellationToken cancel = default)
+    public void Save(string target, Action<double>? progress = null, CancellationToken cancel = default, IReadOnlyList<FrameRange>? only = null)
     {
         var source = new FileInfo(Index.Path);
         if (!source.Exists)
@@ -240,9 +242,9 @@ public sealed class Mp3Edit
 
         string folder = System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(target))!;
         string temp = System.IO.Path.Combine(folder, $".{System.IO.Path.GetFileName(target)}.{Guid.NewGuid():N}.tmp");
-        var segments = Segments;
+        var segments = only ?? Segments;
         var gains = Gains;
-        long totalFrames = segments.Sum(s => (long)s.Count), done = 0;
+        long totalFrames = Math.Max(1, segments.Sum(s => (long)s.Count)), done = 0;
 
         try
         {

@@ -99,5 +99,5 @@ contextBridge.exposeInMainWorld('onabages', {
   openMp3File: () => ipcRenderer.invoke('dialog:open-mp3'),
 
   /** Diàleg «Desar com…» de l'editor. Retorna la ruta, o null. */
-  saveMp3File: (currentPath) => ipcRenderer.invoke('dialog:save-mp3', currentPath),
+  saveMp3File: (currentPath, options) => ipcRenderer.invoke('dialog:save-mp3', currentPath, options),
 });

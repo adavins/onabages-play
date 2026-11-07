@@ -140,6 +140,7 @@ public sealed partial class CommandRouter
                 "editor.undo" => EditorDo(e => e.Change(edit => edit.Undo())),
                 "editor.redo" => EditorDo(e => e.Change(edit => edit.Redo())),
                 "editor.save" => EditorSave(msg),
+                "editor.saveSelection" => EditorSaveSelection(msg),
                 "editor.peaks" => EditorPeaks(msg),
                 "editor.play" => EditorPlay(msg),
                 "editor.stop" => EditorDo(e => e.StopPlayback()),
@@ -275,6 +276,24 @@ public sealed partial class CommandRouter
         if (target is not null) RejectIfRecording(target);
 
         _state.Editor.Save(target, overwrite);
+        return EditorState();
+    }
+
+    /// <summary>
+    /// Desa només la selecció (fase 5, pas 23d): <c>start</c> i <c>end</c> (segons de la versió editada) i <c>path</c>
+    /// (fitxer nou, ruta completa). Sobreescriure demana <c>overwrite: true</c>. L'edició no canvia.
+    /// </summary>
+    private JsonObject EditorSaveSelection(JsonObject msg)
+    {
+        double start = RequireNumber(msg, "start", "el començament en segons");
+        double end = RequireNumber(msg, "end", "el final en segons");
+        string target = RequireString(msg, "path");
+        if (!Path.IsPathFullyQualified(target))
+            throw new BadParamsException("'path' ha de ser una ruta completa.");
+        bool overwrite = msg["overwrite"] is JsonValue v && v.TryGetValue(out bool b) && b;
+        RejectIfRecording(target);
+
+        _state.Editor.SaveSelection(start, end, target, overwrite);
         return EditorState();
     }
 

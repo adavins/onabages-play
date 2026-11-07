@@ -678,15 +678,20 @@ ipcMain.handle('dialog:open-mp3', async (event) => {
 
 /**
  * Diàleg «Desar com…» de l'editor. Proposa «<nom> (editat).mp3» a la mateixa carpeta.
+ * Amb `options` (pas 23d, «Desar la selecció…»): un altre títol i un altre nom proposat (només el nom, sense carpeta).
  * Retorna la ruta, o null. Si ja existeix, el diàleg de Windows ja demana si es vol substituir.
  */
-ipcMain.handle('dialog:save-mp3', async (event, currentPath) => {
+ipcMain.handle('dialog:save-mp3', async (event, currentPath, options) => {
   const owner = BrowserWindow.fromWebContents(event.sender);
   if (!owner || typeof currentPath !== 'string') return null;
   const base = path.basename(currentPath, path.extname(currentPath));
+  // El nom proposat ha de ser només un nom de fitxer (cap carpeta): si no, el de sempre.
+  const name = typeof options?.name === 'string' && options.name === path.basename(options.name) && !/[<>:"/\\|?*]/.test(options.name)
+    ? options.name
+    : `${base} (editat).mp3`;
   const result = await dialog.showSaveDialog(owner, {
-    title: 'Desar com…',
-    defaultPath: path.join(path.dirname(currentPath), `${base} (editat).mp3`),
+    title: typeof options?.title === 'string' ? options.title : 'Desar com…',
+    defaultPath: path.join(path.dirname(currentPath), name),
     filters: [{ name: 'MP3', extensions: ['mp3'] }],
   });
   if (result.canceled || !result.filePath) return null;

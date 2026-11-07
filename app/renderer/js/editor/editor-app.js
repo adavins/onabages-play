@@ -20,6 +20,7 @@ const els = {
   save: /** @type {HTMLButtonElement} */ ($('ed-save')),
   saveAs: /** @type {HTMLButtonElement} */ ($('ed-save-as')),
   saveRec: /** @type {HTMLButtonElement} */ ($('ed-save-rec')),
+  saveSel: /** @type {HTMLButtonElement} */ ($('ed-save-sel')),
   empty: $('ed-empty'),
   busy: $('ed-busy'),
   busyText: $('ed-busy-text'),
@@ -251,6 +252,10 @@ function apply(/** @type {any} */ state) {
       showMessage(`Desat: ${state.savedPath}`);
     }
   }
+  // Selecció desada (pas 23d): l'edició no canvia, només es diu on és.
+  if (state.savedSelectionPath && state.savedSelectionPath !== previous?.savedSelectionPath) {
+    showMessage(`Selecció desada: ${state.savedSelectionPath}`);
+  }
   // Si el desat ha fallat, l'enregistrament no es toca.
   if (savingRecording && !state.busy && state.error) savingRecording = null;
 
@@ -318,6 +323,7 @@ function renderControls() {
   els.open.toggleAttribute('disabled', !connected || !!editor?.busy);
   els.save.disabled = !ready || !editor.modified;
   els.saveAs.disabled = !ready;
+  els.saveSel.disabled = !hasSel;
   // «Desar l'enregistrament…» (pas 14b): només si el fitxer obert és un enregistrament que no s'ha desat.
   // Llavors és el botó principal, i «Desar com…» passa a ser secundari.
   const rec = currentRecording();
@@ -477,6 +483,31 @@ async function saveAs() {
   await send('editor.save', { path, overwrite: true });
 }
 
+/**
+ * Desar només la selecció en un fitxer nou (pas 23d). Proposa «<nom> (1.00 a 2.30).mp3», amb els temps del tros,
+ * perquè se'n puguin desar uns quants seguits sense que es trepitgin. El que s'edita no canvia.
+ */
+async function saveSelection() {
+  const sel = wave.selection;
+  if (!editor?.open || !sel) return;
+  const fs = editor.frameSeconds;
+  const base = fileName(editor.path).replace(/\.mp3$/i, '');
+  const path = await bridge.saveMp3File(editor.path, {
+    title: 'Desar la selecció…',
+    name: `${base} (${fileTime(sel.start * fs)} a ${fileTime(sel.end * fs)}).mp3`,
+  });
+  if (!path) return;
+  await send('editor.saveSelection', { start: sel.start * fs, end: sel.end * fs, path, overwrite: true });
+}
+
+/** «1.05» o «1.02.05» (h.mm.ss): un temps que es pot posar en un nom de fitxer (sense «:»). */
+function fileTime(/** @type {number} */ seconds) {
+  const s = Math.floor(seconds);
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), r = s % 60;
+  const two = (/** @type {number} */ n) => String(n).padStart(2, '0');
+  return h > 0 ? `${h}.${two(m)}.${two(r)}` : `${m}.${two(r)}`;
+}
+
 /** L'enregistrament no desat que té obert l'editor, si n'és un (pas 14b). */
 function currentRecording() {
   if (!editor?.open) return null;
@@ -632,6 +663,7 @@ function setupButtons() {
   els.save.addEventListener('click', saveOver);
   els.saveAs.addEventListener('click', saveAs);
   els.saveRec.addEventListener('click', saveRecordingEdited);
+  els.saveSel.addEventListener('click', saveSelection);
   els.home.addEventListener('click', () => moveCursor(0));
   els.play.addEventListener('click', togglePlay);
   els.playSel.addEventListener('click', playSelection);

@@ -95,6 +95,9 @@ public sealed class EditorSession : IDisposable
     /// <summary>Fitxer on s'ha desat l'última vegada (fins al canvi següent).</summary>
     public string? SavedPath { get; private set; }
 
+    /// <summary>On s'ha desat l'última selecció (pas 23d; fins a l'ordre següent). L'edició no canvia.</summary>
+    public string? SavedSelectionPath { get; private set; }
+
     /// <summary>Fotogrames de l'original que ja tenen forma d'ona (es pot anar dibuixant).</summary>
     public int PeaksDone => Volatile.Read(ref _peaksDone);
 
@@ -129,6 +132,7 @@ public sealed class EditorSession : IDisposable
             Edit = null;
             Error = null;
             SavedPath = null;
+            SavedSelectionPath = null;
             _marks = [];
             StartJob("opening", token => Mp3FrameIndex.Build(path, token), onDone: index =>
             {
@@ -154,6 +158,7 @@ public sealed class EditorSession : IDisposable
             Busy = null;
             Error = null;
             SavedPath = null;
+            SavedSelectionPath = null;
             _marks = [];
         }
         RaiseChanged();
@@ -168,6 +173,7 @@ public sealed class EditorSession : IDisposable
         {
             var edit = RequireReady();
             Error = null;
+            SavedSelectionPath = null;
             changed = change(edit);
             if (changed) SavedPath = null;
         }
@@ -193,6 +199,7 @@ public sealed class EditorSession : IDisposable
                 throw new EditorFileExistsException($"Ja hi ha un fitxer «{System.IO.Path.GetFileName(target)}». Vols substituir-lo?");
 
             Error = null;
+            SavedSelectionPath = null;
             string saved = target;
             var segments = edit.Segments;
             var gains = edit.Gains;
@@ -234,6 +241,56 @@ public sealed class EditorSession : IDisposable
                 else
                 {
                     StartPeaks(index);
+                }
+            });
+        }
+        RaiseChanged();
+    }
+
+    /// <summary>
+    /// Desa <b>només la selecció</b> [<paramref name="start"/>, <paramref name="end"/>) de la versió editada (segons) en un
+    /// fitxer nou (fase 5, pas 23d; D-113), en segon pla. <b>L'edició no canvia</b>: es continua amb el mateix fitxer, els
+    /// mateixos canvis i el mateix desfer. Les marques que hi ha dins de la selecció es desen al costat, comptades des del
+    /// principi del fitxer nou. No es pot desar a sobre del fitxer obert. Si la destinació existeix, cal <paramref name="overwrite"/>.
+    /// </summary>
+    public void SaveSelection(double start, double end, string target, bool overwrite)
+    {
+        Player.Stop();
+        lock (_sync)
+        {
+            var edit = RequireReady();
+            int from = edit.FrameAt(start), to = edit.FrameAt(end);
+            if (to <= from)
+                throw new EditorStateException("Cal seleccionar un tros per desar-lo.");
+            target = System.IO.Path.GetFullPath(target);
+            if (!target.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase))
+                throw new EditorStateException("El fitxer s'ha de desar amb l'extensió .mp3.");
+            if (string.Equals(target, System.IO.Path.GetFullPath(edit.Index.Path), StringComparison.OrdinalIgnoreCase))
+                throw new EditorStateException("La selecció no es pot desar a sobre del fitxer obert: tria un altre nom.");
+            if (File.Exists(target) && !overwrite)
+                throw new EditorFileExistsException($"Ja hi ha un fitxer «{System.IO.Path.GetFileName(target)}». Vols substituir-lo?");
+
+            Error = null;
+            SavedSelectionPath = null;
+            string saved = target;
+            var only = edit.SegmentsBetween(from, to);
+            // Marques de dins de la selecció, comptades des del seu principi (els trossos de la selecció fan de versió editada).
+            var marks = RecordingMarks.MapToEdited(_marks, only, edit.Index.FrameSeconds, edit.Index.FrameCount).Select(m => m.Mark).ToList();
+            StartJob("saving", token =>
+            {
+                edit.Save(saved, p => ReportProgress(p), token, only);
+                return Mp3FrameIndex.Build(saved, token); // comprova que el fitxer nou es llegeix bé
+            }, onDone: _ =>
+            {
+                SavedSelectionPath = saved;
+                try
+                {
+                    if (marks.Count > 0) RecordingMarks.Write(saved, marks);
+                    else if (File.Exists(RecordingMarks.PathFor(saved))) File.Delete(RecordingMarks.PathFor(saved));
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    Error = $"La selecció s'ha desat, però les marques no: {ex.Message}";
                 }
             });
         }

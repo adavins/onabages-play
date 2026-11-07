@@ -34,6 +34,8 @@ public static class EditorJson
             ["progress"] = Math.Round(editor.Progress, 3),
             ["error"] = editor.Error,
             ["savedPath"] = editor.SavedPath,
+            // Desar la selecció (fase 5, pas 23d): on s'ha desat l'última (l'edició no canvia).
+            ["savedSelectionPath"] = editor.SavedSelectionPath,
             // La resta, només quan el fitxer ja és obert.
             ["sampleRate"] = index?.SampleRate,
             ["frameSeconds"] = index?.FrameSeconds,

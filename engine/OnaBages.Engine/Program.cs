@@ -175,6 +175,21 @@ foreach (var recorder in state.Recorders)
     };
 }
 
+// Botonera (fase 5, pas 28a): cada canvi va a la interfície; al registre, els errors de la sortida.
+{
+    string? lastError = null;
+    state.Cart.StateChanged += cart =>
+    {
+        if (cart.ErrorMessage != lastError)
+        {
+            lastError = cart.ErrorMessage;
+            if (lastError is not null) log.LogWarning("Botonera: {Message}", lastError);
+            else log.LogInformation("Botonera: sortida a punt");
+        }
+        Broadcast(CartJson.StateEvent(state));
+    };
+}
+
 // Preescolta: cada canvi va a la interfície; al registre, només el canvi d'estat, de pista o d'error.
 {
     string lastLogged = "";
@@ -320,6 +335,20 @@ catch (Exception ex)
     catch (Exception ex2) { log.LogError("No s'han pogut llegir els dispositius: {Message}", ex2.Message); }
 }
 
+// Botonera (fase 5, pas 28a): els botons del perfil, abans d'obrir-ne la sortida (l'inici de cada un es llegeix en segon pla).
+foreach (var b in config.Read(c => c.CartButtons.ToList()))
+{
+    try
+    {
+        state.Cart.Assign(b.Page, b.Index, b.Path, b.Name);
+        state.Cart.Configure(b.Page, b.Index, color: b.Color, gainDb: b.GainDb);
+    }
+    catch (CartCommandException ex)
+    {
+        log.LogWarning("Botonera: no s'ha pogut carregar el botó {Page}/{Index}: {Message}", b.Page + 1, b.Index + 1, ex.Message);
+    }
+}
+
 // Comparació del maquinari amb la configuració desada (especificació 5.6).
 LogHardwareReport(hardware.Start(devicesAtStart));
 
@@ -455,6 +484,7 @@ app.Lifetime.ApplicationStopping.Register(() =>
     foreach (var player in state.Players)
         player.Dispose();
     state.Cue.Dispose();
+    state.Cart.Dispose();
     foreach (var player in state.Players)
         SaveLastList(player); // l'última versió de cada llista, per recuperar-la en tornar a arrencar
     analyzer.Dispose();
@@ -520,7 +550,7 @@ _ = Task.Run(async () =>
         while (await timer.WaitForNextTickAsync(stopping))
         {
             if (state.Clients == 0) continue;
-            await hub.BroadcastAsync(MetersJson.Event(state.Players, state.Recorders, state.Cue), stopping);
+            await hub.BroadcastAsync(MetersJson.Event(state.Players, state.Recorders, state.Cue, state.Cart), stopping);
         }
     }
     catch (OperationCanceledException)
@@ -632,6 +662,12 @@ _ = Task.Run(async () =>
             catch (Exception ex) { log.LogError("Preescolta: error en revisar-la: {Message}", ex.Message); }
             if (state.Cue.State == CueState.Playing)
                 await hub.BroadcastAsync(CueJson.PositionEvent(state.Cue), stopping);
+
+            // Botonera (pas 28a): allibera els talls acabats i vigila la sortida; posició 10 per segon mentre en sona algun.
+            try { state.Cart.Tick(); }
+            catch (Exception ex) { log.LogError("Botonera: error en revisar-la: {Message}", ex.Message); }
+            if (state.Cart.Playing.Count > 0)
+                await hub.BroadcastAsync(CartJson.PositionEvent(state.Cart), stopping);
 
             // Reproducció de l'editor: final i errors; posició 10 per segon mentre sona.
             try { state.Editor.Player.Tick(); }

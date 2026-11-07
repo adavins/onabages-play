@@ -664,6 +664,23 @@ public sealed class ConfigRepository
         ReadAssignments(root["players"], config.Players);
         ReadAssignments(root["recorders"], config.Recorders);
         ReadAssignments(root["cue"], config.Cue);
+        // Botonera (fase 5, pas 28a; camps opcionals, sense canvi de versió). Els botons fora de la graella no compten.
+        ReadAssignments(root["cartDevice"], config.CartDevice);
+        if (root["cartWall"]?["buttons"] is JsonArray cartButtons)
+        {
+            foreach (var item in cartButtons.OfType<JsonObject>())
+            {
+                if (Int(item["page"]) is not { } page || Int(item["index"]) is not { } index
+                    || page is < 0 or >= CartWall.Pages || index is < 0 or >= CartWall.ButtonsPerPage
+                    || Text(item["path"]) is not { Length: > 0 } path || !Path.IsPathFullyQualified(path)
+                    || config.CartButtons.Any(b => b.Page == page && b.Index == index))
+                    continue;
+                string buttonName = Text(item["name"]) is { Length: > 0 } n ? n : Path.GetFileNameWithoutExtension(path);
+                double gain = item["gainDb"] is JsonValue g && g.TryGetValue(out double gd) && double.IsFinite(gd)
+                    ? Math.Clamp(gd, CartWall.MinGainDb, CartWall.MaxGainDb) : 0;
+                config.CartButtons.Add(new CartButtonSettings(page, index, path, buttonName, Text(item["color"]), gain));
+            }
+        }
         if (root["cueSettings"]?["volumeDb"] is JsonValue cueVolume && cueVolume.TryGetValue(out double cueDb))
             config.CueVolumeDb = Math.Clamp(cueDb, -60, 0);
 
@@ -931,6 +948,19 @@ public sealed class ConfigRepository
         ["players"] = WriteAssignments(config.Players),
         ["recorders"] = WriteAssignments(config.Recorders),
         ["cue"] = WriteAssignments(config.Cue),
+        ["cartDevice"] = WriteAssignments(config.CartDevice),
+        ["cartWall"] = new JsonObject
+        {
+            ["buttons"] = new JsonArray(config.CartButtons.OrderBy(b => b.Page).ThenBy(b => b.Index).Select(b => (JsonNode)new JsonObject
+            {
+                ["page"] = b.Page,
+                ["index"] = b.Index,
+                ["path"] = b.Path,
+                ["name"] = b.Name,
+                ["color"] = b.Color,
+                ["gainDb"] = b.GainDb,
+            }).ToArray()),
+        },
         ["cueSettings"] = new JsonObject { ["volumeDb"] = config.CueVolumeDb },
         ["recorderSettings"] = new JsonArray(config.RecorderSettings
             .OrderBy(s => s.Key, StringComparer.Ordinal)

@@ -212,7 +212,7 @@ El motor desa el dispositiu de cada reproductor i enregistrador a `%APPDATA%\Ona
 - `hasChanges`: `false` si no hi ha res a explicar (la interfície no mostra la finestra «Canvis en el maquinari»).
 - `firstRun`: no hi ha cap dispositiu desat (primera arrencada o configuració perduda). La interfície proposarà una assignació (fase 2).
 - `configProblem`: si `config.json` no s'ha pogut llegir, el motiu. El motor arrenca sense assignacions i en desa una còpia a `config.json.malmes`.
-- `elements`: només els elements que tenien un dispositiu desat. `element` és `player`, `recorder` o `cue` (la preescolta, sempre amb `id: "1"`). `device` és el dispositiu trobat ara (format de 4.1) o `null`.
+- `elements`: només els elements que tenien un dispositiu desat. `element` és `player`, `recorder`, `cue` (la preescolta, sempre amb `id: "1"`) o `cart` (la botonera, fase 5, sempre amb `id: "1"`). `device` és el dispositiu trobat ara (format de 4.1) o `null`.
 - `newDevices`: dispositius actius que no hi eren l'última vegada i no són de cap element. `formatChanges`: dispositius amb el format canviat a Windows.
 - El motor **mai no assigna un dispositiu diferent** del que s'havia triat (D-016). El resum és el de l'arrencada: no canvia fins que el motor es reinicia.
 
@@ -484,6 +484,34 @@ Objecte `processing` (al reproductor, a `player.setProcessing` i a cada preset):
 - Les pistes mono es mesuren com sonen (el mateix senyal pels dos canals).
 - `settings` porta `loudness: { targetLufs, maxBoostDb }` (per defecte, −12 LUFS i +10 dB).
 
+### 4.15. Botonera d'instantanis (fase 5, D-127)
+
+Botons que fan sonar talls curts a l'instant, diversos alhora (com a molt `maxVoices`, 8), per una sortida pròpia. La sortida pot ser la mateixa que la d'un reproductor (Windows les barreja; `sharesPlayerOutput` ho diu). La sortida queda oberta (en silenci) perquè en prémer un botó soni de seguida. Cada botó es diu amb `page` (de 0 a `pages` − 1) i `index` (de 0 a `rows` × `columns` − 1, per files). Els botons i la sortida són del **perfil**; la sortida es recupera en arrencar com la dels altres elements (4.4, `element: "cart"`).
+
+| Ordre | Paràmetres | Resposta |
+|---|---|---|
+| `cart.get` | — | `{ cart }` |
+| `cart.setDevice` | `deviceId` (una sortida) | `{ cart }`. Si sonava alguna cosa, s'atura. Una entrada o un identificador que no hi és: `bad_params`. Si no es pot obrir, `cart.outputReady` és false i `cart.error` diu per què (es torna a provar cada 3 s) |
+| `cart.assign` | `page`, `index`, `path` (ruta completa), `name` (opcional; per defecte, el del fitxer sense l'extensió; com a molt 40 caràcters) | `{ cart }`. Si el botó ja tenia un fitxer, el substitueix (si sonava, s'atura). L'inici (3 s) es llegeix en segon pla (`status: "loading"` → `"ready"`) |
+| `cart.configure` | `page`, `index` i, opcionals, `name`, `color` (`"#rrggbb"`; `""` el treu) i `gainDb` (de `-30` a `10`) | `{ cart }`. El volum s'aplica de seguida, també al que sona. Botó buit: `bad_state` |
+| `cart.clear` | `page`, `index` | `{ cart }`. Treu el fitxer del botó (el fitxer no es toca); si sonava, s'atura |
+| `cart.press` | `page`, `index` | `{ cart, playing }`. Si no sona, sona des del principi (`playing: true`); si ja sona, s'atura amb un fos de 15 ms (`playing: false`). Sense sortida, botó buit, fitxer que no hi és o ja en sonen 8: `bad_state` |
+| `cart.stop` | `page`, `index` | `{ cart }`. Si no sona, no fa res |
+| `cart.stopAll` | — | `{ cart }`. Atura tot el que sona a la botonera |
+
+```json
+{ "deviceId": "{0.0.0.00000000}.{...}", "outputReady": true, "error": null, "sharesPlayerOutput": false,
+  "pages": 4, "rows": 4, "columns": 4, "maxVoices": 8, "minGainDb": -30, "maxGainDb": 10,
+  "buttons": [ { "page": 0, "index": 2, "path": "D:\\Talls\\Sintonia.mp3", "name": "Sintonia", "color": "#d63384",
+                 "gainDb": 0, "status": "ready", "duration": 12.5, "error": null } ],
+  "playing": [ { "page": 0, "index": 2, "position": 3.2, "duration": 12.5 } ] }
+```
+
+- `buttons`: només els assignats. `status`: `loading` (es llegeix l'inici; ja es pot prémer, amb una mica de retard), `ready`, `missing` (el fitxer no hi és) o `error` (no es pot llegir; `error` diu per què). `duration`: només quan és `ready`.
+- `playing`: el que sona ara (un botó pot sortir-hi dues vegades si es prem mentre s'atura).
+
+Al perfil (`perfil.json`): `cartDevice` (com `cue`) i `cartWall.buttons` (`[ { page, index, path, name, color, gainDb } ]`; només les rutes, mai l'àudio).
+
 ## 5. Esdeveniments
 
 | Esdeveniment | Camps | Freqüència | Des de |
@@ -500,6 +528,8 @@ Objecte `processing` (al reproductor, a `player.setProcessing` i a cada preset):
 | `recordings.changed` | `recordings`: la llista sencera d'enregistraments acabats (vegeu 4.6) | quan s'hi afegeix, es desa, es descarta o se'n treu algun. Agrupat: com a molt 10 per segon | fase 2 |
 | `cue.state` | `cue`: objecte complet (vegeu 4.8) | quan canvia l'estat, la pista, la sortida, el volum o l'error de la preescolta | fase 2 |
 | `cue.position` | `position`, `duration` (segons), `format` (el de la pista, quan ja es coneix) | 10 per segon, només mentre la preescolta sona | fase 2 |
+| `cart.state` | `cart`: objecte complet (vegeu 4.15) | quan canvia un botó (també quan acaba de llegir-ne l'inici), la sortida, un error o què sona | fase 5 |
+| `cart.position` | `playing`: com el de 4.15 | 10 per segon, només mentre sona algun botó | fase 5 |
 | `editor.changed` | `editor`: objecte complet (vegeu 4.10) | a cada canvi: obrir, editar, desar, reproduir, errors; el progrés d'obrir, desar o fer la forma d'ona, com a molt 4 per segon | fase 3 |
 | `explorer.durations` | `durations`: `{ "<ruta>": segons | null }` (`null`: no s'ha pogut llegir) | a grups (com a molt 100 o cada 0,3 s) mentre es mesuren els àudios de l'última carpeta llistada amb `explorer.list`; si se'n llista una altra, les que faltaven de l'anterior ja no es mesuren | fase 5 (D-104) |
 | `editor.position` | `position` (segons de la versió editada) | 10 per segon, només mentre l'editor reprodueix | fase 3 |
@@ -534,6 +564,7 @@ Objecte `processing` (al reproductor, a `player.setProcessing` i a cada preset):
   "players":   { "1": [-12.3, -11.8], "2": [-90, -90] },
   "recorders": { "1": [-18.0, -17.5], "2": [-90, -90] },
   "cue": [-24.1, -23.9],
+  "cart": [-90, -90],
   "playerReduction": { "1": 6.4, "2": 0 },
   "recorderReduction": { "1": 0, "2": 1.2 } }
 ```
@@ -542,7 +573,7 @@ Objecte `processing` (al reproductor, a `player.setProcessing` i a cada preset):
 - `recorderReduction`: el mateix per al limitador de cada enregistrador (fase 5, D-083). `0` si està desactivat o no s'enregistra.
 
 - Per a cada element, `[esquerre, dret]` en **dBFS**: el pic més alt des de l'esdeveniment anterior (uns 40 ms). `-90` vol dir silenci.
-- Reproductors: el que surt, **després del volum**. Preescolta: igual, el que surt pels auriculars. Enregistradors: el que entra, **amb el volum d'enregistrament aplicat**, també quan no s'enregistra (si `inputActive`).
+- Reproductors: el que surt, **després del volum**. Preescolta: igual, el que surt pels auriculars. Botonera (`cart`, fase 5): tots els talls barrejats, tal com surten. Enregistradors: el que entra, **amb el volum d'enregistrament aplicat**, també quan no s'enregistra (si `inputActive`).
 - Una entrada mono dona el mateix valor als dos canals.
 - La interfície fa la caiguda suau, la retenció del pic i l'indicador de saturació.
 

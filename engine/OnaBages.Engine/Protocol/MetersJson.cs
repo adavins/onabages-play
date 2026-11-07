@@ -11,7 +11,8 @@ public static class MetersJson
     /// Valors en dBFS, amb un mínim de −90 (silenci).
     /// </summary>
     /// <param name="cue">La preescolta (opcional: sense, el camp no hi és).</param>
-    public static JsonObject Event(IEnumerable<Player> players, IEnumerable<Recorder> recorders, CuePlayer? cue = null)
+    /// <param name="cart">La botonera (opcional: sense, el camp no hi és).</param>
+    public static JsonObject Event(IEnumerable<Player> players, IEnumerable<Recorder> recorders, CuePlayer? cue = null, CartWall? cart = null)
     {
         var playerLevels = new JsonObject();
         // Abaixada del compressor/limitador de cada reproductor (dB, ≥ 0), per a l'indicador de reducció.
@@ -38,6 +39,8 @@ public static class MetersJson
         ev["recorderReduction"] = recorderReductions;
         if (cue is not null)
             ev["cue"] = Levels(cue.TakePeaks());
+        if (cart is not null)
+            ev["cart"] = Levels(cart.Meter.Take());
         return ev;
     }
 

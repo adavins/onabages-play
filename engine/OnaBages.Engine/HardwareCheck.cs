@@ -4,7 +4,7 @@ using OnaBages.Engine.Data;
 namespace OnaBages.Engine;
 
 /// <summary>Tipus d'element que té un dispositiu assignat.</summary>
-public enum ElementKind { Player, Recorder, Cue }
+public enum ElementKind { Player, Recorder, Cue, Cart }
 
 /// <summary>Què ha passat amb el dispositiu desat d'un element (especificació 5.6).</summary>
 public enum CheckResult
@@ -124,6 +124,7 @@ public static class HardwareCheck
     {
         ElementKind.Player => config.Players,
         ElementKind.Recorder => config.Recorders,
+        ElementKind.Cart => config.CartDevice,
         _ => config.Cue,
     };
 

@@ -274,17 +274,29 @@ public class CartWallTests : IDisposable
         WaitReady(cart, 0, 1);
         var buffer = new byte[Rate / 100 * 2 * sizeof(float)];
         var source = Output.Source;
-        source.Read(buffer); // escalfar
-        cart.Press(0, 0);
-        cart.Press(0, 1);
-        source.Read(buffer);
 
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        for (int i = 0; i < 100; i++) source.Read(buffer); // 1 s: tots dos sonen, el curt s'acaba
-        cart.Stop(0, 0);
-        for (int i = 0; i < 10; i++) source.Read(buffer);  // el fos d'aturar
-        long after = GC.GetAllocatedBytesForCurrentThread();
+        // Es mesura només el que fa el fil d'àudio (Read). Les ordres (Press, Stop) són del fil de les ordres.
+        long Measure(int reads)
+        {
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            for (int i = 0; i < reads; i++) source.Read(buffer);
+            return GC.GetAllocatedBytesForCurrentThread() - before;
+        }
 
-        Assert.Equal(0, after - before);
+        // Una volta sencera per escalfar (perquè el compilador JIT ja hagi fet la seva feina).
+        for (int round = 0; round < 2; round++)
+        {
+            cart.Press(0, 0);
+            cart.Press(0, 1);
+            long playing = Measure(100);   // 1 s: tots dos sonen, el curt s'acaba
+            cart.Stop(0, 0);
+            long stopping = Measure(10);   // el fos d'aturar
+            cart.Tick();
+            if (round == 1)
+            {
+                Assert.Equal(0, playing);
+                Assert.Equal(0, stopping);
+            }
+        }
     }
 }

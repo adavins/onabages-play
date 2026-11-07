@@ -55,6 +55,12 @@ public sealed class EngineConfig
     /// <summary>Sortida de la preescolta (clau: <c>EngineState.CueId</c>; només n'hi ha una).</summary>
     public Dictionary<string, DeviceRef> Cue { get; } = [];
 
+    /// <summary>Sortida de la botonera (fase 5, pas 28a; del perfil, com la dels reproductors). Clau: "1".</summary>
+    public Dictionary<string, DeviceRef> CartDevice { get; } = [];
+
+    /// <summary>Botons assignats de la botonera (fase 5, pas 28a; del perfil). Només les rutes, mai l'àudio.</summary>
+    public List<CartButtonSettings> CartButtons { get; set; } = [];
+
     /// <summary>Sortida de la reproducció de l'editor (fase 3). Null = la mateixa que la preescolta.</summary>
     public DeviceRef? EditorDevice { get; set; }
 
@@ -225,3 +231,6 @@ public sealed class EngineConfig
     public const int MinPlaylistRowHeight = 100;
     public const int MaxPlaylistRowHeight = 200;
 }
+
+/// <summary>Un botó de la botonera tal com es desa al perfil.</summary>
+public sealed record CartButtonSettings(int Page, int Index, string Path, string Name, string? Color, double GainDb);

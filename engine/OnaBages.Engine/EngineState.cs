@@ -19,9 +19,11 @@ public sealed class EngineState
     /// <param name="cue">Preescolta. Les proves en poden passar una amb una sortida falsa.</param>
     /// <param name="editor">Editor. Les proves en passen un amb la memòria cau en una carpeta temporal.</param>
     /// <param name="durations">Durada dels àudios de l'explorador. Les proves en passen una que no llegeix fitxers.</param>
+    /// <param name="cart">Botonera (fase 5, pas 28a). Les proves en passen una amb una sortida falsa.</param>
     public EngineState(IEnumerable<Player>? players = null, IEnumerable<Recorder>? recorders = null, CuePlayer? cue = null,
-        EditorSession? editor = null, AudioDurations? durations = null)
+        EditorSession? editor = null, AudioDurations? durations = null, CartWall? cart = null)
     {
+        Cart = cart ?? new CartWall();
         Durations = durations ?? new AudioDurations();
         Editor = editor ?? new EditorSession();
         Players = (players ?? []).ToList();
@@ -34,6 +36,16 @@ public sealed class EngineState
 
     /// <summary>Identificador de la preescolta a config.json i als avisos de maquinari (només n'hi ha una).</summary>
     public const string CueId = "1";
+
+    /// <summary>Identificador de la botonera a la configuració i als avisos de maquinari (només n'hi ha una).</summary>
+    public const string CartId = "1";
+
+    /// <summary>Botonera d'instantanis (fase 5, pas 28a; D-127): una sola, amb sortida pròpia.</summary>
+    public CartWall Cart { get; }
+
+    /// <summary>La botonera surt per la mateixa sortida que algun reproductor (es permet: Windows els barreja).</summary>
+    public bool CartSharesPlayerOutput =>
+        Cart.DeviceId is { } id && Players.Any(p => p.DeviceId == id);
 
     /// <summary>Preescolta (especificació 7): una sola, amb sortida pròpia.</summary>
     public CuePlayer Cue { get; }

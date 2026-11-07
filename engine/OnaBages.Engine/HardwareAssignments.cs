@@ -138,7 +138,8 @@ public sealed class HardwareAssignments
     private IEnumerable<(ElementKind, string)> Elements() =>
         _state.Players.Select(p => (ElementKind.Player, p.Id))
             .Concat(_state.Recorders.Select(r => (ElementKind.Recorder, r.Id)))
-            .Append((ElementKind.Cue, EngineState.CueId));
+            .Append((ElementKind.Cue, EngineState.CueId))
+            .Append((ElementKind.Cart, EngineState.CartId));
 
     /// <summary>Assigna el dispositiu trobat a l'element. Retorna false si l'element no l'accepta.</summary>
     private bool Assign(ElementCheck check)
@@ -151,6 +152,7 @@ public sealed class HardwareAssignments
                 case ElementKind.Player: _state.FindPlayer(check.ElementId)?.SetDevice(device.Id); break;
                 case ElementKind.Recorder: _state.FindRecorder(check.ElementId)?.SetDevice(device.Id); break;
                 case ElementKind.Cue: _state.Cue.SetDevice(device.Id); break;
+                case ElementKind.Cart: _state.Cart.SetDevice(device.Id); break;
             }
             return true;
         }
@@ -170,6 +172,7 @@ public sealed class HardwareAssignments
     {
         ElementKind.Player => $"Reproductor {id}",
         ElementKind.Recorder => $"Enregistrador {id}",
+        ElementKind.Cart => "Botonera",
         _ => "Preescolta",
     };
 }

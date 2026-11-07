@@ -72,6 +72,14 @@ public sealed class CartWall : IDisposable
     /// <summary>Segons de l'inici de cada botó que es guarden descodificats a la memòria.</summary>
     public const double HeadSeconds = 3;
 
+    /// <summary>Pàgines de la botonera, i files i columnes de botons de cada pàgina (D-127: 4 × 4, 4 pàgines).</summary>
+    public const int Pages = 4, Rows = 4, Columns = 4;
+
+    public const int ButtonsPerPage = Rows * Columns;
+
+    /// <summary>Llargada màxima del nom d'un botó.</summary>
+    public const int MaxNameLength = 40;
+
     /// <summary>Talls que poden sonar alhora.</summary>
     public const int MaxVoices = 8;
 

@@ -131,6 +131,14 @@ public sealed partial class CommandRouter
                 "cue.seek" => CueCommand(c => c.Seek(TimeSpan.FromSeconds(RequireNumber(msg, "position", "la posició en segons")))),
                 "cue.setVolume" => CueSetVolume(msg),
                 "cue.setDevice" => CueSetDevice(msg),
+                "cart.get" => CartResult(),
+                "cart.setDevice" => CartSetDevice(msg),
+                "cart.assign" => CartAssign(msg),
+                "cart.configure" => CartConfigure(msg),
+                "cart.clear" => CartClear(msg),
+                "cart.press" => CartPress(msg),
+                "cart.stop" => CartStop(msg),
+                "cart.stopAll" => CartStopAll(),
                 "editor.get" => EditorState(),
                 "editor.open" => EditorOpen(msg),
                 "editor.refresh" => EditorRefresh(),
@@ -180,7 +188,7 @@ public sealed partial class CommandRouter
             return Messages.Error(id, "bad_params", ex.Message);
         }
         catch (Exception ex) when (ex is PlayerCommandException or RecorderCommandException or RecordingCommandException
-                                       or EditorStateException or Mp3EditException)
+                                       or EditorStateException or Mp3EditException or CartCommandException)
         {
             return Messages.Error(id, "bad_state", ex.Message);
         }
@@ -231,6 +239,7 @@ public sealed partial class CommandRouter
         ["recorders"] = RecorderJson.All(_state.Recorders),
         ["recordings"] = RecordingJson.All(_recordings),
         ["cue"] = CueJson.Cue(_state),
+        ["cart"] = CartJson.Cart(_state),
         ["playlists"] = PlaylistJson.All(_state.Players),
         ["hardware"] = HardwareJson.Report(_hardware?.Report ?? HardwareReport.Empty),
         ["editor"] = EditorJson.Editor(_state.Editor, _config?.Read(c => c.EditorDevice)),

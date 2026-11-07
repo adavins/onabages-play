@@ -1606,9 +1606,10 @@ body.engine-offline .side-content {
 }
 
 /* Amb un enregistrament pendent hi ha cinc botons (Enregistrar, Escoltar, Editar, Desar, Descartar):
-   si el panell no és prou ample, Escoltar, Editar i Descartar només porten la icona. */
+   si el panell no és prou ample, tots només porten la icona (també Desar, que es distingeix pel color blau).
+   El text de cada botó surt en passar-hi el ratolí. */
 @container (max-width: 40rem) {
-  .recorder .rec-action:not(.js-save) .rec-label { display: none; }
+  .recorder .rec-action .rec-label { display: none; }
 }
 
 /* Estat de cada enregistrador d'un cop d'ull (fase 5, pas 14c; D-100) ------- */

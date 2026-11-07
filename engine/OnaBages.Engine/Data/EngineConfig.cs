@@ -161,6 +161,13 @@ public sealed class EngineConfig
     /// <summary>Marge després de l'últim so (ms), per a la cua.</summary>
     public int TrimTailMs { get; set; } = 50;
 
+    // --- Fade-out dels reproductors (fase 5, pas 20; D-107; del perfil) ---
+
+    /// <summary>Quant dura el fade-out (botó al costat de Stop), en ms: de <see cref="Player.MinFadeOutMs"/> a <see cref="Player.MaxFadeOutMs"/>.</summary>
+    public int FadeOutMs { get; set; } = DefaultFadeOutMs;
+
+    public const int DefaultFadeOutMs = 2000;
+
     // --- Limitador dels enregistradors (fase 5, pas 9a; del perfil) ---
 
     /// <summary>Enregistradors amb el limitador activat (per defecte, cap).</summary>

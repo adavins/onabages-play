@@ -36,6 +36,18 @@ public sealed class PlayerStream : IWaveProvider
     private float _currentGain; // només el fa servir el fil d'àudio
     private volatile float _gain;
 
+    // --- Fade-out (fase 5, pas 20; D-107) ---
+    // L'ordre deixa la petició a _fadeOutRequest (mostres per canal; -1 = cancel·lar); el fil d'àudio la recull
+    // al bloc següent. La baixada és constant en dB (de 0 a FadeOutFloorDb, com un fader mogut a velocitat
+    // constant): cada mostra es multiplica pel factor _fadeOutStep. Al final, silenci.
+    private int _fadeOutRequest;                 // Interlocked
+    private int _fadeOutTotal, _fadeOutDone;     // només el fil d'àudio
+    private double _fadeOutLevel, _fadeOutStep;  // idem (double: es multiplica moltes vegades seguides)
+    private volatile bool _fadeOutFinished;
+
+    /// <summary>Nivell on acaba la baixada del fade-out; a partir d'aquí, silenci.</summary>
+    public const double FadeOutFloorDb = -60;
+
     /// <summary>Guany que es vol (1 = sense canvi, 0 = silenci). El fixa el reproductor quan es mou el fader.</summary>
     public float Gain
     {
@@ -91,6 +103,67 @@ public sealed class PlayerStream : IWaveProvider
     {
         _pendingFadeFrames = Math.Max(1, fadeFrames);
         Volatile.Write(ref _pendingRing, ring);
+    }
+
+    /// <summary>
+    /// Fade-out (pas 20): el so baixa durant <paramref name="frames"/> mostres per canal i després queda en silenci
+    /// (<see cref="FadeOutFinished"/>). El reproductor l'atura llavors. Fil de les ordres.
+    /// </summary>
+    public void StartFadeOut(int frames)
+    {
+        _fadeOutFinished = false;
+        Interlocked.Exchange(ref _fadeOutRequest, Math.Max(1, frames));
+    }
+
+    /// <summary>Treu el fade-out (p. ex. si es fa sonar una altra pista): el so torna al volum normal. Fil de les ordres.</summary>
+    public void CancelFadeOut()
+    {
+        _fadeOutFinished = false;
+        Interlocked.Exchange(ref _fadeOutRequest, -1);
+    }
+
+    /// <summary>El fade-out ja ha arribat al final: ara només surt silenci.</summary>
+    public bool FadeOutFinished => _fadeOutFinished;
+
+    /// <summary>Fil d'àudio: recull la petició de fade-out o de cancel·lar-lo. Sense crear objectes.</summary>
+    private void TakeFadeOutRequest()
+    {
+        int request = Interlocked.Exchange(ref _fadeOutRequest, 0);
+        if (request > 0)
+        {
+            _fadeOutTotal = request;
+            _fadeOutDone = 0;
+            _fadeOutLevel = 1;
+            _fadeOutStep = Math.Pow(10, FadeOutFloorDb / 20 / request);
+        }
+        else if (request < 0)
+        {
+            _fadeOutTotal = 0;
+        }
+    }
+
+    /// <summary>Fil d'àudio: aplica el fade-out als dos primers canals (després del volum).</summary>
+    private void ApplyFadeOut(Span<float> output, int frames)
+    {
+        if (_fadeOutTotal == 0) return;
+        for (int i = 0; i < frames; i++)
+        {
+            float level;
+            if (_fadeOutDone < _fadeOutTotal)
+            {
+                _fadeOutLevel *= _fadeOutStep;
+                _fadeOutDone++;
+                level = (float)_fadeOutLevel;
+            }
+            else
+            {
+                level = 0f;
+            }
+            int o = i * _outChannels;
+            output[o] *= level;
+            output[o + 1] *= level;
+        }
+        if (_fadeOutDone >= _fadeOutTotal) _fadeOutFinished = true;
     }
 
     /// <summary>Hi ha un canvi de pista preparat que el fil d'àudio encara no ha fet.</summary>
@@ -177,6 +250,7 @@ public sealed class PlayerStream : IWaveProvider
         Span<float> output = MemoryMarshal.Cast<byte, float>(buffer);
         int frames = output.Length / _outChannels;
         TakePendingSwitch();
+        TakeFadeOutRequest();
 
         int framesRead = _outChannels == 2
             ? _ring.Read(output[..(frames * 2)]) / 2
@@ -206,6 +280,7 @@ public sealed class PlayerStream : IWaveProvider
         if (_outChannels == 2)
             Dynamics.Process(output[..(frames * 2)]);
         ApplyGain(output, frames);
+        ApplyFadeOut(output, frames);
         Meter.AddInterleaved(output[..(frames * _outChannels)], _outChannels);
 
         Interlocked.Add(ref _framesPlayed, framesRead);

@@ -27,6 +27,8 @@ public static class PlayerJson
         ["processing"] = Data.ConfigRepository.WriteDynamics(null, player.Dynamics),
         // Fos entre pistes encadenades (fase 5): 0 = cap.
         ["crossfadeMs"] = player.CrossfadeMs,
+        // Fade-out en marxa (pas 20): en acabar, el reproductor s'atura (state «ended»).
+        ["fadingOut"] = player.FadingOut,
         // Retall de silencis (fase 5): enabled i els ajustos (comuns al perfil).
         ["trim"] = new JsonObject
         {

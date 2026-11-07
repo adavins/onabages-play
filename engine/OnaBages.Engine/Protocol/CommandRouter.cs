@@ -88,6 +88,8 @@ public sealed partial class CommandRouter
                 "player.play" => PlayerCommand(msg, p => p.Play()),
                 "player.pause" => PlayerCommand(msg, p => p.Pause()),
                 "player.stop" => PlayerCommand(msg, p => p.Stop()),
+                // Fade-out (pas 20; D-107): la durada és la del perfil (settings.fadeOut.ms).
+                "player.fadeOut" => PlayerCommand(msg, p => p.FadeOut(_config?.Read(c => c.FadeOutMs) ?? EngineConfig.DefaultFadeOutMs)),
                 "player.retry" => PlayerCommand(msg, p => p.Retry()),
                 "player.seek" => PlayerSeek(msg),
                 "player.setVolume" => PlayerSetVolume(msg),
@@ -382,8 +384,10 @@ public sealed partial class CommandRouter
         var limiter = msg["recorderLimiter"] as JsonObject;
         var archive = msg["recordingArchive"] as JsonObject;
         var recents = msg["recents"] as JsonObject;
-        if (ui is null && layout is null && program is null && loudness is null && trim is null && limiter is null && archive is null && recents is null)
-            throw new BadParamsException("Falta el camp 'ui', 'layout', 'program', 'loudness', 'trim', 'recorderLimiter', 'recordingArchive' o 'recents' amb els ajustos a canviar.");
+        var fadeOut = msg["fadeOut"] as JsonObject;
+        if (ui is null && layout is null && program is null && loudness is null && trim is null && limiter is null && archive is null && recents is null && fadeOut is null)
+            throw new BadParamsException("Falta el camp 'ui', 'layout', 'program', 'loudness', 'trim', 'fadeOut', 'recorderLimiter', 'recordingArchive' o 'recents' amb els ajustos a canviar.");
+        int? fadeOutMs = OptionalInt(fadeOut?["ms"], "fadeOut.ms", Player.MinFadeOutMs, Player.MaxFadeOutMs);
         bool? clearOnExit = null;
         if (recents?["clearOnExit"] is { } clearNode)
             clearOnExit = clearNode is JsonValue cv && cv.TryGetValue(out bool cb) ? cb : throw new BadParamsException("'recents.clearOnExit' ha de ser true o false.");
@@ -434,6 +438,7 @@ public sealed partial class CommandRouter
             if (trimThreshold is { } th) c.TrimThresholdDb = th;
             if (trimLead is { } lead) c.TrimLeadMs = lead;
             if (trimTail is { } tail) c.TrimTailMs = tail;
+            if (fadeOutMs is { } fo) c.FadeOutMs = fo; // s'aplica al pròxim fade-out
             if (ceiling is { } ce) c.RecorderLimiterCeilingDb = Math.Round(ce, 1);
             if (archiveEnabled is { } ae) c.RecordingArchiveEnabled = ae;
             if (archiveFolder is not null) c.RecordingArchiveFolder = archiveFolder.Length == 0 ? null : archiveFolder;
@@ -506,6 +511,13 @@ public sealed partial class CommandRouter
                 ["thresholds"] = new JsonArray(TrackLoudness.SilenceThresholdsDb.Select(t => (JsonNode)t).ToArray()),
                 ["maxMarginMs"] = Player.MaxTrimMarginMs,
             }),
+            // Fade-out dels reproductors (fase 5, pas 20; del perfil).
+            ["fadeOut"] = new JsonObject
+            {
+                ["ms"] = config.Read(c => c.FadeOutMs),
+                ["minMs"] = Player.MinFadeOutMs,
+                ["maxMs"] = Player.MaxFadeOutMs,
+            },
             // Enregistraments recents (fase 5, pas 11a; de l'ordinador).
             ["recents"] = new JsonObject { ["clearOnExit"] = config.Read(c => c.ClearRecentsOnExit) },
             // Historial d'enregistraments (fase 5, pas 10a; de l'ordinador): còpia de cada original.

@@ -1019,6 +1019,20 @@ body.engine-offline .side-content {
   flex: 0.6;
 }
 
+/* Fade-out (pas 20): al costat de Stop, més estret i amb text. Mentre baixa, ple i parpellejant. */
+.btn-control.btn-fade {
+  flex: 0.7;
+  font-size: calc(var(--obp-control-size) * 0.45);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.btn-control.btn-fade.fading {
+  background: var(--bs-danger);
+  color: #fff;
+  animation: obp-blink 1s steps(2, start) infinite;
+}
+
 /* Botó de Pausa mentre està en pausa. */
 .btn-control.blink {
   animation: obp-blink 1s steps(2, start) infinite;

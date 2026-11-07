@@ -37,7 +37,7 @@ let lastTab = 'general';
  * @param {{ players: number, recorders: number }} running  quants n'hi ha ara al motor
  * @param {{ profileName: string, hasPin: boolean, set: (pin: string | null) => Promise<void> }} pin
  *   PIN del perfil actiu (pas 13c): `set` el desa de seguida al motor (null el treu)
- * @returns {Promise<{ ui: object, layout: object, program: object, loudness: object, trim: object, recorderLimiter: object, recordingArchive: object, recents: object } | null>}
+ * @returns {Promise<{ ui: object, layout: object, program: object, loudness: object, trim: object, fadeOut: object, recorderLimiter: object, recordingArchive: object, recents: object } | null>}
  */
 export function editSettings(settings, running, pin) {
   const options = (/** @type {number} */ max, /** @type {number} */ selected) =>
@@ -50,6 +50,12 @@ export function editSettings(settings, running, pin) {
   const target = Number(settings.loudness?.targetLufs ?? -12);
   const targets = [...new Set([-9, -10, -11, -12, -13, -14, -16, -18, -20, -23, target])].sort((a, b) => b - a);
   // Retall de silencis (fase 5): llindars que mesura el motor i els marges.
+  // Fade-out (pas 20): durades fixes (i la desada, si fos una altra).
+  const fadeMs = settings.fadeOut?.ms ?? 2000;
+  const fadeChoices = [...new Set([500, 1000, 1500, 2000, 3000, 4000, 5000, 7000, 10000, fadeMs])].sort((a, b) => a - b);
+  const fadeOptions = fadeChoices
+    .map((ms) => `<option value="${ms}"${ms === fadeMs ? ' selected' : ''}>${String(ms / 1000).replace('.', ',')} s${ms === 2000 ? ' (per defecte)' : ''}</option>`)
+    .join('');
   const trim = settings.trim ?? { thresholdDb: -60, leadMs: 10, tailMs: 50, thresholds: [-40, -50, -60, -70, -80] };
   const trimOptions = (trim.thresholds ?? [-40, -50, -60, -70, -80])
     .map((/** @type {number} */ t) => `<option value="${t}"${t === trim.thresholdDb ? ' selected' : ''}>${String(t).replace('-', '−')} dBFS${t === -60 ? ' (recomanat)' : ''}</option>`)
@@ -132,6 +138,15 @@ export function editSettings(settings, running, pin) {
         </div>
       </div>
       <div class="form-text mb-3">El temps restant es posa vermell i parpelleja. 0 = sense avís.</div>
+
+      <h3 class="obp-settings-section">Fade-out</h3>
+      <div class="obp-settings-grid">
+        <label for="st-fade">Durada</label>
+        <select id="st-fade" class="form-select form-select-sm">${fadeOptions}</select>
+      </div>
+      <div class="form-text mb-3">
+        El botó FADE, al costat de Stop, baixa el so en aquest temps i després atura el reproductor, com Stop.
+      </div>
 
       <h3 class="obp-settings-section">Normalització (NORM)</h3>
       <div class="obp-settings-grid">
@@ -426,6 +441,7 @@ export function editSettings(settings, running, pin) {
             folder: chosenArchiveFolder,
             keepDays: Number($('#st-archive-days').value),
           },
+          fadeOut: { ms: Number($('#st-fade').value) },
           trim: {
             thresholdDb: Number($('#st-trim-threshold').value),
             leadMs: Number($('#st-trim-lead').value),

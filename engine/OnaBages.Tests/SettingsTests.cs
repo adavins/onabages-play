@@ -142,6 +142,30 @@ public class SettingsTests : IDisposable
     }
 
     [Fact]
+    public void La_durada_del_fade_out_es_desa_al_perfil()
+    {
+        var s = Settings("""{ "v": 1, "id": 1, "cmd": "settings.get" }""");
+        Assert.Equal(2000, s["fadeOut"]!["ms"]!.GetValue<int>()); // per defecte, 2 s
+        Assert.Equal(Player.MinFadeOutMs, s["fadeOut"]!["minMs"]!.GetValue<int>());
+        Assert.Equal(Player.MaxFadeOutMs, s["fadeOut"]!["maxMs"]!.GetValue<int>());
+
+        s = Settings("""{ "v": 1, "id": 2, "cmd": "settings.set", "fadeOut": { "ms": 3500 } }""");
+
+        Assert.Equal(3500, s["fadeOut"]!["ms"]!.GetValue<int>());
+        Assert.Equal(3500, _repository.Load().Config.FadeOutMs);
+    }
+
+    [Theory]
+    [InlineData("""{ "v": 1, "id": 1, "cmd": "settings.set", "fadeOut": { "ms": 400 } }""")]
+    [InlineData("""{ "v": 1, "id": 1, "cmd": "settings.set", "fadeOut": { "ms": 10001 } }""")]
+    [InlineData("""{ "v": 1, "id": 1, "cmd": "settings.set", "fadeOut": { "ms": "2s" } }""")]
+    public void Una_durada_de_fade_out_fora_de_marge_no_canvia_res(string json)
+    {
+        Assert.Equal("bad_params", ErrorCode(_router.Handle(json)));
+        Assert.False(File.Exists(_repository.FilePath));
+    }
+
+    [Fact]
     public void L_ordre_dels_panells_es_desa_al_perfil()
     {
         var s = Settings("""{ "v": 1, "id": 1, "cmd": "settings.get" }""");

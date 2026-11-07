@@ -714,6 +714,10 @@ public sealed class ConfigRepository
             }
         }
 
+        // Fade-out (pas 20; camp opcional, sense canvi de versió). Fora de marge, el límit més proper.
+        if (Int(root["fadeOut"]?["ms"]) is { } fadeMs)
+            config.FadeOutMs = Math.Clamp(fadeMs, Player.MinFadeOutMs, Player.MaxFadeOutMs);
+
         // Retall de silencis (fase 5; camp opcional, sense canvi de versió).
         if (root["trim"] is JsonObject trim)
         {
@@ -933,6 +937,7 @@ public sealed class ConfigRepository
             ["tailMs"] = config.TrimTailMs,
             ["players"] = new JsonArray(config.TrimPlayers.Order(StringComparer.Ordinal).Select(id => (JsonNode)id).ToArray()),
         },
+        ["fadeOut"] = new JsonObject { ["ms"] = config.FadeOutMs },
         ["recorderLimiter"] = new JsonObject
         {
             ["ceilingDb"] = config.RecorderLimiterCeilingDb,

@@ -405,6 +405,8 @@ public sealed class Player : IDisposable
 
             if (CurrentItemId is not null && State is PlayerState.Playing or PlayerState.Paused)
                 LastPlayedId = CurrentItemId;
+            // Una pista nova a mà durant un fade-out: el fade-out es treu (la nova sona al volum normal).
+            CancelFadeOut();
             // Amb fos configurat i una pista sonant: la nova entra amb fos (D-078). Si no, com sempre.
             if (State == PlayerState.Playing && _crossfadeMs > 0 && _stream is not null && _output is not null)
                 CrossfadeTo(target, startAt < TimeSpan.Zero ? TimeSpan.Zero : startAt);
@@ -507,6 +509,45 @@ public sealed class Player : IDisposable
         RaiseStateChanged();
     }
 
+    /// <summary>Durada mínima i màxima del fade-out (pas 20; D-107).</summary>
+    public const int MinFadeOutMs = 500;
+    public const int MaxFadeOutMs = 10_000;
+
+    /// <summary>
+    /// Hi ha un fade-out en marxa: el so baixa i, quan arriba al final, el reproductor s'atura com amb Stop.
+    /// Es treu sol si el reproductor deixa de sonar (pausa, Stop, salt) o si es fa sonar una altra pista.
+    /// </summary>
+    public bool FadingOut { get; private set; }
+
+    /// <summary>
+    /// Fade-out (pas 20; D-107): baixa el so durant <paramref name="ms"/> i després fa Stop. Només mentre sona.
+    /// Si ja n'hi ha un en marxa, no fa res (per aturar de cop, Stop).
+    /// </summary>
+    public void FadeOut(int ms)
+    {
+        lock (_sync)
+        {
+            if (State != PlayerState.Playing || _stream is null || _output is null)
+                throw new PlayerCommandException("Només es pot fer un fade-out mentre sona.");
+            if (FadingOut) return;
+
+            int frames = (int)((long)Math.Clamp(ms, MinFadeOutMs, MaxFadeOutMs) * _output.SampleRate / 1000);
+            _stream.StartFadeOut(frames);
+            FadingOut = true;
+            _changed = true;
+        }
+        RaiseStateChanged();
+    }
+
+    /// <summary>Treu el fade-out en marxa (dins de _sync).</summary>
+    private void CancelFadeOut()
+    {
+        if (!FadingOut) return;
+        _stream?.CancelFadeOut();
+        FadingOut = false;
+        _changed = true;
+    }
+
     /// <summary>
     /// Després d'un error, torna a obrir la sortida i el fitxer i deixa el reproductor
     /// preparat a la <b>mateixa posició</b>. No torna a sonar sol: cal prémer Play.
@@ -541,11 +582,22 @@ public sealed class Player : IDisposable
                 _readerError = null;
                 FailKeepingTrack("No s'ha pogut continuar llegint el fitxer: és malmès o ja no és accessible.", readerError.Message);
             }
+            else if (FadingOut && _stream is { FadeOutFinished: true })
+            {
+                // El fade-out ha arribat al final (ja només surt silenci): s'atura com amb Stop.
+                FinishList();
+            }
             else if (_stream is not null)
             {
                 // Pistes encadenades que ja han començat a sonar (bucle o avanç automàtic).
                 while (_transitions.TryPeek(out var next) && _stream.FramesPlayed >= next.StartFrame)
                 {
+                    // Amb un fade-out en marxa, la pista no encadena amb la següent (ni en bucle): s'atura aquí.
+                    if (FadingOut)
+                    {
+                        FinishList();
+                        break;
+                    }
                     _transitions.TryDequeue(out _);
 
                     // Per precaució, l'avanç automàtic ja fet es desmarca: la pista no tornarà a
@@ -988,6 +1040,8 @@ public sealed class Player : IDisposable
 
     private void SetState(PlayerState state)
     {
+        // Si deixa de sonar (pausa, Stop, salt, error...), el fade-out en marxa es treu.
+        if (state != PlayerState.Playing) CancelFadeOut();
         State = state;
         _changed = true;
     }

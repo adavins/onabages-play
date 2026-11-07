@@ -87,6 +87,20 @@ public class PlayerCommandsTests
     }
 
     [Fact]
+    public void Fade_out_nomes_mentre_sona_i_ho_diu_l_estat()
+    {
+        LoadReady("1");
+        Assert.Equal("bad_state", ErrorCode(Send("""{ "v": 1, "id": 3, "cmd": "player.fadeOut", "player": "1" }""")));
+
+        Send("""{ "v": 1, "id": 4, "cmd": "player.play", "player": "1" }""");
+        var r = Send("""{ "v": 1, "id": 5, "cmd": "player.fadeOut", "player": "1" }""");
+
+        Assert.Equal("playing", PlayerState(r)); // continua sonant mentre baixa
+        Assert.True(r["result"]!["player"]!["fadingOut"]!.GetValue<bool>());
+        Assert.Equal("ended", PlayerState(Send("""{ "v": 1, "id": 6, "cmd": "player.stop", "player": "1" }"""))); // Stop, de cop
+    }
+
+    [Fact]
     public void Fitxer_que_no_existeix_dona_player_error_amb_el_motiu()
     {
         Send($$"""{ "v": 1, "id": 1, "cmd": "player.setDevice", "player": "1", "deviceId": "{{DeviceId}}" }""");

@@ -118,6 +118,7 @@ export class PlayerPanel {
           <button class="btn btn-success btn-control js-play" type="button" title="Play"><i class="bi bi-play-fill"></i></button>
           <button class="btn btn-warning btn-control js-pause" type="button" title="Pausa"><i class="bi bi-pause-fill"></i></button>
           <button class="btn btn-danger btn-control js-stop" type="button" title="Stop"><i class="bi bi-stop-fill"></i></button>
+          <button class="btn btn-outline-danger btn-control btn-fade js-fade" type="button" title="Fade-out"><span>FADE</span></button>
           <button class="btn btn-outline-light btn-control js-retry d-none" type="button" title="Reintentar">
             <i class="bi bi-arrow-repeat"></i> Reintentar
           </button>
@@ -152,6 +153,8 @@ export class PlayerPanel {
     this.#el.play.addEventListener('click', () => this.#send('player.play'));
     this.#el.pause.addEventListener('click', () => this.#pauseOrResume());
     this.#el.stop.addEventListener('click', () => this.#send('player.stop'));
+    // Fade-out (pas 20): el so baixa i el reproductor s'atura sol. No demana confirmació, com Stop.
+    this.#el.fade.addEventListener('click', () => this.#send('player.fadeOut'));
     this.#setupSeek();
     this.#el.retry.addEventListener('click', () => this.#send('player.retry'));
     this.#el.open.addEventListener('click', () => this.#open());
@@ -257,6 +260,13 @@ export class PlayerPanel {
     setEnabled(el.pause, playing || p.state === 'paused');
     el.pause.classList.toggle('blink', p.state === 'paused');
     setEnabled(el.stop, ['playing', 'paused', 'ready'].includes(p.state));
+    // Fade-out: només mentre sona. Mentre baixa, el botó parpelleja (Stop l'atura de cop).
+    const fadeSeconds = String((this.#store.settings?.fadeOut?.ms ?? 2000) / 1000).replace('.', ',');
+    setEnabled(el.fade, playing);
+    el.fade.classList.toggle('fading', playing && !!p.fadingOut);
+    el.fade.title = playing && p.fadingOut
+      ? "Baixant… En acabar, s'atura sol. Per aturar de cop, Stop."
+      : `Fade-out: baixa el so en ${fadeSeconds} s i després s'atura`;
     el.retry.classList.toggle('d-none', p.state !== 'error');
 
     el.error.textContent = p.error ?? '';

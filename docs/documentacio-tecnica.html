@@ -236,7 +236,9 @@ npm start
   <ul>
     <li><strong>Lectura:</strong> Media Foundation (MP3, AAC/M4A, WMA, FLAC…); WAV sense Media Foundation. Sortida sempre
       estèreo, remostrejada a la freqüència del dispositiu.</li>
-    <li><strong>Cadena:</strong> fitxer → descodificació → guany de normalització → compressor/limitador → volum → sortida.</li>
+    <li><strong>Cadena:</strong> fitxer → descodificació → guany de normalització → compressor/limitador → volum → fade-out → sortida.
+      El fade-out (<code>player.fadeOut</code>, D-107) és un factor per mostra al fil d'àudio (constant en dB fins a −60 dB);
+      quan acaba, <code>Player.Tick</code> fa el mateix que Stop.</li>
     <li><strong>Llista</strong> (<code>Playlist</code>): identificadors propis per element; la «pista següent» es calcula per
       identitat, no per posició, perquè la llista es pot editar mentre sona.</li>
     <li><strong>Encadenament:</strong> el fil de lectura decideix què ve després 1 s abans del final i continua escrivint a la

@@ -84,8 +84,8 @@ public static class WaveformPeaks
                     if (!gains.TryGetValue(s.Start + f, out var gain)) continue;
                     float factor = Mp3Edit.GainOfSteps(Math.Max(gain.Granule0, gain.Granule1));
                     int at = pos + f * BytesPerFrame;
-                    result[at] = (byte)MathF.Round(result[at] * factor);
-                    result[at + 1] = (byte)MathF.Round(result[at + 1] * factor);
+                    result[at] = (byte)Math.Min(255f, MathF.Round(result[at] * factor)); // amb la normalització, el guany pot ser > 1
+                    result[at + 1] = (byte)Math.Min(255f, MathF.Round(result[at + 1] * factor));
                 }
             }
             pos += s.Count * BytesPerFrame;

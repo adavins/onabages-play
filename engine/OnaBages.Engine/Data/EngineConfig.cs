@@ -72,6 +72,14 @@ public sealed class EngineConfig
     /// <summary>En tornar a obrir l'aplicació, es treuen de Recents els desats i els no trobats (per defecte, no).</summary>
     public bool ClearRecentsOnExit { get; set; }
 
+    // --- Normalització de l'editor (fase 5, pas 26a; de l'ordinador, com la sortida de l'editor) ---
+
+    /// <summary>Últim objectiu de pic de la normalització de l'editor (dBFS).</summary>
+    public double EditorNormalizeTargetDb { get; set; } = DefaultEditorNormalizeTargetDb;
+
+    public const double DefaultEditorNormalizeTargetDb = -1;
+    public const double MinEditorNormalizeTargetDb = -12, MaxEditorNormalizeTargetDb = 0;
+
     // --- Historial d'enregistraments (fase 5, pas 10a; de l'ordinador: depèn dels discos) ---
 
     /// <summary>Es fa una còpia de cada enregistrament original (per defecte, sí).</summary>

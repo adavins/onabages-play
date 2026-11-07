@@ -292,6 +292,9 @@ npm start
       fotogrames sencers (~24–26 ms).</li>
     <li><strong>Fosos</strong> (<code>Mp3Gain</code>): es canvia el volum global de cada grànul en passos d'1,5 dB, com el
       mp3DirectCut. No es perd qualitat ni canvia la mida.</li>
+    <li><strong>Normalització</strong> (D-123; <code>EditorSession.Normalize</code>, <code>Mp3Edit.Gain</code>): per pic. El pic
+      surt de la forma d'ona (amb els fosos aplicats), sense descodificar; el guany és el mateix nombre de passos d'1,5 dB
+      a tots els grànuls del fragment, arrodonit cap avall perquè mai no passi de l'objectiu.</li>
     <li><strong>Forma d'ona</strong> (<code>WaveformPeaks</code>): un pic per fotograma, calculat en un fil de prioritat baixa i
       desat a la memòria cau.</li>
     <li>Desar escriu en un temporal i el substitueix. Mai no obre un fitxer que s'està enregistrant.</li>

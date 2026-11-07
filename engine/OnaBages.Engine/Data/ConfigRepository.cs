@@ -626,6 +626,9 @@ public sealed class ConfigRepository
         // "editor" és opcional (fase 3): sortida de l'editor; sense, la de la preescolta.
         if (Text(root["editor"]?["device"]?["id"]) is { Length: > 0 } editorId)
             config.EditorDevice = new DeviceRef(editorId, Text(root["editor"]?["device"]?["name"]) ?? "");
+        // Objectiu de la normalització de l'editor (fase 5, pas 26a; camp opcional, sense canvi de versió).
+        if (root["editor"]?["normalizeTargetDb"] is JsonValue nt && nt.TryGetValue(out double normalizeTarget) && double.IsFinite(normalizeTarget))
+            config.EditorNormalizeTargetDb = Math.Round(Math.Clamp(normalizeTarget, EngineConfig.MinEditorNormalizeTargetDb, EngineConfig.MaxEditorNormalizeTargetDb), 1);
 
         // Enregistraments recents (fase 5, pas 11a; camp opcional, sense canvi de versió).
         if (root["recents"]?["clearOnExit"] is JsonValue clear && clear.TryGetValue(out bool clearOnExit))
@@ -893,6 +896,7 @@ public sealed class ConfigRepository
             ["device"] = config.EditorDevice is { } editorDevice
                 ? new JsonObject { ["id"] = editorDevice.Id, ["name"] = editorDevice.Name }
                 : null,
+            ["normalizeTargetDb"] = config.EditorNormalizeTargetDb,
         },
     };
 

@@ -155,6 +155,37 @@ public sealed class Mp3Edit
     /// <exception cref="Mp3EditException">Si no hi ha cap fragment seleccionat.</exception>
     public bool FadeOut(int start, int end) => Fade(start, end, fadeIn: false);
 
+    /// <summary>
+    /// Canvia el volum de [start, end) de la versió editada en <paramref name="steps"/> passos de 1,5 dB
+    /// (positiu = més fort), a sobre dels fosos que hi hagi. Per a la normalització (fase 5, pas 26a; D-123).
+    /// Sense tornar a codificar, com els fosos. Es pot desfer.
+    /// </summary>
+    /// <exception cref="Mp3EditException">Si el fragment és buit.</exception>
+    public bool Gain(int start, int end, int steps)
+    {
+        (start, end) = Clamp(start, end);
+        if (end <= start)
+            throw new Mp3EditException("No hi ha res a normalitzar.");
+        if (steps == 0) return false;
+
+        bool twoGranules = GranulesPerFrame > 1;
+        var gains = Gains.ToBuilder();
+        foreach (var s in SegmentsBetween(start, end))
+        {
+            for (int original = s.Start; original < s.End; original++)
+            {
+                var current = gains.GetValueOrDefault(original);
+                // Un grànul en silenci (fos fins al final) continua en silenci.
+                int g0 = current.Granule0 <= SilenceSteps ? current.Granule0 : current.Granule0 + steps;
+                int g1 = !twoGranules ? 0 : current.Granule1 <= SilenceSteps ? current.Granule1 : current.Granule1 + steps;
+                if (g0 == 0 && g1 == 0) gains.Remove(original);
+                else gains[original] = new FrameGain(g0, g1);
+            }
+        }
+        Apply(Segments, gains.ToImmutable());
+        return true;
+    }
+
     private bool Fade(int start, int end, bool fadeIn)
     {
         (start, end) = Clamp(start, end);

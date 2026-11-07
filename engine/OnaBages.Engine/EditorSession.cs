@@ -265,6 +265,59 @@ public sealed class EditorSession : IDisposable
         return changed;
     }
 
+    /// <summary>Resultat de la normalització: pic d'ara, guany (múltiple de 1,5 dB) i pic que quedarà (dBFS).</summary>
+    public sealed record NormalizePlan(double PeakDb, double GainDb, double ResultPeakDb, bool Limited);
+
+    /// <summary>Guany màxim de la normalització: més enllà, només es pujaria el soroll de fons.</summary>
+    public const double MaxNormalizeGainDb = 24;
+
+    /// <summary>
+    /// Normalització per pic (fase 5, pas 26a; D-123): puja o baixa [start, end) de la versió editada perquè el pic arribi
+    /// a <paramref name="targetDb"/> sense passar-lo. El guany és un múltiple de 1,5 dB (sense recodificar, com els fosos),
+    /// com a molt +24 dB. El pic surt de la forma d'ona (amb els fosos que hi hagi): no cal descodificar res.
+    /// Amb <paramref name="apply"/> false només es calcula (per al diàleg).
+    /// </summary>
+    /// <exception cref="EditorStateException">Sense fitxer, ocupat, en directe (si s'aplica), forma d'ona a mitges o tot silenci.</exception>
+    public NormalizePlan Normalize(int start, int end, double targetDb, bool apply)
+    {
+        NormalizePlan plan;
+        lock (_sync)
+        {
+            var edit = RequireReady();
+            if (apply && Live) throw new EditorStateException(LiveNotAllowed);
+            if (_peaks is not { } peaks || _peaksDone < edit.Index.FrameCount)
+                throw new EditorStateException("Encara s'està calculant la forma d'ona: torna-ho a provar d'aquí a uns segons.");
+
+            // Pic de la versió editada: el de cada fotograma de l'original, amb el seu guany (el grànul més fort).
+            // El pic desat està arrodonit a 1/255: es compta mig pas més, perquè mai no es passi de l'objectiu.
+            double peak = 0;
+            var gains = edit.Gains;
+            foreach (var s in edit.SegmentsBetween(start, end))
+            {
+                for (int f = s.Start; f < s.End; f++)
+                {
+                    int raw = Math.Max(peaks[f * WaveformPeaks.BytesPerFrame], peaks[f * WaveformPeaks.BytesPerFrame + 1]);
+                    if (raw == 0) continue;
+                    double frame = (raw + 0.5) / 255;
+                    if (gains.TryGetValue(f, out var g)) frame *= Mp3Edit.GainOfSteps(Math.Max(g.Granule0, g.Granule1));
+                    if (frame > peak) peak = frame;
+                }
+            }
+            if (peak <= 0)
+                throw new EditorStateException(start == end ? "No hi ha res a normalitzar." : "És tot silenci: no hi ha res a normalitzar.");
+
+            double peakDb = 20 * Math.Log10(peak);
+            int maxSteps = (int)(MaxNormalizeGainDb / Mp3Gain.StepDb);
+            int wanted = (int)Math.Floor((targetDb - peakDb) / Mp3Gain.StepDb + 1e-9);
+            int steps = Math.Min(wanted, maxSteps);
+            plan = new NormalizePlan(Math.Round(peakDb, 1), steps * Mp3Gain.StepDb, Math.Round(peakDb + steps * Mp3Gain.StepDb, 1), wanted > maxSteps);
+            if (!apply || steps == 0) return plan;
+        }
+
+        Change(edit => edit.Gain(start, end, (int)Math.Round(plan.GainDb / Mp3Gain.StepDb)));
+        return plan;
+    }
+
     /// <summary>
     /// Desa la versió editada (en segon pla). Sense <paramref name="target"/>, a sobre de l'original.
     /// Si la destinació existeix, cal <paramref name="overwrite"/>. Quan acaba, l'editor continua

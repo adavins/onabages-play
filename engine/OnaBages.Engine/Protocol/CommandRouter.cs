@@ -139,6 +139,7 @@ public sealed partial class CommandRouter
                 "editor.keep" => EditorChange(msg, (edit, start, end) => edit.Keep(start, end)),
                 "editor.fadeIn" => EditorChange(msg, (edit, start, end) => edit.FadeIn(start, end)),
                 "editor.fadeOut" => EditorChange(msg, (edit, start, end) => edit.FadeOut(start, end)),
+                "editor.normalize" => EditorNormalize(msg),
                 "editor.undo" => EditorDo(e => e.Change(edit => edit.Undo())),
                 "editor.redo" => EditorDo(e => e.Change(edit => edit.Redo())),
                 "editor.save" => EditorSave(msg),
@@ -288,6 +289,41 @@ public sealed partial class CommandRouter
         bool changed = _state.Editor.Change(edit => change(edit, edit.FrameAt(start), edit.FrameAt(end)));
         var result = EditorState();
         result["changed"] = changed;
+        return result;
+    }
+
+    /// <summary>
+    /// Normalització per pic (fase 5, pas 26a; D-123): <c>start</c> i <c>end</c> (segons de la versió editada; sense, o iguals,
+    /// tot el fitxer), <c>targetDb</c> (de −12 a 0; sense, l'últim que s'ha fet servir) i <c>preview</c> (true: només calcula).
+    /// </summary>
+    private JsonObject EditorNormalize(JsonObject msg)
+    {
+        bool hasRange = msg.ContainsKey("start") || msg.ContainsKey("end");
+        double start = hasRange ? RequireNumber(msg, "start", "el començament en segons") : 0;
+        double end = hasRange ? RequireNumber(msg, "end", "el final en segons") : 0;
+        double? target = OptionalNumber(msg["targetDb"], "targetDb", EngineConfig.MinEditorNormalizeTargetDb, EngineConfig.MaxEditorNormalizeTargetDb);
+        bool preview = msg["preview"] is JsonValue pv && pv.TryGetValue(out bool pb) && pb;
+        double targetDb = Math.Round(target ?? _config?.Read(c => c.EditorNormalizeTargetDb) ?? EngineConfig.DefaultEditorNormalizeTargetDb, 1);
+
+        var editor = _state.Editor;
+        var edit = editor.Edit ?? throw new EditorStateException("No hi ha cap fitxer obert a l'editor.");
+        int from = edit.FrameAt(start), to = edit.FrameAt(end);
+        if (from == to) (from, to) = (0, edit.FrameCount); // sense selecció: tot el fitxer
+        var plan = editor.Normalize(from, to, targetDb, apply: !preview);
+        if (!preview && target is not null) _config?.Update(c => c.EditorNormalizeTargetDb = targetDb);
+
+        var result = EditorState();
+        result["normalize"] = new JsonObject
+        {
+            ["targetDb"] = targetDb,
+            ["peakDb"] = plan.PeakDb,
+            ["gainDb"] = plan.GainDb,
+            ["resultPeakDb"] = plan.ResultPeakDb,
+            ["limited"] = plan.Limited,
+            ["maxGainDb"] = EditorSession.MaxNormalizeGainDb,
+            ["whole"] = from == 0 && to == edit.FrameCount,
+        };
+        result["changed"] = !preview && plan.GainDb != 0;
         return result;
     }
 

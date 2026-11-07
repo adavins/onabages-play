@@ -57,6 +57,14 @@ public static class EditorJson
             ["gains"] = edit is null ? null : new JsonArray(edit.Gains.OrderBy(g => g.Key)
                 .Select(g => (JsonNode)new JsonArray(g.Key, g.Value.Granule0, g.Value.Granule1)).ToArray()),
             ["silenceSteps"] = Mp3Edit.SilenceSteps,
+            // Marques de l'enregistrament (fase 5, pas 23c), on són a la versió editada (segons). Les dels trossos
+            // eliminats no hi surten; number és el de l'original (no canvia en retallar).
+            ["marks"] = new JsonArray(editor.EditedMarks().Select(m => (JsonNode)new JsonObject
+            {
+                ["number"] = m.Number,
+                ["seconds"] = Math.Round(m.Mark.Seconds, 3),
+                ["name"] = m.Mark.Name,
+            }).ToArray()),
             ["granulesPerFrame"] = edit?.GranulesPerFrame,
         };
     }

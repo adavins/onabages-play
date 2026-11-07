@@ -70,6 +70,37 @@ public static class RecordingMarks
     }
 
     /// <summary>
+    /// On queden les marques a la versió editada (fase 5, pas 23c): els trossos de l'original que es queden són
+    /// <paramref name="segments"/>. Les que eren en un tros eliminat no hi surten. Cada una conserva el número que
+    /// tenia (1, 2, 3... de l'original), perquè no canviïn de nom en retallar.
+    /// </summary>
+    /// <param name="originalFrames">Fotogrames de l'original sencer.</param>
+    public static List<(int Number, RecordingMark Mark)> MapToEdited(
+        IReadOnlyList<RecordingMark> marks, IReadOnlyList<FrameRange> segments, double frameSeconds, int originalFrames)
+    {
+        var result = new List<(int, RecordingMark)>();
+        if (frameSeconds <= 0) return result;
+        for (int i = 0; i < marks.Count; i++)
+        {
+            double frame = marks[i].Seconds / frameSeconds; // fotograma de l'original (amb decimals)
+            // Una marca just al final del fitxer (o una mica més enllà) és de l'últim fotograma.
+            int whole = Math.Min((int)Math.Floor(frame), Math.Max(0, originalFrames - 1));
+            long before = 0; // fotogrames de la versió editada abans del tros
+            foreach (var s in segments)
+            {
+                if (whole >= s.Start && whole < s.Start + s.Count)
+                {
+                    double edited = before + Math.Min(frame - s.Start, s.Count);
+                    result.Add((i + 1, marks[i] with { Seconds = edited * frameSeconds }));
+                    break;
+                }
+                before += s.Count;
+            }
+        }
+        return result;
+    }
+
+    /// <summary>
     /// L'MP3 s'ha mogut de <paramref name="fromMp3"/> a <paramref name="toMp3"/>: les marques el segueixen.
     /// Si no n'hi ha, no fa res. Si a la destinació ja n'hi havia unes d'un altre fitxer (que ja no hi és), se substitueixen.
     /// </summary>

@@ -61,6 +61,13 @@
       <div class="ed-time"><span class="ed-time-label">Durada</span><span id="ed-duration" class="ed-time-value">—</span></div>
     </div>
 
+    <!-- Marques de l'enregistrament (fase 5, pas 23c): només si el fitxer en té. -->
+    <div id="ed-marks" class="ed-group d-none">
+      <button id="ed-mark-prev" class="btn btn-sm btn-outline-info" type="button" title="Cursor a la marca anterior (Re Pàg)"><i class="bi bi-caret-left-fill"></i><i class="bi bi-bookmark-fill"></i></button>
+      <button id="ed-mark-sel" class="btn btn-sm btn-outline-info" type="button" title="Seleccionar el tros entre les dues marques del voltant del cursor (M, o doble clic a la forma d'ona)"><i class="bi bi-bookmarks"></i> Entre marques</button>
+      <button id="ed-mark-next" class="btn btn-sm btn-outline-info" type="button" title="Cursor a la marca següent (Av Pàg)"><i class="bi bi-bookmark-fill"></i><i class="bi bi-caret-right-fill"></i></button>
+    </div>
+
     <div class="ed-group">
       <button id="ed-trim-start" class="btn btn-sm btn-outline-warning" type="button" title="Eliminar des de l'inici fins al cursor"><i class="bi bi-chevron-bar-left"></i> Retallar inici</button>
       <button id="ed-trim-end" class="btn btn-sm btn-outline-warning" type="button" title="Eliminar des del cursor fins al final"><i class="bi bi-chevron-bar-right"></i> Retallar final</button>

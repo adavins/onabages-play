@@ -41,6 +41,10 @@ const els = {
   zoomIn: /** @type {HTMLButtonElement} */ ($('ed-zoom-in')),
   zoomOut: /** @type {HTMLButtonElement} */ ($('ed-zoom-out')),
   zoomAll: /** @type {HTMLButtonElement} */ ($('ed-zoom-all')),
+  marks: $('ed-marks'),
+  markPrev: /** @type {HTMLButtonElement} */ ($('ed-mark-prev')),
+  markSel: /** @type {HTMLButtonElement} */ ($('ed-mark-sel')),
+  markNext: /** @type {HTMLButtonElement} */ ($('ed-mark-next')),
   device: /** @type {HTMLSelectElement} */ ($('ed-device')),
   message: $('ed-message'),
 };
@@ -60,6 +64,8 @@ let fetchingPeaks = false;
 let segmentsKey = '';
 /** Últims fosos dibuixats (per no recalcular-los si no canvien). */
 let loadedGainsKey = '';
+/** Últimes marques dibuixades (pas 23c). */
+let marksKey = '';
 /** Sortides de so (per al desplegable). @type {any[]} */
 let outputs = [];
 let cueDeviceName = '';
@@ -200,8 +206,10 @@ function apply(/** @type {any} */ state) {
   if (!state.open) {
     loadedPath = '';
     segmentsKey = '';
+    marksKey = '';
     wave.reset(0, 0.026);
     wave.setSegments([]);
+    wave.setMarks([]);
   }
 
   if (ready) {
@@ -217,6 +225,12 @@ function apply(/** @type {any} */ state) {
     if (gainsKey !== loadedGainsKey) {
       loadedGainsKey = gainsKey;
       wave.setGains(state.gains ?? [], state.silenceSteps, state.granulesPerFrame);
+    }
+    // Marques de l'enregistrament (pas 23c): el motor les dona ja a la versió editada (segons).
+    const newMarksKey = JSON.stringify(state.marks ?? []);
+    if (newMarksKey !== marksKey) {
+      marksKey = newMarksKey;
+      wave.setMarks((state.marks ?? []).map((/** @type {any} */ m) => ({ number: m.number, frame: m.seconds / state.frameSeconds, name: m.name })));
     }
     fetchPeaks();
   }
@@ -325,6 +339,12 @@ function renderControls() {
   els.zoomIn.disabled = !ready;
   els.zoomOut.disabled = !ready;
   els.zoomAll.disabled = !ready;
+  // Marques (pas 23c): el grup només surt si el fitxer en té (les dels trossos eliminats no compten).
+  const hasMarks = ready && wave.marks.length > 0;
+  els.marks.classList.toggle('d-none', !hasMarks);
+  els.markPrev.disabled = !hasMarks;
+  els.markSel.disabled = !hasMarks;
+  els.markNext.disabled = !hasMarks;
   els.device.disabled = !connected;
 
   // Play ↔ Stop: només es canvia la classe (si es reconstruís el botó, es perdrien clics).
@@ -583,6 +603,18 @@ function moveCursor(/** @type {number} */ frame) {
   jumpTimer = window.setTimeout(jumpIfPlaying, 200);
 }
 
+/** Cursor a la marca anterior o següent (pas 23c). */
+function goToMark(/** @type {1 | -1} */ direction) {
+  const frame = wave.markFrom(wave.cursor, direction);
+  if (frame !== null) moveCursor(frame);
+}
+
+/** Selecciona el tros entre les marques del voltant del cursor (pas 23c). */
+function selectBetweenMarks() {
+  wave.selectBetweenMarks(wave.cursor);
+  renderTimes();
+}
+
 function selectAll() {
   if (!wave.frames) return;
   wave.selection = { start: 0, end: wave.frames };
@@ -614,6 +646,9 @@ function setupButtons() {
   els.zoomIn.addEventListener('click', () => wave.zoom(0.5));
   els.zoomOut.addEventListener('click', () => wave.zoom(2));
   els.zoomAll.addEventListener('click', () => wave.zoomAll());
+  els.markPrev.addEventListener('click', () => goToMark(-1));
+  els.markNext.addEventListener('click', () => goToMark(1));
+  els.markSel.addEventListener('click', selectBetweenMarks);
   els.device.addEventListener('change', async () => {
     deviceKey = '';
     await send('editor.setDevice', { deviceId: els.device.value || null });
@@ -645,6 +680,10 @@ function setupKeyboard() {
     // Fosos: E (entrada) i S (sortida), sense Ctrl (Ctrl+S és desar).
     else if (!ctrl && e.key.toLowerCase() === 'e') action = () => fadeSelection('editor.fadeIn');
     else if (!ctrl && e.key.toLowerCase() === 's') action = () => fadeSelection('editor.fadeOut');
+    // Marques (pas 23c): Re Pàg / Av Pàg hi salten; M selecciona el tros entre les del voltant.
+    else if (e.key === 'PageUp') action = () => goToMark(-1);
+    else if (e.key === 'PageDown') action = () => goToMark(1);
+    else if (!ctrl && e.key.toLowerCase() === 'm') action = selectBetweenMarks;
     else if (e.key === 'Home') action = () => moveCursor(0);
     else if (e.key === 'End') action = () => moveCursor(wave.frames);
     else if (e.key === 'ArrowLeft') action = () => moveCursor(wave.cursor - second * (e.shiftKey ? 10 : 1));

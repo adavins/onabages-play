@@ -205,6 +205,12 @@ public sealed class RecordingList
                 {
                     _sendToRecycleBin(original);
                     recycled = true;
+                    // Les seves marques també (les de la versió editada ja les ha desat l'editor, pas 23c).
+                    if (File.Exists(RecordingMarks.PathFor(original)))
+                    {
+                        try { _sendToRecycleBin(RecordingMarks.PathFor(original)); }
+                        catch (Exception) { }
+                    }
                 }
                 catch (Exception ex)
                 {

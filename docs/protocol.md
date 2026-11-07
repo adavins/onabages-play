@@ -387,11 +387,13 @@ Mentre `busy` no és `null`, `delete`, `keep`, `undo`, `redo` i `save` donen `ba
   "segments": [[125, 90000], [97810, 52189]],
   "peaksDone": 150000, "peaksError": null,
   "canUndo": true, "canRedo": false, "modified": true,
-  "gains": [[97810, -2, -3], [97811, -3, -4]], "silenceSteps": -255, "granulesPerFrame": 2 }
+  "gains": [[97810, -2, -3], [97811, -3, -4]], "silenceSteps": -255, "granulesPerFrame": 2,
+  "marks": [ { "number": 1, "seconds": 60.0, "name": null }, { "number": 3, "seconds": 210.0, "name": null } ] }
 ```
 
 - `playback`: reproducció de l'editor. `state`: `stopped`, `playing` o `error` (amb el motiu a `error`). `position`: segons de la versió editada (on sona o on s'ha aturat). `output`: la sortida triada (`{ id, name }`) o `null` si fa servir la de la preescolta.
 - `segments`: trossos de l'original que es queden, `[primer fotograma, quants]`, en ordre.
+- `marks`: marques de l'enregistrament (`Nom.mp3.marques`; fase 5, D-112), **ja a la versió editada**: `[{ number, seconds, name }]`, en ordre. Les dels trossos eliminats no hi surten (tornen amb `editor.undo`); `number` és el que tenien a l'original (no canvia en retallar). En desar (`editor.save`), es desen ajustades al costat del fitxer desat; si no en queda cap, el fitxer de marques de la destinació s'esborra. Si no s'han pogut escriure, `error` ho diu (l'àudio sí que s'ha desat). Sense marques: `[]`.
 - `gains`: fosos, per fotograma de l'**original** (si després es talla, el fos es mou amb el seu so): `[fotograma, passos del grànul 1, passos del grànul 2]`, en ordre. Cada pas és de 1,5 dB (negatiu = més fluix); `silenceSteps` o menys = silenci. A MPEG-2 hi ha un sol grànul per fotograma (`granulesPerFrame`: 1) i el segon valor no es fa servir. Els fosos se senten a la previsualització (`editor.play`).
 - `peaksDone`: fotogrames de l'original que ja tenen forma d'ona. Es calcula en segon pla després d'obrir (uns 25 s per hora en un ordinador normal) i es pot editar mentrestant; quan és igual a `originalFrames` (fotogrames de l'original), és completa. La segona vegada que s'obre un fitxer surt de la memòria cau i és completa de seguida. `peaksError`: no s'ha pogut calcular (el fitxer es pot editar igualment).
 - `error`: motiu de l'última feina que ha fallat (obrir o desar). Es neteja amb l'ordre següent.

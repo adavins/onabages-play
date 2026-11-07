@@ -21,12 +21,15 @@ const COLORS = {
   ruler: '#9aa4ae',
   rulerLine: '#3a414a',
   overviewView: 'rgba(255, 255, 255, 0.18)',
+  mark: '#3dd5f3',        // marques de l'enregistrament (pas 23c): el blau del botó Marca
+  markText: '#000000',
 };
 
 const RULER_HEIGHT = 22;
 
 /**
  * @typedef {{ start: number, end: number }} Range  fotogrames [start, end)
+ * @typedef {{ number: number, frame: number, name?: string | null }} Mark  marca de l'enregistrament (fotograma editat)
  * @typedef {{
  *   onCursor?: (frame: number) => void,
  *   onSelection?: (range: Range | null) => void,
@@ -43,6 +46,7 @@ export class Waveform {
   #gains = null;
   /** @type {Int32Array} */ #map = new Int32Array(0);       // editat → original
   /** @type {number[]} */ #cuts = [];                       // fotogrames (editats) on hi ha un tall
+  /** Marques de l'enregistrament (pas 23c), per ordre. @type {Mark[]} */ #marks = [];
   frameSeconds = 0.026;
 
   // Vista
@@ -75,6 +79,11 @@ export class Waveform {
     window.addEventListener('mousemove', (e) => this.#onMouseMove(e));
     window.addEventListener('mouseup', () => this.#onMouseUp());
     canvas.addEventListener('wheel', (e) => this.#onWheel(e), { passive: false });
+    // Doble clic (pas 23c): selecciona el tros entre les dues marques del voltant.
+    canvas.addEventListener('dblclick', (e) => {
+      if (this.frames === 0 || this.#marks.length === 0) return;
+      this.selectBetweenMarks(this.#xToFrame(e.offsetX));
+    });
     overview.addEventListener('mousedown', (e) => { this.#overviewDrag = true; this.#onOverview(e); });
     window.addEventListener('mousemove', (e) => { if (this.#overviewDrag) this.#onOverview(e); });
     window.addEventListener('mouseup', () => { this.#overviewDrag = false; });
@@ -147,6 +156,52 @@ export class Waveform {
     if (this.selection && this.selection.end > total) this.selection = null;
     this.#clampView();
     this.requestDraw();
+  }
+
+  // -------------------------------------------------------------------------
+  // Marques de l'enregistrament (pas 23c)
+  // -------------------------------------------------------------------------
+
+  /** Marques que envia el motor, ja a la versió editada. @param {Mark[]} marks */
+  setMarks(marks) {
+    this.#marks = [...marks].sort((a, b) => a.frame - b.frame);
+    this.requestDraw();
+  }
+
+  get marks() {
+    return this.#marks;
+  }
+
+  /**
+   * Tros entre les dues marques del voltant de `frame`: des de la marca d'abans (o l'inici) fins a la de després
+   * (o el final). Una marca just al punt compta com la d'abans.
+   * @returns {Range | null}
+   */
+  rangeBetweenMarks(/** @type {number} */ frame) {
+    if (this.#marks.length === 0 || this.frames === 0) return null;
+    let start = 0;
+    let end = this.frames;
+    for (const mark of this.#marks) {
+      const f = Math.round(mark.frame);
+      if (f <= frame) start = f;
+      else { end = f; break; }
+    }
+    return end > start ? { start, end } : null;
+  }
+
+  /** Selecciona el tros entre marques del voltant de `frame` (i el mostra). */
+  selectBetweenMarks(/** @type {number} */ frame) {
+    const range = this.rangeBetweenMarks(frame);
+    if (!range) return;
+    this.#select(range.start, range.end);
+    this.reveal(range.start);
+  }
+
+  /** Fotograma de la marca anterior (`direction` −1) o següent (+1) a `frame`; null si no n'hi ha. */
+  markFrom(/** @type {number} */ frame, /** @type {1 | -1} */ direction) {
+    const frames = this.#marks.map((m) => Math.round(m.frame));
+    if (direction > 0) return frames.find((f) => f > frame) ?? null;
+    return frames.filter((f) => f < frame).pop() ?? null;
   }
 
   // -------------------------------------------------------------------------
@@ -265,9 +320,28 @@ export class Waveform {
     }
     ctx.setLineDash([]);
 
+    this.#drawMarks(ctx, height);
+
     // Cursor i posició de reproducció
     this.#drawLine(ctx, this.cursor, COLORS.cursor, height);
     if (this.playhead !== null) this.#drawLine(ctx, this.playhead, COLORS.playhead, height, 2);
+  }
+
+  /** Marques: línia vertical i una etiqueta amb el número (i el nom, si en té) a dalt. */
+  #drawMarks(/** @type {CanvasRenderingContext2D} */ ctx, /** @type {number} */ height) {
+    ctx.font = 'bold 11px system-ui, sans-serif';
+    ctx.textBaseline = 'middle';
+    for (const mark of this.#marks) {
+      if (!this.#isVisible(mark.frame) && Math.round(mark.frame) !== this.frames) continue;
+      const x = Math.round(this.#frameToX(mark.frame));
+      ctx.fillStyle = COLORS.mark;
+      ctx.fillRect(x, RULER_HEIGHT, 1, height - RULER_HEIGHT);
+      const text = mark.name ? `${mark.number} ${mark.name}` : String(mark.number);
+      const w = ctx.measureText(text).width + 8;
+      ctx.fillRect(x, RULER_HEIGHT + 2, w, 15);
+      ctx.fillStyle = COLORS.markText;
+      ctx.fillText(text, x + 4, RULER_HEIGHT + 10);
+    }
   }
 
   /** Columna a columna: el pic més alt dels fotogrames que hi caben. */
@@ -374,6 +448,8 @@ export class Waveform {
     const w = Math.max(3, (this.visibleFrames / total) * width);
     ctx.fillStyle = COLORS.overviewView;
     ctx.fillRect(x0, 0, w, height);
+    ctx.fillStyle = COLORS.mark;
+    for (const mark of this.#marks) ctx.fillRect(Math.round((mark.frame / total) * width), 0, 2, height * 0.35);
     ctx.fillStyle = COLORS.cursor;
     ctx.fillRect(Math.round((this.cursor / total) * width), 0, 1, height);
     if (this.playhead !== null) {

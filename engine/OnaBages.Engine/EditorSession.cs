@@ -28,6 +28,7 @@ public sealed class EditorSession : IDisposable
     private DateTime _lastPeaksEvent;
     private byte[]? _peaks;      // pics del fitxer obert (de l'original, no de la versió editada)
     private int _peaksDone;      // fotogrames que ja tenen pic
+    private List<RecordingMark> _marks = []; // marques del fitxer obert (pas 23c), en temps de l'original
 
     /// <param name="cacheFolder">Carpeta de la memòria cau de formes d'ona. Per defecte, la de l'usuari; les proves en passen una de temporal.</param>
     /// <param name="openOutput">Sortida de la reproducció de l'editor. Per defecte, WASAPI; les proves en passen una de falsa.</param>
@@ -100,6 +101,19 @@ public sealed class EditorSession : IDisposable
     /// <summary>La forma d'ona no s'ha pogut calcular (el fitxer es pot editar igualment).</summary>
     public string? PeaksError { get; private set; }
 
+    /// <summary>
+    /// Marques del fitxer obert (fase 5, pas 23c; de <c>Nom.mp3.marques</c>), on queden a la versió editada:
+    /// les dels trossos eliminats no hi surten. Cada una amb el número que tenia a l'original.
+    /// </summary>
+    public List<(int Number, RecordingMark Mark)> EditedMarks()
+    {
+        lock (_sync)
+        {
+            if (Edit is not { } edit || Busy is not null) return [];
+            return RecordingMarks.MapToEdited(_marks, edit.Segments, edit.Index.FrameSeconds, edit.Index.FrameCount);
+        }
+    }
+
     /// <summary>Qualsevol canvi (també el progrés, com a molt 4 vegades per segon).</summary>
     public event Action? Changed;
 
@@ -115,10 +129,13 @@ public sealed class EditorSession : IDisposable
             Edit = null;
             Error = null;
             SavedPath = null;
+            _marks = [];
             StartJob("opening", token => Mp3FrameIndex.Build(path, token), onDone: index =>
             {
-                Edit = new Mp3Edit(index);
+                _marks = RecordingMarks.Read(path); // fitxer petit: si no n'hi ha o és malmès, cap marca
                 StartPeaks(index);
+                // L'última: qui miri Edit sense bloqueig (les proves) ja ho troba tot a punt.
+                Edit = new Mp3Edit(index);
             });
         }
         RaiseChanged();
@@ -137,6 +154,7 @@ public sealed class EditorSession : IDisposable
             Busy = null;
             Error = null;
             SavedPath = null;
+            _marks = [];
         }
         RaiseChanged();
     }
@@ -178,12 +196,26 @@ public sealed class EditorSession : IDisposable
             string saved = target;
             var segments = edit.Segments;
             var gains = edit.Gains;
+            // Les marques, on queden a la versió que es desa (pas 23c).
+            var marks = RecordingMarks.MapToEdited(_marks, segments, edit.Index.FrameSeconds, edit.Index.FrameCount).Select(m => m.Mark).ToList();
             StartJob("saving", token =>
             {
                 edit.Save(saved, p => ReportProgress(p), token);
                 return Mp3FrameIndex.Build(saved, token);
             }, onDone: index =>
             {
+                // L'àudio ja és desat. Les marques, al costat; si no n'hi ha cap, no hi ha d'haver fitxer
+                // (si es desa a sobre i s'han eliminat totes). Si no es poden escriure, es diu.
+                try
+                {
+                    if (marks.Count > 0) RecordingMarks.Write(saved, marks);
+                    else if (File.Exists(RecordingMarks.PathFor(saved))) File.Delete(RecordingMarks.PathFor(saved));
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    Error = $"L'àudio s'ha desat, però les marques no: {ex.Message}";
+                }
+                _marks = marks;
                 // Forma d'ona del fitxer desat: si la de l'original ja era completa, es munta amb els
                 // trossos que s'han quedat (sense tornar a descodificar). Si no, es calcula de nou.
                 byte[]? derived = _peaks is { } peaks && _peaksDone == edit.Index.FrameCount

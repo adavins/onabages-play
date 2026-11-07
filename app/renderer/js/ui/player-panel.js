@@ -44,6 +44,8 @@ export class PlayerPanel {
   /** @type {number | null} */ #dragFraction = null;
   /** El comptador gran mostra el temps transcorregut en lloc del restant. */
   #showElapsed = false;
+  /** Hora d'acabar que es mostra (ms des de 1970), o null si no sona. Vegeu #renderEndTime. @type {number | null} */
+  #shownEnd = null;
   /** Reducció del compressor que es mostra (amb caiguda suau). */
   #shownReduction = 0;
 
@@ -85,7 +87,13 @@ export class PlayerPanel {
           </button>
         </div>
 
-        <div class="remaining js-remaining" role="button" title="Temps restant">--:--</div>
+        <div class="remaining-row">
+          <div class="remaining js-remaining" role="button" title="Temps restant">--:--</div>
+          <div class="end-time js-endtime">
+            <span class="end-time-label">Acaba</span>
+            <span class="end-time-value js-endvalue">--:--:--</span>
+          </div>
+        </div>
         <div class="seek-area js-seek" title="Clica o arrossega per saltar">
           <div class="progress player-progress" role="progressbar" aria-label="Posició">
             <div class="progress-bar js-progress"></div>
@@ -232,6 +240,10 @@ export class PlayerPanel {
     // Avís de final (configurable; 0 = sense avís).
     const warning = this.#store.settings?.ui.endWarningSeconds ?? DEFAULT_END_WARNING_SECONDS;
     el.remaining.classList.toggle('ending', playing && warning > 0 && remaining <= warning);
+    // Hora d'acabar (pas 18). Si la pista que sona està en bucle, no s'acaba sola.
+    const looping = !!this.#store.playlists.get(this.#id)?.items?.find((/** @type {any} */ i) => i.id === p.currentItemId)?.loop;
+    // (Mentre s'arrossega la barra, l'hora és la d'acabar si es deixa anar allà.)
+    this.#renderEndTime(playing && hasTrack, looping, remaining);
     el.position.textContent = this.#showElapsed ? remainingText : elapsedText;
     el.duration.textContent = formatDuration(p.duration);
     el.progress.style.width = hasTrack ? `${Math.min(100, (position / p.duration) * 100)}%` : '0%';
@@ -274,6 +286,31 @@ export class PlayerPanel {
       return;
     }
     bridge?.openEditor(path);
+  }
+
+  /**
+   * Hora prevista d'acabar la pista que sona (pas 18): ara + temps restant, amb segons.
+   * Només mentre sona: en pausa o aturat, l'hora no se sap (depèn de quan es torni a prémer Play).
+   * La posició arriba del motor unes quantes vegades per segon i cada càlcul pot variar unes dècimes:
+   * l'hora mostrada només es canvia si la nova difereix més de 0,75 s (un salt, una pausa...), perquè
+   * no salti d'un segon a l'altre sense motiu.
+   * @param {boolean} playing @param {boolean} loop @param {number} remaining  segons
+   */
+  #renderEndTime(playing, loop, remaining) {
+    const el = this.#el;
+    if (!playing || loop) {
+      this.#shownEnd = null;
+      el.endvalue.textContent = loop && playing ? '∞ bucle' : '--:--:--';
+      el.endtime.classList.add('idle');
+      el.endtime.title = loop && playing ? "La pista es repeteix: no s'acaba sola" : "Hora prevista d'acabar la pista (mentre sona)";
+      return;
+    }
+    const end = Date.now() + remaining * 1000;
+    if (this.#shownEnd === null || Math.abs(end - this.#shownEnd) > 750) this.#shownEnd = end;
+    const text = clockText(this.#shownEnd);
+    el.endvalue.textContent = text;
+    el.endtime.classList.remove('idle');
+    el.endtime.title = `La pista acabarà a les ${text}`;
   }
 
   /** Avís breu al panell (p. ex. una drecera de teclat que el motor ha rebutjat). */
@@ -414,6 +451,12 @@ export class PlayerPanel {
     clearTimeout(this.#messageTimer);
     this.#messageTimer = window.setTimeout(() => { this.#el.message.textContent = ''; }, MESSAGE_MS);
   }
+}
+
+/** Hora del rellotge amb segons (p. ex. «12:04:09»), arrodonida al segon. @param {number} ms */
+function clockText(ms) {
+  const d = new Date(Math.round(ms / 1000) * 1000);
+  return [d.getHours(), d.getMinutes(), d.getSeconds()].map((n) => String(n).padStart(2, '0')).join(':');
 }
 
 /** @param {HTMLElement} button @param {boolean} enabled */

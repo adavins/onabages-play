@@ -916,6 +916,49 @@ body.engine-offline .side-content {
 }
 
 /* Últims segons de la pista: color i parpelleig (a més del número que baixa). */
+/* Comptador gran al mig i, a la seva dreta, l'hora prevista d'acabar (pas 18). Les dues columnes laterals
+   fan el mateix ample perquè el comptador es quedi centrat. */
+.remaining-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: 0.6rem;
+}
+
+.remaining-row > .remaining {
+  grid-column: 2;
+  padding: 0 0.3rem;
+}
+
+.end-time {
+  grid-column: 3;
+  justify-self: start;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.end-time-label {
+  font-size: min(calc(0.7rem * var(--obp-ui-scale)), 3.2cqi);
+  color: var(--bs-secondary-color);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.end-time-value {
+  font-size: min(calc(1.05rem * var(--obp-ui-scale)), 4.6cqi);
+  font-weight: 600;
+}
+
+/* Quan no sona, l'hora no se sap: es mostra apagada. */
+.end-time.idle .end-time-value {
+  color: var(--bs-secondary-color);
+  font-weight: 400;
+}
+
 .remaining.ending {
   background: var(--obp-ending-bg);
   color: #fff;

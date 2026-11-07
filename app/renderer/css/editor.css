@@ -77,6 +77,25 @@
   overflow: hidden;
 }
 
+/* Barra del nom d'una marca (fase 5, pas 27b), a sota de la forma d'ona. */
+.ed-mark-name {
+  position: absolute;
+  left: 0.5rem;
+  bottom: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.5rem;
+  background: var(--bs-body-bg);
+  border: 1px solid #3dd5f3;
+  border-radius: 0.3rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  z-index: 2;
+}
+.ed-mark-name.d-none { display: none; }
+.ed-mark-name label { white-space: nowrap; color: #3dd5f3; font-weight: 600; }
+.ed-mark-name input { width: 18rem; }
+
 .ed-wave {
   display: block;
   width: 100%;

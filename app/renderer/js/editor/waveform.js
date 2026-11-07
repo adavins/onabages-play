@@ -23,6 +23,7 @@ const COLORS = {
   overviewView: 'rgba(255, 255, 255, 0.18)',
   mark: '#3dd5f3',        // marques de l'enregistrament (pas 23c): el blau del botó Marca
   markText: '#000000',
+  markSelected: '#ffffff', // marca seleccionada (pas 27b): etiqueta blanca amb vora blava
 };
 
 const RULER_HEIGHT = 22;
@@ -36,6 +37,9 @@ const RULER_HEIGHT = 22;
  *   onClick?: (frame: number) => void,
  *   onView?: () => void,
  *   onMarkMove?: (number: number, frame: number) => void,
+ *   onMarkSelect?: (number: number | null) => void,
+ *   onMarkRename?: (number: number) => void,
+ *   onMarkMenu?: (number: number, event: MouseEvent) => void,
  * }} WaveformCallbacks
  */
 
@@ -58,6 +62,8 @@ export class Waveform {
   cursor = 0;
   /** @type {Range | null} */ selection = null;
   /** @type {number | null} */ playhead = null;   // fotograma on sona (null = no sona)
+  /** Marca seleccionada (pas 27b): clic a l'etiqueta. Supr l'esborra i R hi posa nom. @type {number | null} */
+  selectedMark = null;
 
   #canvas;
   #overview;
@@ -91,7 +97,17 @@ export class Waveform {
     // Doble clic (pas 23c): selecciona el tros entre les dues marques del voltant.
     canvas.addEventListener('dblclick', (e) => {
       if (this.frames === 0 || this.#marks.length === 0) return;
-      this.selectBetweenMarks(this.#xToFrame(e.offsetX));
+      const mark = this.#markAt(e.offsetX, e.offsetY);
+      if (mark) this.#callbacks.onMarkRename?.(mark.number); // pas 27b: posar nom a la marca
+      else this.selectBetweenMarks(this.#xToFrame(e.offsetX));
+    });
+    // Botó dret a l'etiqueta d'una marca (pas 27b): menú amb Posar nom i Esborrar.
+    canvas.addEventListener('contextmenu', (e) => {
+      const mark = this.#markAt(e.offsetX, e.offsetY);
+      if (!mark) return;
+      e.preventDefault();
+      this.#setSelectedMark(mark.number);
+      this.#callbacks.onMarkMenu?.(mark.number, e);
     });
     overview.addEventListener('mousedown', (e) => { this.#overviewDrag = true; this.#onOverview(e); });
     window.addEventListener('mousemove', (e) => { if (this.#overviewDrag) this.#onOverview(e); });
@@ -174,6 +190,7 @@ export class Waveform {
   /** Marques que envia el motor, ja a la versió editada. @param {Mark[]} marks */
   setMarks(marks) {
     this.#marks = [...marks].sort((a, b) => a.frame - b.frame);
+    if (this.selectedMark !== null && !this.#marks.some((m) => m.number === this.selectedMark)) this.#setSelectedMark(null);
     this.requestDraw();
   }
 
@@ -353,6 +370,26 @@ export class Waveform {
     if (this.playhead !== null) this.#drawLine(ctx, this.playhead, COLORS.playhead, height, 2);
   }
 
+/** Selecciona una marca (o cap) i avisa. */
+  #setSelectedMark(/** @type {number | null} */ number) {
+    if (number === this.selectedMark) return;
+    this.selectedMark = number;
+    this.#callbacks.onMarkSelect?.(number);
+    this.requestDraw();
+  }
+
+  /** Selecciona la marca més propera a un fotograma (pas 27b: després de moure-la, que pot haver canviat de número). */
+  selectMarkNear(/** @type {number} */ frame) {
+    let best = null;
+    for (const m of this.#marks) if (!best || Math.abs(m.frame - frame) < Math.abs(best.frame - frame)) best = m;
+    this.#setSelectedMark(best ? best.number : null);
+  }
+
+  /** Selecciona la marca amb aquest número (o cap, amb null). */
+  selectMark(/** @type {number | null} */ number) {
+    this.#setSelectedMark(number);
+  }
+
   /** Marques: línia vertical i una etiqueta amb el número (i el nom, si en té) a dalt. */
   #drawMarks(/** @type {CanvasRenderingContext2D} */ ctx, /** @type {number} */ height) {
     ctx.font = 'bold 11px system-ui, sans-serif';
@@ -370,6 +407,12 @@ export class Waveform {
       const w = ctx.measureText(text).width + 8;
       this.#markBoxes.push({ number: mark.number, x0: x, x1: x + w });
       ctx.fillRect(x, RULER_HEIGHT + 2, w, 15);
+      // Seleccionada (pas 27b): etiqueta blanca amb vora blava i la línia més gruixuda.
+      if (mark.number === this.selectedMark) {
+        ctx.fillRect(x - 1, RULER_HEIGHT, 3, height - RULER_HEIGHT);
+        ctx.fillStyle = COLORS.markSelected;
+        ctx.fillRect(x + 2, RULER_HEIGHT + 4, w - 4, 11);
+      }
       ctx.fillStyle = COLORS.markText;
       ctx.fillText(text, x + 4, RULER_HEIGHT + 10);
     }
@@ -502,8 +545,10 @@ export class Waveform {
     const mark = this.#markAt(e.offsetX, e.offsetY);
     if (mark) {
       this.#markDrag = { mark, from: mark.frame, moved: false };
+      this.#setSelectedMark(mark.number); // pas 27b: un clic a l'etiqueta la selecciona
       return;
     }
+    this.#setSelectedMark(null);
 
     if (e.shiftKey) {
       // Maj + clic: estén la selecció (o en fa una des del cursor).

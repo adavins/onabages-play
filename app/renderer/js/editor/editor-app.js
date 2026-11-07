@@ -5,6 +5,7 @@
 import { EngineClient } from '../engine-client.js';
 import { choose } from '../ui/dialogs.js';
 import { escapeHtml, fileName } from '../ui/format.js';
+import { showContextMenu } from '../ui/context-menu.js';
 import { Waveform, formatTime } from './waveform.js';
 
 /** @type {any} API de preload.js */
@@ -47,6 +48,11 @@ const els = {
   zoomOut: /** @type {HTMLButtonElement} */ ($('ed-zoom-out')),
   zoomAll: /** @type {HTMLButtonElement} */ ($('ed-zoom-all')),
   marks: $('ed-marks'),
+  markAdd: /** @type {HTMLButtonElement} */ ($('ed-mark-add')),
+  markName: /** @type {HTMLFormElement} */ ($('ed-mark-name')),
+  markNameLabel: $('ed-mark-name-label'),
+  markNameInput: /** @type {HTMLInputElement} */ ($('ed-mark-name-input')),
+  markNameCancel: $('ed-mark-name-cancel'),
   markPrev: /** @type {HTMLButtonElement} */ ($('ed-mark-prev')),
   markSel: /** @type {HTMLButtonElement} */ ($('ed-mark-sel')),
   markNext: /** @type {HTMLButtonElement} */ ($('ed-mark-next')),
@@ -96,6 +102,13 @@ const wave = new Waveform(
     onClick: () => jumpIfPlaying(),
     // Marca arrossegada (pas 23f): el motor la desa de seguida; si no pot, la torna a posar on era.
     onMarkMove: (number, frame) => moveMark(number, frame),
+    // Marques des de l'editor (pas 27b): seleccionar (clic a l'etiqueta), posar nom (doble clic) i menú (botó dret).
+    onMarkSelect: () => renderControls(),
+    onMarkRename: (number) => askMarkName(number),
+    onMarkMenu: (number, event) => showContextMenu(event, [
+      { label: 'Posar nom…', icon: 'bi-pencil', action: () => askMarkName(number) },
+      { label: 'Esborrar la marca', icon: 'bi-trash3', action: () => removeMark(number) },
+    ]),
   },
 );
 
@@ -219,6 +232,7 @@ function apply(/** @type {any} */ state) {
     peaksFetched = 0;
     segmentsKey = '';
     wave.reset(state.originalFrames, state.frameSeconds);
+    closeMarkName(); // la barra del nom era d'una marca del fitxer d'abans
   }
   if (!state.open) {
     loadedPath = '';
@@ -227,6 +241,7 @@ function apply(/** @type {any} */ state) {
     wave.reset(0, 0.026);
     wave.setSegments([]);
     wave.setMarks([]);
+    closeMarkName();
   }
 
   if (ready) {
@@ -383,7 +398,8 @@ function renderControls() {
   els.zoomAll.disabled = !ready;
   // Marques (pas 23c): el grup només surt si el fitxer en té (les dels trossos eliminats no compten).
   const hasMarks = ready && wave.marks.length > 0;
-  els.marks.classList.toggle('d-none', !hasMarks);
+  els.marks.classList.toggle('d-none', !ready);
+  els.markAdd.disabled = !ready;
   els.markPrev.disabled = !hasMarks;
   els.markSel.disabled = !hasMarks;
   els.markNext.disabled = !hasMarks;
@@ -767,6 +783,66 @@ async function moveMark(/** @type {number} */ number, /** @type {number} */ fram
   if (!(await send('editor.moveMark', { number, seconds: frame * editor.frameSeconds }))) {
     marksKey = '';
     if (editor) apply(editor);
+    return;
+  }
+  wave.selectMarkNear(frame);
+}
+
+/** Quant temps espera la barra del nom d'una marca nova si no s'hi escriu res (ms), com a l'enregistrador. */
+const MARK_NAME_IDLE_MS = 5000;
+/** Barra del nom oberta: de quina marca. @type {{ number: number, timer: number } | null} */
+let markNaming = null;
+
+/** Afegir una marca al cursor (pas 27b; D-126). També mentre s'enregistra. Després es pot escriure el nom. */
+async function addMark() {
+  if (!editor?.open || els.markAdd.disabled) return;
+  const result = await send('editor.addMark', { seconds: wave.cursor * editor.frameSeconds });
+  if (!result?.number) return;
+  wave.selectMark(result.number);
+  askMarkName(result.number, true);
+}
+
+/**
+ * Barra per posar nom a una marca (pas 27b). Retorn desa, Esc tanca. Per a una marca nova, si en 5 s no s'hi ha
+ * escrit res, es tanca sola (la marca ja és al seu lloc: el nom és opcional).
+ */
+function askMarkName(/** @type {number} */ number, isNew = false) {
+  const mark = wave.marks.find((m) => m.number === number);
+  if (!mark) return;
+  closeMarkName();
+  els.markNameLabel.textContent = isNew ? `Marca ${number} afegida · nom` : `Nom de la marca ${number}`;
+  els.markNameInput.value = mark.name ?? '';
+  els.markName.classList.remove('d-none');
+  els.markNameInput.focus();
+  els.markNameInput.select();
+  markNaming = { number, timer: isNew ? window.setTimeout(() => { if (!els.markNameInput.value) closeMarkName(); }, MARK_NAME_IDLE_MS) : 0 };
+}
+
+function closeMarkName() {
+  if (markNaming) clearTimeout(markNaming.timer);
+  markNaming = null;
+  els.markName.classList.add('d-none');
+}
+
+async function saveMarkName() {
+  if (!markNaming) return;
+  const { number } = markNaming;
+  const name = els.markNameInput.value.trim();
+  closeMarkName();
+  const current = wave.marks.find((m) => m.number === number);
+  if ((current?.name ?? '') === name) return; // no ha canviat
+  await send('editor.nameMark', { number, name });
+}
+
+/** Esborrar una marca (pas 27b). No es pot desfer: el missatge diu quina era. */
+async function removeMark(/** @type {number} */ number) {
+  const mark = wave.marks.find((m) => m.number === number);
+  if (!mark || !editor?.open) return;
+  closeMarkName();
+  if (await send('editor.removeMark', { number })) {
+    wave.selectMark(null);
+    const label = mark.name ? `${number} «${mark.name}»` : String(number);
+    showMessage(`Marca ${label} esborrada (a ${formatTime(mark.frame * editor.frameSeconds)}).`);
   }
 }
 
@@ -816,6 +892,12 @@ function setupButtons() {
   els.zoomIn.addEventListener('click', () => wave.zoom(0.5));
   els.zoomOut.addEventListener('click', () => wave.zoom(2));
   els.zoomAll.addEventListener('click', () => wave.zoomAll());
+  els.markAdd.addEventListener('click', addMark);
+  els.markName.addEventListener('submit', (e) => { e.preventDefault(); saveMarkName(); });
+  els.markNameCancel.addEventListener('click', closeMarkName);
+  // En escriure, ja no es tanca sola; Esc la tanca sense canviar res.
+  els.markNameInput.addEventListener('input', () => { if (markNaming) clearTimeout(markNaming.timer); });
+  els.markNameInput.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); closeMarkName(); } });
   els.markPrev.addEventListener('click', () => goToMark(-1));
   els.markNext.addEventListener('click', () => goToMark(1));
   els.markSel.addEventListener('click', selectBetweenMarks);
@@ -839,6 +921,7 @@ function setupKeyboard() {
     let action = null;
     if (e.key === ' ' && e.shiftKey) action = playSelection;
     else if (e.key === ' ') action = togglePlay;
+    else if ((e.key === 'Delete' || e.key === 'Backspace') && wave.selectedMark !== null) action = () => removeMark(/** @type {number} */ (wave.selectedMark));
     else if (e.key === 'Delete' || e.key === 'Backspace') action = () => wave.selection && deleteRange(wave.selection.start, wave.selection.end);
     else if (ctrl && e.key.toLowerCase() === 'z' && e.shiftKey) action = () => send('editor.redo');
     else if (ctrl && e.key.toLowerCase() === 'z') action = () => send('editor.undo');
@@ -856,6 +939,9 @@ function setupKeyboard() {
     else if (e.key === 'PageUp') action = () => goToMark(-1);
     else if (e.key === 'PageDown') action = () => goToMark(1);
     else if (!ctrl && e.key.toLowerCase() === 'm') action = selectBetweenMarks;
+    // Marques des de l'editor (pas 27b): B afegeix al cursor; R posa nom a la seleccionada.
+    else if (!ctrl && e.key.toLowerCase() === 'b') action = addMark;
+    else if (!ctrl && e.key.toLowerCase() === 'r' && wave.selectedMark !== null) action = () => askMarkName(/** @type {number} */ (wave.selectedMark));
     else if (e.key === 'Home') action = () => moveCursor(0);
     else if (e.key === 'End') action = () => moveCursor(wave.frames);
     else if (e.key === 'ArrowLeft') action = () => moveCursor(wave.cursor - second * (e.shiftKey ? 10 : 1));
@@ -865,12 +951,12 @@ function setupKeyboard() {
     else if (e.key === '0') action = () => wave.zoomAll();
     else if (e.key === 'Escape') action = () => {
       if (wave.cancelMarkDrag()) return; // Esc a mig arrossegar una marca: torna on era
-      wave.selection = null; wave.requestDraw(); renderTimes();
+      wave.selection = null; wave.selectMark(null); wave.requestDraw(); renderTimes();
     };
 
     // Enregistrament en curs (pas 24c): F5 actualitza; les tecles d'editar i desar no fan res (els botons ho expliquen).
     if (e.key === 'F5' && editor?.live) action = () => refresh();
-    const editKey = e.key === 'Delete' || e.key === 'Backspace' || (ctrl && ['s', 'z', 'y'].includes(e.key.toLowerCase()))
+    const editKey = ((e.key === 'Delete' || e.key === 'Backspace') && wave.selectedMark === null) || (ctrl && ['s', 'z', 'y'].includes(e.key.toLowerCase()))
       || (!ctrl && ['e', 's', 'n'].includes(e.key.toLowerCase()));
     if (editor?.live && editKey) action = null;
 

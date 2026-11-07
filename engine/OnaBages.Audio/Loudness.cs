@@ -278,8 +278,8 @@ public sealed class LoudnessMeter
 
     private static double EnergyFor(double lufs) => Math.Pow(10, (lufs + 0.691) / 10);
 
-    /// <summary>Filtre de segon ordre (forma directa II transposada), en doble precisió.</summary>
-    private sealed class Biquad
+    /// <summary>Filtre de segon ordre (forma directa II transposada), en doble precisió. També el fa servir l'anivellador (D-134).</summary>
+    internal sealed class Biquad
     {
         private readonly double _b0, _b1, _b2, _a1, _a2;
         private double _z1, _z2;

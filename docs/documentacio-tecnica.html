@@ -301,6 +301,10 @@ npm start
   <ul>
     <li><strong>Compressor/limitador</strong> (<code>DynamicsProcessor</code>): com el SqrSoft del Winamp, amb anticipació
       d'1,5 ms. El limitador dels enregistradors és el mateix amb ràtio 1 (només el sostre).</li>
+    <li><strong>Anivellador</strong> (D-134; <code>Leveler</code>): a sobre de la lectura de la pista (fil de lectura), amb 1 s
+      de mirada endavant. Per a cada bloc de 100 ms, la sonoritat d'una finestra de ±1 s mesurada com la integrada (blocs de
+      400 ms, filtre K, porta de −50 LUFS i relativa de −10 dB); el guany va cap a l'objectiu a 6 dB/s amunt i 12 dB/s avall,
+      no puja on no hi ha veu, i el limita el pic dels 0,3 s següents (sostre −1 dBFS). Rampa dins de cada bloc.</li>
     <li><strong>Canal buit</strong> (D-132): l'anàlisi (<code>TrackLoudness.FindEmptyChannel</code>) guarda el pic de cada canal.
       La correcció (<code>ChannelFix</code>) la fa el fil d'àudio (<code>PlayerStream.FixChannels</code>): la de la pista d'ara
       es pot canviar en qualsevol moment, la de la pista que encadena s'hi programa per fotograma

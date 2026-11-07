@@ -265,6 +265,10 @@ npm start
       la versió editada amb els trossos que es queden (<code>RecordingMarks.MapToEdited</code>) i, en desar, les desa
       ajustades al costat del fitxer nou; la interfície només les dibuixa. «Desar la selecció» (<code>editor.saveSelection</code>)
       fa servir el mateix <code>Mp3Edit.Save</code> amb només els trossos de la selecció i no toca l'edició.</li>
+    <li><strong>Alarma de silenci</strong> (D-121): el fil de codificació, just abans de LAME, mira si tot el bloc és per
+      sota del llindar i suma o posa a zero un comptador atòmic (<code>_silentFrames</code>); <code>Recorder.Tick</code>
+      (cada 100 ms) encén o apaga <code>SilenceAlarm</code> i avisa la interfície. Es mesura el que queda al fitxer, no
+      el mesurador. Ajustos comuns del perfil (<code>settings.silenceAlarm</code>).</li>
     <li><strong>Historial d'enregistraments:</strong> el mateix fil escriu els mateixos bytes a una còpia
       (<code>RecordingArchive</code>). Un error a la còpia no afecta mai l'enregistrament principal.</li>
     <li>Es compten les mostres perdudes i els avisos de Windows, i s'escriuen al registre amb la posició.</li>

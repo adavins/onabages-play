@@ -29,6 +29,8 @@ public static class RecorderJson
         ["samplesLost"] = recorder.SamplesLost,
         ["captureGlitches"] = recorder.CaptureGlitches,
         ["inputActive"] = recorder.InputActive,
+        // Alarma de silenci (fase 5, pas 25a): ajustos de settings.silenceAlarm.
+        ["silence"] = Silence(recorder),
         ["error"] = recorder.ErrorMessage,
         // Marques de l'enregistrament en curs o del pendent (fase 5, pas 23a): recorder.mark.
         ["marks"] = new JsonArray(recorder.Marks.Select(m => (JsonNode)new JsonObject
@@ -64,6 +66,7 @@ public static class RecorderJson
                 ["lowDiskSpace"] = r.LowDiskSpace,
                 ["samplesLost"] = r.SamplesLost,
                 ["captureGlitches"] = r.CaptureGlitches,
+                ["silence"] = Silence(r),
             });
         }
 
@@ -71,6 +74,15 @@ public static class RecorderJson
         ev["recorders"] = list;
         return ev;
     }
+
+    private static JsonObject Silence(Recorder r) => new()
+    {
+        ["alarm"] = r.SilenceAlarm,
+        ["seconds"] = Math.Round(r.SilentSeconds, 1),
+        ["enabled"] = r.SilenceAlarmEnabled,
+        ["thresholdDb"] = r.SilenceThresholdDb,
+        ["alarmSeconds"] = r.SilenceSeconds,
+    };
 
     public static string State(RecorderState state) => state switch
     {

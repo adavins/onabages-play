@@ -372,6 +372,9 @@ if (archiveFolder is not null && archiveKeepDays > 0)
 foreach (var recorder in state.Recorders)
     recorder.SetLimiter(config.Read(c => c.LimitedRecorders.Contains(recorder.Id)), config.Read(c => c.RecorderLimiterCeilingDb));
 
+// Alarma de silenci dels enregistradors (fase 5, pas 25a): la del perfil.
+CommandRouter.ApplySilenceAlarm(config, state.Recorders);
+
 // Volum de la preescolta (config.json; depèn dels auriculars, per això es recorda).
 state.Cue.SetVolume(config.Read(c => c.CueVolumeDb));
 // Compressor/limitador de cada reproductor (fase 4, pas 4b): el que hi ha al perfil.
@@ -560,6 +563,7 @@ _ = Task.Run(async () =>
     var lastGlitches = new Dictionary<Recorder, int>();
     var lastLost = new Dictionary<Recorder, long>();
     var lastUnderruns = new Dictionary<Player, int>();
+    var lastSilenceAlarm = new Dictionary<Recorder, bool>();
 
     try
     {
@@ -584,6 +588,18 @@ _ = Task.Run(async () =>
                     log.LogWarning("Enregistrador {Id}: s'han perdut {Count} mostres perquè el disc no ha anat prou ràpid (a {Elapsed} de l'enregistrament)",
                         recorder.Id, lost - lostBefore, recorder.Elapsed.ToString(@"hh\:mm\:ss\.f"));
                 lastLost[recorder] = lost;
+
+                // Alarma de silenci (pas 25a): queda al registre quan salta i quan torna el so.
+                bool silenceAlarm = recorder.SilenceAlarm;
+                if (silenceAlarm != lastSilenceAlarm.GetValueOrDefault(recorder))
+                {
+                    if (silenceAlarm)
+                        log.LogWarning("Enregistrador {Id}: alarma de silenci, fa {Seconds} s que no entra so (a {Elapsed} de l'enregistrament)",
+                            recorder.Id, (int)recorder.SilentSeconds, recorder.Elapsed.ToString(@"hh\:mm\:ss"));
+                    else
+                        log.LogInformation("Enregistrador {Id}: s'ha acabat l'alarma de silenci", recorder.Id);
+                }
+                lastSilenceAlarm[recorder] = silenceAlarm;
             }
 
             if (tick % 10 == 0 && state.IsRecording)

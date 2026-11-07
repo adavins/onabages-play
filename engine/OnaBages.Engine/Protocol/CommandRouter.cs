@@ -454,8 +454,14 @@ public sealed partial class CommandRouter
         var archive = msg["recordingArchive"] as JsonObject;
         var recents = msg["recents"] as JsonObject;
         var fadeOut = msg["fadeOut"] as JsonObject;
-        if (ui is null && layout is null && program is null && loudness is null && trim is null && limiter is null && archive is null && recents is null && fadeOut is null)
-            throw new BadParamsException("Falta el camp 'ui', 'layout', 'program', 'loudness', 'trim', 'fadeOut', 'recorderLimiter', 'recordingArchive' o 'recents' amb els ajustos a canviar.");
+        var silence = msg["silenceAlarm"] as JsonObject;
+        if (ui is null && layout is null && program is null && loudness is null && trim is null && limiter is null && archive is null && recents is null && fadeOut is null && silence is null)
+            throw new BadParamsException("Falta el camp 'ui', 'layout', 'program', 'loudness', 'trim', 'fadeOut', 'recorderLimiter', 'silenceAlarm', 'recordingArchive' o 'recents' amb els ajustos a canviar.");
+        bool? silenceEnabled = null;
+        if (silence?["enabled"] is { } silenceNode)
+            silenceEnabled = silenceNode is JsonValue sv && sv.TryGetValue(out bool sb) ? sb : throw new BadParamsException("'silenceAlarm.enabled' ha de ser true o false.");
+        double? silenceThreshold = OptionalNumber(silence?["thresholdDb"], "silenceAlarm.thresholdDb", Recorder.MinSilenceThresholdDb, Recorder.MaxSilenceThresholdDb);
+        int? silenceSeconds = OptionalInt(silence?["seconds"], "silenceAlarm.seconds", Recorder.MinSilenceSeconds, Recorder.MaxSilenceSeconds);
         int? fadeOutMs = OptionalInt(fadeOut?["ms"], "fadeOut.ms", Player.MinFadeOutMs, Player.MaxFadeOutMs);
         bool? clearOnExit = null;
         if (recents?["clearOnExit"] is { } clearNode)
@@ -511,6 +517,9 @@ public sealed partial class CommandRouter
             if (trimTail is { } tail) c.TrimTailMs = tail;
             if (fadeOutMs is { } fo) c.FadeOutMs = fo; // s'aplica al pròxim fade-out
             if (ceiling is { } ce) c.RecorderLimiterCeilingDb = Math.Round(ce, 1);
+            if (silenceEnabled is { } se) c.SilenceAlarmEnabled = se;
+            if (silenceThreshold is { } st) c.SilenceThresholdDb = Math.Round(st);
+            if (silenceSeconds is { } ss) c.SilenceSeconds = ss;
             if (archiveEnabled is { } ae) c.RecordingArchiveEnabled = ae;
             if (archiveFolder is not null) c.RecordingArchiveFolder = archiveFolder.Length == 0 ? null : archiveFolder;
             if (keepDays is { } kd) c.RecordingArchiveKeepDays = kd;
@@ -528,6 +537,9 @@ public sealed partial class CommandRouter
             foreach (var recorder in _state.Recorders)
                 recorder.SetLimiter(limited.Contains(recorder.Id), newCeiling);
         }
+
+        // L'alarma de silenci s'aplica de seguida a tots els enregistradors (també als que enregistren).
+        if (silence is not null) ApplySilenceAlarm(config, _state.Recorders);
 
         // El retall nou s'aplica a tots els reproductors (a partir de la pista següent).
         if (trim is not null)
@@ -557,6 +569,14 @@ public sealed partial class CommandRouter
         string? folder = config.Read(c => c.ProfileRecordingArchiveFolder);
         foreach (var recorder in _state.Recorders)
             recorder.SetArchive(folder);
+    }
+
+    /// <summary>Ajustos de l'alarma de silenci del perfil a tots els enregistradors (en arrencar i després de settings.set).</summary>
+    public static void ApplySilenceAlarm(ConfigStore config, IEnumerable<Recorder> recorders)
+    {
+        var (enabled, threshold, seconds) = config.Read(c => (c.SilenceAlarmEnabled, c.SilenceThresholdDb, c.SilenceSeconds));
+        foreach (var recorder in recorders)
+            recorder.SetSilenceAlarm(enabled, threshold, seconds);
     }
 
     private JsonObject SettingsJson(ConfigStore config)
@@ -608,6 +628,17 @@ public sealed partial class CommandRouter
                 ["minCeilingDb"] = Recorder.MinLimiterCeilingDb,
                 ["maxCeilingDb"] = Recorder.MaxLimiterCeilingDb,
             },
+            // Alarma de silenci dels enregistradors (fase 5, pas 25a; del perfil).
+            ["silenceAlarm"] = config.Read(c => new JsonObject
+            {
+                ["enabled"] = c.SilenceAlarmEnabled,
+                ["thresholdDb"] = c.SilenceThresholdDb,
+                ["seconds"] = c.SilenceSeconds,
+                ["minThresholdDb"] = Recorder.MinSilenceThresholdDb,
+                ["maxThresholdDb"] = Recorder.MaxSilenceThresholdDb,
+                ["minSeconds"] = Recorder.MinSilenceSeconds,
+                ["maxSeconds"] = Recorder.MaxSilenceSeconds,
+            }),
             // Presets del compressor/limitador dels reproductors (fase 4, pas 4b).
             ["processingPresets"] = ProcessingPresetsJson(),
             ["ui"] = new JsonObject { ["zoom"] = zoom, ["recordersPerRow"] = perRow, ["endWarningSeconds"] = warning, ["hideIdleRecorderMeters"] = hideIdleMeters,

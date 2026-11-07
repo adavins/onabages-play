@@ -750,6 +750,17 @@ public sealed class ConfigRepository
             }
         }
 
+        // Alarma de silenci dels enregistradors (fase 5, pas 25a; camp opcional, sense canvi de versió).
+        if (root["silenceAlarm"] is JsonObject silence)
+        {
+            if (silence["enabled"] is JsonValue e && e.TryGetValue(out bool enabled))
+                config.SilenceAlarmEnabled = enabled;
+            if (silence["thresholdDb"] is JsonValue th && th.TryGetValue(out double threshold) && double.IsFinite(threshold))
+                config.SilenceThresholdDb = Math.Round(Math.Clamp(threshold, Recorder.MinSilenceThresholdDb, Recorder.MaxSilenceThresholdDb));
+            if (Int(silence["seconds"]) is { } seconds)
+                config.SilenceSeconds = Math.Clamp(seconds, Recorder.MinSilenceSeconds, Recorder.MaxSilenceSeconds);
+        }
+
         // Normalització de sonoritat (pas 5b; camp opcional, sense canvi de versió).
         if (root["normalization"] is JsonObject normalization)
         {
@@ -945,6 +956,12 @@ public sealed class ConfigRepository
         {
             ["ceilingDb"] = config.RecorderLimiterCeilingDb,
             ["recorders"] = new JsonArray(config.LimitedRecorders.Order(StringComparer.Ordinal).Select(id => (JsonNode)id).ToArray()),
+        },
+        ["silenceAlarm"] = new JsonObject
+        {
+            ["enabled"] = config.SilenceAlarmEnabled,
+            ["thresholdDb"] = config.SilenceThresholdDb,
+            ["seconds"] = config.SilenceSeconds,
         },
         ["normalization"] = new JsonObject
         {

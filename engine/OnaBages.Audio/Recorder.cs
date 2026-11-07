@@ -99,6 +99,17 @@ public sealed class Recorder : IDisposable
     private volatile DynamicsProcessor? _limiter;
     // Sostre del limitador per al mesurador (lineal; sense limitador, cap). El llegeix el fil de captura.
     private volatile float _meterCeiling = float.MaxValue;
+    // --- Alarma de silenci (fase 5, pas 25a; D-121) ---
+
+    public const double DefaultSilenceThresholdDb = -50;
+    public const double MinSilenceThresholdDb = -70, MaxSilenceThresholdDb = -30;
+    public const int DefaultSilenceSeconds = 30;
+    public const int MinSilenceSeconds = 5, MaxSilenceSeconds = 600;
+
+    // Llindar lineal del silenci (el llegeix el fil de codificació).
+    private volatile float _silenceThreshold = (float)Math.Pow(10, DefaultSilenceThresholdDb / 20);
+    // Fotogrames seguits de silenci al final del que s'ha escrit (l'escriu el fil de codificació).
+    private long _silentFrames;
     // Còpia d'historial de l'enregistrament en curs (l'escriu el fil de codificació). Null si no n'hi ha.
     private volatile ArchiveCopy? _archive;
     // Marques de l'enregistrament en curs o del pendent (pas 23a). Dins de _sync.
@@ -314,6 +325,54 @@ public sealed class Recorder : IDisposable
     /// <summary>Quant ha abaixat el limitador des de l'última crida (dB, ≥ 0). 0 si no s'enregistra.</summary>
     public float TakeLimiterReductionDb() => _limiter?.TakeMaxReductionDb() ?? 0f;
 
+    /// <summary>Si l'alarma de silenci vigila aquest enregistrador (per defecte, sí).</summary>
+    public bool SilenceAlarmEnabled { get; private set; } = true;
+
+    /// <summary>Per sota d'aquest nivell (dBFS, als dos canals) es considera silenci.</summary>
+    public double SilenceThresholdDb { get; private set; } = DefaultSilenceThresholdDb;
+
+    /// <summary>Quants segons seguits de silenci fan saltar l'alarma.</summary>
+    public int SilenceSeconds { get; private set; } = DefaultSilenceSeconds;
+
+    /// <summary>
+    /// L'alarma ha saltat: mentre s'enregistra, fa com a mínim <see cref="SilenceSeconds"/> que el que entra al fitxer
+    /// és silenci. S'apaga sola quan torna el so o en aturar. Ho actualitza <see cref="Tick"/>.
+    /// </summary>
+    public bool SilenceAlarm { get; private set; }
+
+    /// <summary>Segons seguits de silenci al final del que s'ha enregistrat fins ara (0 si no s'enregistra).</summary>
+    public double SilentSeconds => State == RecorderState.Recording && SampleRate > 0
+        ? Interlocked.Read(ref _silentFrames) / (double)SampleRate
+        : 0;
+
+    /// <summary>
+    /// Ajustos de l'alarma de silenci (comuns a tots els enregistradors, del perfil). S'apliquen de seguida,
+    /// també a mig enregistrament. Els valors fora de marge es porten al límit.
+    /// </summary>
+    public void SetSilenceAlarm(bool enabled, double thresholdDb, int seconds)
+    {
+        lock (_sync)
+        {
+            SilenceAlarmEnabled = enabled;
+            SilenceThresholdDb = Math.Round(Math.Clamp(double.IsFinite(thresholdDb) ? thresholdDb : DefaultSilenceThresholdDb,
+                MinSilenceThresholdDb, MaxSilenceThresholdDb));
+            SilenceSeconds = Math.Clamp(seconds, MinSilenceSeconds, MaxSilenceSeconds);
+            _silenceThreshold = (float)Math.Pow(10, SilenceThresholdDb / 20);
+            UpdateSilenceAlarm();
+            _changed = true;
+        }
+        RaiseStateChanged();
+    }
+
+    // Dins de _sync. Encén o apaga l'alarma segons el silenci que s'ha comptat.
+    private void UpdateSilenceAlarm()
+    {
+        bool alarm = SilenceAlarmEnabled && State == RecorderState.Recording && SilentSeconds >= SilenceSeconds;
+        if (alarm == SilenceAlarm) return;
+        SilenceAlarm = alarm;
+        _changed = true;
+    }
+
     /// <summary>El limitador és el sostre del compressor dels reproductors, sense compressió (ràtio 1).</summary>
     private static DynamicsSettings LimiterSettings(bool enabled, double ceilingDb) =>
         new(enabled, InputGainDb: 0, ThresholdDb: 0, Ratio: 1, OutputGainDb: 0, StereoLink: true, CeilingDb: ceilingDb);
@@ -509,6 +568,8 @@ public sealed class Recorder : IDisposable
                 _changed = true;
             }
 
+            UpdateSilenceAlarm();
+
             if (State != RecorderState.Recording)
             {
                 // Sense enregistrar, perdre l'entrada no és un error (no es perd res): el mesurador
@@ -603,6 +664,8 @@ public sealed class Recorder : IDisposable
             Interlocked.Exchange(ref _framesCaptured, 0);
             Interlocked.Exchange(ref _samplesLost, 0);
             Interlocked.Exchange(ref _fileSize, 0);
+            Interlocked.Exchange(ref _silentFrames, 0);
+            SilenceAlarm = false;
             Volatile.Write(ref _captureGlitches, 0);
             _encoderError = null;
             _stopEncoder = false;
@@ -734,6 +797,7 @@ public sealed class Recorder : IDisposable
                     int frames = read / channels;
                     ToStereo(input, frames, channels, stereo);
                     Process(frames);
+                    CountSilence(stereo, frames);
                     var mp3 = encoder.Encode(stereo, frames * 2);
                     file.Write(mp3);
                     archive?.Write(mp3);
@@ -786,6 +850,24 @@ public sealed class Recorder : IDisposable
             encoder.Dispose();
             if (ok) TryDelete(path + ".rec");
         }
+    }
+
+    /// <summary>
+    /// Alarma de silenci: si tot el bloc (el que va al fitxer, amb el volum i el limitador) és per sota del llindar
+    /// als dos canals, s'afegeix al silenci seguit; si hi ha so, es torna a zero. Fil de codificació, sense objectes nous.
+    /// </summary>
+    private void CountSilence(float[] stereo, int frames)
+    {
+        float threshold = _silenceThreshold;
+        for (int i = 0; i < frames * 2; i++)
+        {
+            if (Math.Abs(stereo[i]) >= threshold)
+            {
+                Interlocked.Exchange(ref _silentFrames, 0);
+                return;
+            }
+        }
+        Interlocked.Add(ref _silentFrames, frames);
     }
 
     /// <summary>Converteix a estèreo: mono es duplica; més de 2 canals, els dos primers.</summary>
@@ -1027,6 +1109,7 @@ public sealed class Recorder : IDisposable
     private void SetState(RecorderState state)
     {
         State = state;
+        if (state != RecorderState.Recording) SilenceAlarm = false; // sense enregistrar no hi ha alarma
         _changed = true;
     }
 

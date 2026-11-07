@@ -179,6 +179,12 @@ public sealed class EngineConfig
     /// <summary>Sostre del limitador, comú a tots els enregistradors (dBFS).</summary>
     public double RecorderLimiterCeilingDb { get; set; } = Recorder.DefaultLimiterCeilingDb;
 
+    // --- Alarma de silenci dels enregistradors (fase 5, pas 25a; del perfil) ---
+
+    public bool SilenceAlarmEnabled { get; set; } = true;
+    public double SilenceThresholdDb { get; set; } = Recorder.DefaultSilenceThresholdDb;
+    public int SilenceSeconds { get; set; } = Recorder.DefaultSilenceSeconds;
+
     // --- Normalització de sonoritat (fase 4, pas 5b; del perfil) ---
 
     /// <summary>Reproductors que normalitzen (per defecte, cap: D-070).</summary>

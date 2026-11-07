@@ -133,6 +133,7 @@ public sealed partial class CommandRouter
                 "cue.setDevice" => CueSetDevice(msg),
                 "editor.get" => EditorState(),
                 "editor.open" => EditorOpen(msg),
+                "editor.refresh" => EditorRefresh(),
                 "editor.close" => EditorDo(e => e.Close()),
                 "editor.delete" => EditorChange(msg, (edit, start, end) => edit.Delete(start, end)),
                 "editor.keep" => EditorChange(msg, (edit, start, end) => edit.Keep(start, end)),
@@ -243,7 +244,10 @@ public sealed partial class CommandRouter
         return EditorState();
     }
 
-    /// <summary>Obre un MP3. Mai un fitxer que s'està enregistrant (especificació 9.4).</summary>
+    /// <summary>
+    /// Obre un MP3. Si s'està enregistrant, se n'obre una fotografia que només es llegeix (fase 5, pas 24a; D-117: abans no
+    /// s'obria mai, especificació 9.4). Un enregistrament interromput (marcador .rec sense enregistrar) no s'obre.
+    /// </summary>
     private JsonObject EditorOpen(JsonObject msg)
     {
         string path = RequireString(msg, "path");
@@ -251,11 +255,30 @@ public sealed partial class CommandRouter
             throw new BadParamsException("'path' ha de ser una ruta completa.");
         if (!path.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase))
             throw new BadParamsException("L'editor només obre fitxers MP3.");
-        RejectIfRecording(path);
+        bool live = IsRecording(path);
+        if (!live) RejectIfRecording(path);
 
-        _state.Editor.Open(path);
+        _state.Editor.Open(path, live);
         return EditorState();
     }
+
+    /// <summary>
+    /// Torna a obrir el fitxer de l'editor (fase 5, pas 24a): d'un enregistrament en curs, per veure'n el que s'ha
+    /// enregistrat des de l'última fotografia i les marques noves; si ja s'ha aturat, passa a ser un fitxer normal.
+    /// Si hi havia canvis sense desar, es perden (la interfície ho pregunta abans).
+    /// </summary>
+    private JsonObject EditorRefresh()
+    {
+        string path = _state.Editor.Path ?? throw new EditorStateException("No hi ha cap fitxer obert a l'editor.");
+        bool live = IsRecording(path);
+        if (!live) RejectIfRecording(path);
+        _state.Editor.Open(path, live);
+        return EditorState();
+    }
+
+    /// <summary>Algun enregistrador està enregistrant en aquest fitxer.</summary>
+    private bool IsRecording(string path) => _state.Recorders.Any(r => r.State == RecorderState.Recording
+        && string.Equals(r.FilePath, path, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>Elimina o conserva [start, end) (segons de la versió editada; s'ajusten al fotograma més proper).</summary>
     private JsonObject EditorChange(JsonObject msg, Func<Mp3Edit, int, int, bool> change)

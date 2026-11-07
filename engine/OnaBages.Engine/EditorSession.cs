@@ -81,6 +81,17 @@ public sealed class EditorSession : IDisposable
     /// <summary>Fitxer obert (o que s'està obrint). Null si no n'hi ha cap.</summary>
     public string? Path { get; private set; }
 
+    /// <summary>
+    /// El fitxer obert s'està enregistrant (fase 5, pas 24a; D-117): l'editor en veu una fotografia (fins on era en obrir-lo
+    /// o en actualitzar-lo), que només es llegeix. Es pot escoltar, seleccionar i desar trossos en fitxers nous; no es pot
+    /// retallar, fer fosos ni desar a sobre.
+    /// </summary>
+    public bool Live { get; private set; }
+
+    private const string LiveNotAllowed =
+        "Mentre s'enregistra, l'editor només deixa escoltar, seleccionar i desar trossos amb «Desar la selecció». " +
+        "Per retallar o fer fosos, espera que s'aturi l'enregistrament.";
+
     /// <summary>L'edició, quan el fitxer ja és obert.</summary>
     public Mp3Edit? Edit { get; private set; }
 
@@ -131,6 +142,7 @@ public sealed class EditorSession : IDisposable
         lock (_sync)
         {
             var edit = RequireReady();
+            if (Live) throw new EditorStateException("Mentre s'enregistra, les marques encara no es poden moure des de l'editor.");
             if (number < 1 || number > _marks.Count)
                 throw new EditorStateException($"No hi ha cap marca {number}.");
             double fs = edit.Index.FrameSeconds;
@@ -161,14 +173,18 @@ public sealed class EditorSession : IDisposable
     public event Action? Changed;
 
     /// <summary>Obre un fitxer (en segon pla). El que hi hagués obert es tanca sense desar.</summary>
-    public void Open(string path)
+    /// <param name="live">El fitxer s'està enregistrant (pas 24a): se n'obre una fotografia que només es llegeix.</param>
+    public void Open(string path, bool live = false)
     {
         Player.Stop(); // el que sonava és d'un altre fitxer
         lock (_sync)
         {
+            if (Busy == "saving" && string.Equals(Path, path, StringComparison.OrdinalIgnoreCase))
+                throw new EditorStateException("S'està desant: espera que acabi.");
             CancelJob();
             CancelPeaks();
             Path = path;
+            Live = live;
             Edit = null;
             Error = null;
             SavedPath = null;
@@ -179,7 +195,7 @@ public sealed class EditorSession : IDisposable
                 _marks = RecordingMarks.Read(path); // fitxer petit: si no n'hi ha o és malmès, cap marca
                 StartPeaks(index);
                 // L'última: qui miri Edit sense bloqueig (les proves) ja ho troba tot a punt.
-                Edit = new Mp3Edit(index);
+                Edit = new Mp3Edit(index) { Growing = live };
             });
         }
         RaiseChanged();
@@ -194,6 +210,7 @@ public sealed class EditorSession : IDisposable
             CancelJob();
             CancelPeaks();
             Path = null;
+            Live = false;
             Edit = null;
             Busy = null;
             Error = null;
@@ -212,6 +229,7 @@ public sealed class EditorSession : IDisposable
         lock (_sync)
         {
             var edit = RequireReady();
+            if (Live) throw new EditorStateException(LiveNotAllowed);
             Error = null;
             SavedSelectionPath = null;
             changed = change(edit);
@@ -232,6 +250,7 @@ public sealed class EditorSession : IDisposable
         lock (_sync)
         {
             var edit = RequireReady();
+            if (Live) throw new EditorStateException(LiveNotAllowed);
             target = System.IO.Path.GetFullPath(target ?? edit.Index.Path);
             if (!target.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase))
                 throw new EditorStateException("El fitxer s'ha de desar amb l'extensió .mp3.");
@@ -431,7 +450,8 @@ public sealed class EditorSession : IDisposable
     private void StartPeaks(Mp3FrameIndex index)
     {
         PeaksError = null;
-        if (PeakCacheFile.Read(index, _cacheFolder) is { } cached)
+        bool useCache = !Live; // d'un enregistrament en curs (pas 24a), cap: el fitxer encara creix
+        if (useCache && PeakCacheFile.Read(index, _cacheFolder) is { } cached)
         {
             _peaks = cached;
             Volatile.Write(ref _peaksDone, index.FrameCount);
@@ -462,7 +482,7 @@ public sealed class EditorSession : IDisposable
                 if (error is null)
                 {
                     Volatile.Write(ref _peaksDone, index.FrameCount);
-                    PeakCacheFile.Write(index, peaks, _cacheFolder);
+                    if (useCache) PeakCacheFile.Write(index, peaks, _cacheFolder);
                 }
                 else
                 {

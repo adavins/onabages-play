@@ -53,6 +53,12 @@ public sealed class Mp3Edit
     public IReadOnlyList<FrameRange> Segments { get; private set; }
 
     /// <summary>
+    /// L'original és un enregistrament en curs (fase 5, pas 24a; D-117): només creix pel final i els fotogrames ja
+    /// escrits no canvien. En desar, n'hi ha prou que no s'hagi fet més curt.
+    /// </summary>
+    public bool Growing { get; init; }
+
+    /// <summary>
     /// Canvis de volum dels fosos, per fotograma de l'<b>original</b>: si després es talla, el fos es mou
     /// amb el seu tros de so. Buit si no hi ha cap fos.
     /// </summary>
@@ -237,7 +243,10 @@ public sealed class Mp3Edit
         var source = new FileInfo(Index.Path);
         if (!source.Exists)
             throw new Mp3EditException("El fitxer original ja no hi és (l'han mogut o esborrat).");
-        if (source.Length != Index.FileSize || source.LastWriteTimeUtc != Index.LastWriteUtc)
+        bool changed = Growing
+            ? source.Length < Index.FileSize
+            : source.Length != Index.FileSize || source.LastWriteTimeUtc != Index.LastWriteUtc;
+        if (changed)
             throw new Mp3EditException("El fitxer original ha canviat des que s'ha obert a l'editor. Torna'l a obrir.");
 
         string folder = System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(target))!;

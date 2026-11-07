@@ -474,7 +474,7 @@ Editar ràpidament un enregistrament acabat, com amb mp3DirectCut: retallar, tre
 ## 9.4. Convivència amb els enregistraments
 
 - L'editor treballa en un fil o procés de baixa prioritat.
-- Mai no obre un fitxer que s'està enregistrant.
+- Mai no **escriu** en un fitxer que s'està enregistrant. Des de la fase 5 (D-117) el pot obrir, però només en llegeix una fotografia (fins on era en obrir-lo): per escoltar-lo, moure'n les marques i desar-ne trossos en fitxers nous; no s'hi pot retallar, fer fosos ni desar a sobre.
 - Cal provar-ho: editar un fitxer d'1 hora mentre dos enregistradors funcionen, sense cap pèrdua.
   - Prova automàtica: `OnaBages.ToneCheck convivencia [minuts] [carpeta]` (D-053). Dos enregistradors amb una entrada simulada en temps real mentre l'editor obre, fa la forma d'ona, talla i desa un MP3 d'1 hora; després comprova que els enregistraments no tenen talls ni mostres perdudes.
   - Prova amb el maquinari real: la fa el desenvolupador des de l'aplicació (vegeu D-053).

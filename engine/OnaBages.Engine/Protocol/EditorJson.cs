@@ -30,6 +30,8 @@ public static class EditorJson
             },
             ["open"] = editor.Path is not null,
             ["path"] = editor.Path,
+            // Enregistrament en curs (fase 5, pas 24a): fotografia que només es llegeix (vegeu editor.refresh).
+            ["live"] = editor.Live,
             ["busy"] = editor.Busy,
             ["progress"] = Math.Round(editor.Progress, 3),
             ["error"] = editor.Error,

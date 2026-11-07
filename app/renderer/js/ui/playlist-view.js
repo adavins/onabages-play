@@ -21,6 +21,7 @@ import { PATHS_DRAG_TYPE, draggedPaths } from './drag-types.js';
 import { choose, showInfo } from './dialogs.js';
 import { togglePreview, previewButton } from './cue-actions.js';
 import { editSection } from './section-dialog.js';
+import { showToast } from './toast.js';
 
 /** @typedef {import('../store.js').Store} Store */
 /** @typedef {(cmd: string, params?: object) => Promise<any>} Request */
@@ -644,6 +645,25 @@ export class PlaylistView {
     else if (flag === 'auto') Object.assign(params, { autoNext: !item.autoNext });
     else Object.assign(params, { cue: this.#playlist.cueId !== id });
     this.#send('playlist.setFlags', params);
+    if (flag === 'cue' && this.#playlist.cueId !== id) this.#warnIfCueWontPlay(id);
+  }
+
+  /**
+   * En marcar el cue (pas 22): la pista del cue només sona sola si la que sona ara té l'avanç
+   * automàtic (i no és en bucle). Si no, s'avisa; en acabar, el reproductor s'aturarà i
+   * caldrà prémer Play (que sí que fa sonar la del cue).
+   * @param {string} cueId
+   */
+  #warnIfCueWontPlay(cueId) {
+    const p = this.#player;
+    if (p.state !== 'playing' && p.state !== 'paused') return;
+    const current = this.#playlist.items.find((/** @type {any} */ i) => i.id === p.currentItemId);
+    if (!current || current.id === cueId) return;
+    if (current.loop) {
+      showToast(this.element, "La pista que sona és en bucle: la del cue no sonarà fins que en treguis el bucle i hi posis l'avanç automàtic.");
+    } else if (!current.autoNext) {
+      showToast(this.element, "La pista que sona no té l'avanç automàtic: en acabar, el reproductor s'aturarà. Marca-li l'avanç (A) perquè la del cue soni sola, o prem Play quan acabi.");
+    }
   }
 
   // -------------------------------------------------------------------------

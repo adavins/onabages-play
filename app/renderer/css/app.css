@@ -1293,6 +1293,7 @@ body.engine-offline .side-content {
 }
 
 .playlist {
+  position: relative; /* per a l'avís (toast) de sobre la llista */
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -1987,3 +1988,34 @@ body.engine-offline .side-content {
 .section-color-none.section-swatch span { background: transparent; border-color: var(--bs-border-color); }
 .section-swatch input:checked + span { border-color: #fff; box-shadow: 0 0 0 2px var(--section); }
 .section-swatch input:focus-visible + span { outline: 2px solid var(--obp-info); outline-offset: 2px; }
+
+/* Avís breu a sobre d'un element, que desapareix sol (js/ui/toast.js; pas 22). Color + icona + text. */
+.obp-toast {
+  position: absolute;
+  left: 0.5rem;
+  right: 0.5rem;
+  bottom: 2.6rem;
+  z-index: 20;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--bs-warning);
+  border-left-width: 5px;
+  border-radius: 0.3rem;
+  background: #3a3218;
+  color: #fff;
+  font-size: 0.85rem;
+  box-shadow: 0 0.3rem 1rem rgb(0 0 0 / 0.5);
+  cursor: pointer;
+  animation: obp-toast-in 0.2s ease-out;
+  transition: opacity 0.4s;
+}
+
+.obp-toast > .bi { color: var(--bs-warning); font-size: 1.1rem; line-height: 1.2; }
+.obp-toast-hiding { opacity: 0; }
+
+@keyframes obp-toast-in {
+  from { opacity: 0; transform: translateY(0.5rem); }
+  to   { opacity: 1; transform: none; }
+}

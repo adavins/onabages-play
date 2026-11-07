@@ -5,9 +5,10 @@
 // - Clic a una subcarpeta: s'hi entra. Clic a un fitxer: se selecciona (Ctrl i Maj, com a les llistes).
 // - Els fitxers s'arrosseguen a un reproductor (on es deixen anar).
 // - Doble clic a un àudio: s'escolta a la preescolta. Botó dret: més opcions.
+// - Botó ✂ de la capçalera (només a Àudios; pas 17): obre a l'editor l'àudio seleccionat.
 // El contingut de les carpetes el llegeix el motor (explorer.list): aquí només es mostra.
 
-import { escapeHtml, formatDuration } from './format.js';
+import { escapeHtml, fileName, formatDuration } from './format.js';
 import { showContextMenu } from './context-menu.js';
 import { togglePreview, previewButton } from './cue-actions.js';
 import { PATHS_DRAG_TYPE } from './drag-types.js';
@@ -75,9 +76,14 @@ export class ExplorerTab {
     this.element.innerHTML = `
       <div class="card-header panel-header">
         <span class="panel-title"><i class="bi ${k.icon}"></i> ${k.title}</span>
-        <button class="btn btn-sm btn-outline-secondary ex-tool js-manage" type="button" title="Carpetes d'aquesta pestanya…">
-          <i class="bi bi-gear"></i>
-        </button>
+        <span class="panel-header-right">
+          ${kind === 'audios' ? `<button class="btn btn-sm btn-outline-secondary ex-tool js-edit" type="button" disabled>
+            <i class="bi bi-scissors"></i>
+          </button>` : ''}
+          <button class="btn btn-sm btn-outline-secondary ex-tool js-manage" type="button" title="Carpetes d'aquesta pestanya…">
+            <i class="bi bi-gear"></i>
+          </button>
+        </span>
       </div>
       <div class="ex-nav">
         <select class="form-select form-select-sm js-root" aria-label="Carpeta"></select>
@@ -96,7 +102,7 @@ export class ExplorerTab {
       <div class="ex-rows js-rows" tabindex="0" aria-label="Contingut de la carpeta"></div>
       <div class="ex-status js-status"></div>`;
 
-    for (const name of ['manage', 'root', 'up', 'refresh', 'crumbs', 'filter', 'sort', 'rows', 'status']) {
+    for (const name of ['edit', 'manage', 'root', 'up', 'refresh', 'crumbs', 'filter', 'sort', 'rows', 'status']) {
       this.#el[name] = /** @type {HTMLElement} */ (this.element.querySelector(`.js-${name}`));
     }
 
@@ -114,6 +120,7 @@ export class ExplorerTab {
     if (kind === 'audios') store.addEventListener('explorerDurations', (e) => this.#onDurations(/** @type {any} */ (e).detail));
 
     this.#el.manage.addEventListener('click', () => this.#manageFolders());
+    this.#el.edit?.addEventListener('click', () => this.#edit());
     this.#el.root.addEventListener('change', () => {
       this.#rootIndex = Number(/** @type {HTMLSelectElement} */ (this.#el.root).value);
       this.#open(this.#roots[this.#rootIndex]?.path ?? null);
@@ -260,6 +267,12 @@ export class ExplorerTab {
 
   /** @param {string} [message] text en lloc de la llista (p. ex. mentre es llegeix) */
   #renderRows(message) {
+    this.#drawRows(message);
+    this.#updateEditButton(); // el filtre pot haver amagat el que estava seleccionat
+  }
+
+  /** @param {string} [message] */
+  #drawRows(message) {
     const rows = this.#el.rows;
     const k = KINDS[this.#kind];
 
@@ -461,6 +474,32 @@ export class ExplorerTab {
     for (const row of this.#el.rows.querySelectorAll('.ex-file')) {
       row.classList.toggle('ex-selected', this.#selected.has(/** @type {string} */ (/** @type {HTMLElement} */ (row).dataset.path)));
     }
+    this.#updateEditButton();
+  }
+
+  /** L'àudio que obriria el botó ✂: n'hi ha d'haver un de sol seleccionat, i ha de ser MP3 (l'editor només obre MP3). */
+  #editablePath() {
+    const paths = this.#selectedPaths();
+    return paths.length === 1 && /.mp3$/i.test(paths[0]) ? paths[0] : null;
+  }
+
+  /** Activa o desactiva el botó ✂ segons la selecció, i n'explica el perquè a l'ajuda. */
+  #updateEditButton() {
+    const button = /** @type {HTMLButtonElement | undefined} */ (this.#el.edit);
+    if (!button) return;
+    const paths = this.#selectedPaths();
+    const path = this.#editablePath();
+    button.disabled = !path;
+    button.title = path ? `Obrir a l'editor: ${fileName(path)}`
+      : paths.length > 1 ? "Obrir a l'editor (selecciona'n només un)"
+      : paths.length === 1 ? "Obrir a l'editor (només fitxers MP3)"
+      : "Obrir a l'editor (selecciona un àudio)";
+  }
+
+  /** Botó ✂: obre l'àudio seleccionat a l'editor (si l'editor ja és obert, l'hi obre i el porta al davant). */
+  #edit() {
+    const path = this.#editablePath();
+    if (path) bridge?.openEditor(path);
   }
 
   /** Les rutes seleccionades, en l'ordre en què es veuen. */

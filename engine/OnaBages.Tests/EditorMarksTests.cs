@@ -124,6 +124,54 @@ public class EditorMarksTests : IDisposable
     }
 
     [Fact]
+    public void Moure_una_marca_es_desa_de_seguida_i_no_modifica_l_audio()
+    {
+        string mp3 = CreateMp3(3);
+        RecordingMarks.Write(mp3, [new RecordingMark(0.6), new RecordingMark(1.5, "B")]);
+        Open(mp3);
+
+        var editor = Send("editor.moveMark", new JsonObject { ["number"] = 2, ["seconds"] = 0.9 });
+
+        Assert.Equal([(1, 0.6), (2, 0.9)], Marks(editor));
+        Assert.False(editor["modified"]!.GetValue<bool>()); // l'àudio no canvia: no cal desar
+        Assert.False(editor["canUndo"]!.GetValue<bool>());
+        var saved = RecordingMarks.Read(mp3);
+        Assert.Equal([0.6, 0.9], saved.Select(m => Math.Round(m.Seconds, 3)));
+        Assert.Equal("B", saved[1].Name); // el nom es manté
+    }
+
+    [Fact]
+    public void Moure_una_marca_despres_d_un_tall_la_desa_en_temps_de_l_original()
+    {
+        string mp3 = CreateMp3(3);
+        RecordingMarks.Write(mp3, [new RecordingMark(0.6), new RecordingMark(2.4)]);
+        Open(mp3);
+        Send("editor.delete", new JsonObject { ["start"] = 0, ["end"] = 20 * Frame }); // −0,48 s
+
+        // Passar la 1 per darrere de la 2: conserva el número mentre l'editor és obert.
+        var editor = Send("editor.moveMark", new JsonObject { ["number"] = 1, ["seconds"] = 2.0 });
+
+        Assert.Equal([(2, 1.92), (1, 2.0)], Marks(editor));
+        Assert.Equal([2.4, 2.48], RecordingMarks.Read(mp3).Select(m => Math.Round(m.Seconds, 3)));
+        Assert.True(editor["modified"]!.GetValue<bool>()); // pel tall, no per la marca
+    }
+
+    [Fact]
+    public void No_es_pot_moure_una_marca_que_no_es_veu()
+    {
+        string mp3 = CreateMp3(3);
+        RecordingMarks.Write(mp3, [new RecordingMark(0.24)]);
+        Open(mp3);
+        Send("editor.delete", new JsonObject { ["start"] = 0, ["end"] = 20 * Frame }); // la marca 1 hi era
+
+        var msg = new JsonObject { ["v"] = 1, ["id"] = 99, ["cmd"] = "editor.moveMark", ["number"] = 1, ["seconds"] = 1.0 };
+        Assert.Equal("bad_state", _router.Handle(msg.ToJsonString())["error"]!["code"]!.GetValue<string>());
+        msg["number"] = 2;
+        Assert.Equal("bad_state", _router.Handle(msg.ToJsonString())["error"]!["code"]!.GetValue<string>());
+        Assert.Equal(0.24, RecordingMarks.Read(mp3).Single().Seconds);
+    }
+
+    [Fact]
     public void Una_marca_del_final_eliminat_no_queda_enganxada_al_final_que_es_conserva()
     {
         var marks = RecordingMarks.MapToEdited([new RecordingMark(80 * Frame), new RecordingMark(30 * Frame)],

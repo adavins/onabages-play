@@ -35,6 +35,7 @@ const RULER_HEIGHT = 22;
  *   onSelection?: (range: Range | null) => void,
  *   onClick?: (frame: number) => void,
  *   onView?: () => void,
+ *   onMarkMove?: (number: number, frame: number) => void,
  * }} WaveformCallbacks
  */
 
@@ -62,6 +63,10 @@ export class Waveform {
   #overview;
   #callbacks;
   #drag = /** @type {{ anchor: number, moved: boolean } | null} */ (null);
+  /** Etiquetes de les marques dibuixades (píxels del canvas), per agafar-les amb el ratolí (pas 23f). @type {{ number: number, x0: number, x1: number }[]} */
+  #markBoxes = [];
+  /** Marca que s'arrossega: on era (per tornar-hi amb Esc) i si s'ha mogut. @type {{ mark: Mark, from: number, moved: boolean } | null} */
+  #markDrag = null;
   #overviewDrag = false;
   #pending = false;
 
@@ -76,6 +81,10 @@ export class Waveform {
     this.#callbacks = callbacks;
 
     canvas.addEventListener('mousedown', (e) => this.#onMouseDown(e));
+    // Damunt de l'etiqueta d'una marca, el cursor diu que es pot moure (pas 23f).
+    canvas.addEventListener('mousemove', (e) => {
+      if (!this.#drag && !this.#markDrag) canvas.style.cursor = this.#markAt(e.offsetX, e.offsetY) ? 'ew-resize' : '';
+    });
     window.addEventListener('mousemove', (e) => this.#onMouseMove(e));
     window.addEventListener('mouseup', () => this.#onMouseUp());
     canvas.addEventListener('wheel', (e) => this.#onWheel(e), { passive: false });
@@ -195,6 +204,23 @@ export class Waveform {
     if (!range) return;
     this.#select(range.start, range.end);
     this.reveal(range.start);
+  }
+
+  /** Si s'està arrossegant una marca, la torna on era (Esc). Retorna si n'hi havia cap. */
+  cancelMarkDrag() {
+    if (!this.#markDrag) return false;
+    this.#markDrag.mark.frame = this.#markDrag.from;
+    this.#markDrag = null;
+    this.#canvas.style.cursor = '';
+    this.requestDraw();
+    return true;
+  }
+
+  /** L'etiqueta de marca que hi ha en aquest punt del canvas, si n'hi ha. */
+  #markAt(/** @type {number} */ x, /** @type {number} */ y) {
+    if (y < RULER_HEIGHT || y > RULER_HEIGHT + 19) return null;
+    const box = this.#markBoxes.find((b) => x >= b.x0 - 3 && x <= b.x1);
+    return box ? this.#marks.find((m) => m.number === box.number) ?? null : null;
   }
 
   /** Fotograma de la marca anterior (`direction` −1) o següent (+1) a `frame`; null si no n'hi ha. */
@@ -331,13 +357,18 @@ export class Waveform {
   #drawMarks(/** @type {CanvasRenderingContext2D} */ ctx, /** @type {number} */ height) {
     ctx.font = 'bold 11px system-ui, sans-serif';
     ctx.textBaseline = 'middle';
+    this.#markBoxes = [];
     for (const mark of this.#marks) {
       if (!this.#isVisible(mark.frame) && Math.round(mark.frame) !== this.frames) continue;
       const x = Math.round(this.#frameToX(mark.frame));
       ctx.fillStyle = COLORS.mark;
       ctx.fillRect(x, RULER_HEIGHT, 1, height - RULER_HEIGHT);
-      const text = mark.name ? `${mark.number} ${mark.name}` : String(mark.number);
+      // Mentre s'arrossega, l'etiqueta diu on quedarà.
+      const dragging = this.#markDrag?.mark === mark;
+      const label = mark.name ? `${mark.number} ${mark.name}` : String(mark.number);
+      const text = dragging ? `${label} · ${formatTime(mark.frame * this.frameSeconds, true)}` : label;
       const w = ctx.measureText(text).width + 8;
+      this.#markBoxes.push({ number: mark.number, x0: x, x1: x + w });
       ctx.fillRect(x, RULER_HEIGHT + 2, w, 15);
       ctx.fillStyle = COLORS.markText;
       ctx.fillText(text, x + 4, RULER_HEIGHT + 10);
@@ -467,6 +498,13 @@ export class Waveform {
     if (e.button !== 0 || this.frames === 0) return;
     const frame = this.#xToFrame(e.offsetX);
 
+    // Etiqueta d'una marca: s'arrossega la marca (pas 23f), no es fa cap selecció.
+    const mark = this.#markAt(e.offsetX, e.offsetY);
+    if (mark) {
+      this.#markDrag = { mark, from: mark.frame, moved: false };
+      return;
+    }
+
     if (e.shiftKey) {
       // Maj + clic: estén la selecció (o en fa una des del cursor).
       const anchor = this.selection
@@ -487,6 +525,15 @@ export class Waveform {
 
   /** @param {MouseEvent} e */
   #onMouseMove(e) {
+    if (this.#markDrag) {
+      const r = this.#canvas.getBoundingClientRect();
+      const frame = this.#xToFrame(Math.min(Math.max(e.clientX - r.left, 0), r.width));
+      if (!this.#markDrag.moved && Math.abs(frame - this.#markDrag.from) / this.#perPixel < 3) return;
+      this.#markDrag.moved = true;
+      this.#markDrag.mark.frame = frame;
+      this.requestDraw();
+      return;
+    }
     if (!this.#drag) return;
     const rect = this.#canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
@@ -500,6 +547,13 @@ export class Waveform {
   }
 
   #onMouseUp() {
+    if (this.#markDrag) {
+      const { mark, moved } = this.#markDrag;
+      this.#markDrag = null;
+      this.requestDraw();
+      if (moved) this.#callbacks.onMarkMove?.(mark.number, mark.frame);
+      return;
+    }
     // Un clic sense arrossegar (p. ex. per saltar a un altre punt mentre sona).
     if (this.#drag && !this.#drag.moved) this.#callbacks.onClick?.(this.cursor);
     this.#drag = null;

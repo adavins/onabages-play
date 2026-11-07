@@ -142,6 +142,7 @@ public sealed partial class CommandRouter
                 "editor.redo" => EditorDo(e => e.Change(edit => edit.Redo())),
                 "editor.save" => EditorSave(msg),
                 "editor.saveSelection" => EditorSaveSelection(msg),
+                "editor.moveMark" => EditorMoveMark(msg),
                 "editor.peaks" => EditorPeaks(msg),
                 "editor.play" => EditorPlay(msg),
                 "editor.stop" => EditorDo(e => e.StopPlayback()),
@@ -295,6 +296,15 @@ public sealed partial class CommandRouter
         RejectIfRecording(target);
 
         _state.Editor.SaveSelection(start, end, target, overwrite);
+        return EditorState();
+    }
+
+    /// <summary>Mou una marca (fase 5, pas 23f): <c>number</c> (1, 2...) i <c>seconds</c> (de la versió editada). Es desa de seguida.</summary>
+    private JsonObject EditorMoveMark(JsonObject msg)
+    {
+        int number = (int)RequireNumber(msg, "number", "el número de la marca (1, 2...)");
+        double seconds = RequireNumber(msg, "seconds", "la posició en segons");
+        _state.Editor.MoveMark(number, seconds);
         return EditorState();
     }
 

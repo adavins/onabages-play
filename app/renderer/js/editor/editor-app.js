@@ -84,7 +84,13 @@ let savingRecording = null;
 const wave = new Waveform(
   /** @type {HTMLCanvasElement} */ ($('ed-wave')),
   /** @type {HTMLCanvasElement} */ ($('ed-overview')),
-  { onCursor: () => renderTimes(), onSelection: () => renderControls(), onClick: () => jumpIfPlaying() },
+  {
+    onCursor: () => renderTimes(),
+    onSelection: () => renderControls(),
+    onClick: () => jumpIfPlaying(),
+    // Marca arrossegada (pas 23f): el motor la desa de seguida; si no pot, la torna a posar on era.
+    onMarkMove: (number, frame) => moveMark(number, frame),
+  },
 );
 
 setupButtons();
@@ -634,6 +640,15 @@ function moveCursor(/** @type {number} */ frame) {
   jumpTimer = window.setTimeout(jumpIfPlaying, 200);
 }
 
+/** Desa la posició nova d'una marca (pas 23f). Si el motor no la pot desar, es tornen a dibuixar les que té. */
+async function moveMark(/** @type {number} */ number, /** @type {number} */ frame) {
+  if (!editor?.frameSeconds) return;
+  if (!(await send('editor.moveMark', { number, seconds: frame * editor.frameSeconds }))) {
+    marksKey = '';
+    if (editor) apply(editor);
+  }
+}
+
 /** Cursor a la marca anterior o següent (pas 23c). */
 function goToMark(/** @type {1 | -1} */ direction) {
   const frame = wave.markFrom(wave.cursor, direction);
@@ -723,7 +738,10 @@ function setupKeyboard() {
     else if (e.key === '+' || (e.key === '=' && !e.shiftKey)) action = () => wave.zoom(0.5);
     else if (e.key === '-') action = () => wave.zoom(2);
     else if (e.key === '0') action = () => wave.zoomAll();
-    else if (e.key === 'Escape') action = () => { wave.selection = null; wave.requestDraw(); renderTimes(); };
+    else if (e.key === 'Escape') action = () => {
+      if (wave.cancelMarkDrag()) return; // Esc a mig arrossegar una marca: torna on era
+      wave.selection = null; wave.requestDraw(); renderTimes();
+    };
 
     if (action && !(editor?.busy)) {
       e.preventDefault();

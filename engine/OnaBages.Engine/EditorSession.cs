@@ -113,8 +113,47 @@ public sealed class EditorSession : IDisposable
         lock (_sync)
         {
             if (Edit is not { } edit || Busy is not null) return [];
-            return RecordingMarks.MapToEdited(_marks, edit.Segments, edit.Index.FrameSeconds, edit.Index.FrameCount);
+            // Per ordre de posició: una marca moguda pot passar per davant d'una altra (i conserva el número).
+            return [.. RecordingMarks.MapToEdited(_marks, edit.Segments, edit.Index.FrameSeconds, edit.Index.FrameCount)
+                .OrderBy(m => m.Mark.Seconds)];
         }
+    }
+
+    /// <summary>
+    /// Mou la marca <paramref name="number"/> a <paramref name="seconds"/> de la versió editada (fase 5, pas 23f; D-115).
+    /// Les marques es guarden en temps de l'original: es fa la correspondència amb els trossos que es queden. <b>Es desa
+    /// de seguida</b> al fitxer de marques del fitxer obert (no cal «Desar»: l'àudio no canvia i no es perd si es tanca
+    /// sense desar). No es desfà amb <c>editor.undo</c>. Només les marques que es veuen (no les dels trossos eliminats).
+    /// </summary>
+    public void MoveMark(int number, double seconds)
+    {
+        lock (_sync)
+        {
+            var edit = RequireReady();
+            if (number < 1 || number > _marks.Count)
+                throw new EditorStateException($"No hi ha cap marca {number}.");
+            double fs = edit.Index.FrameSeconds;
+            if (!RecordingMarks.MapToEdited(_marks, edit.Segments, fs, edit.Index.FrameCount).Any(m => m.Number == number))
+                throw new EditorStateException($"La marca {number} és en un tros eliminat.");
+
+            // Temps de la versió editada → temps de l'original (amb els decimals del fotograma).
+            double frame = Math.Clamp(seconds / fs, 0, edit.FrameCount);
+            int whole = Math.Min((int)Math.Floor(frame), edit.FrameCount - 1);
+            double original = (edit.ToOriginal(whole) + (frame - whole)) * fs;
+
+            var previous = _marks[number - 1];
+            _marks[number - 1] = previous with { Seconds = original };
+            try
+            {
+                RecordingMarks.Write(edit.Index.Path, _marks);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                _marks[number - 1] = previous;
+                throw new EditorStateException($"No s'ha pogut desar la marca: {ex.Message}");
+            }
+        }
+        RaiseChanged();
     }
 
     /// <summary>Qualsevol canvi (també el progrés, com a molt 4 vegades per segon).</summary>

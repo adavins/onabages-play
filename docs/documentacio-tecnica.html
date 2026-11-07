@@ -185,7 +185,8 @@
   </table>
 
   <h2 id="compilar">Compilar, provar i empaquetar</h2>
-  <p>Cal: .NET 10 SDK, Node.js LTS i Git. No calen Visual Studio, MSVC ni CMake.</p>
+  <p>Cal: .NET 10 SDK, Node.js LTS i Git. No calen Visual Studio, MSVC ni CMake. Els passos detallats per clonar i preparar
+    el projecte, i la resta d'ordres útils, són al <code>README.md</code> de l'arrel.</p>
   <pre><code># Motor
 dotnet build engine/OnaBages.slnx
 dotnet test engine/OnaBages.slnx
@@ -195,6 +196,9 @@ dotnet run --project engine/OnaBages.Engine -- --port 47800
 npm install
 npm start
 
+# Desenvolupament (des de l'arrel): compila el motor i obre la interfície
+.\arrencar.cmd
+
 # Versió portable (des de l'arrel): build\OnaBagesPlay-&lt;versió&gt;.zip
 .\empaquetar.cmd</code></pre>
   <ul>
@@ -202,7 +206,7 @@ npm start
       i el testimoni que mostra la consola. Permet enviar qualsevol ordre a mà.</li>
     <li><strong>Dades de proves:</strong> la variable d'entorn <code>ONABAGES_DATA_DIR</code> fa que Electron i el motor facin
       servir una altra carpeta de dades. Així es pot provar sense tocar la configuració real.</li>
-    <li><strong>Proves automàtiques:</strong> més de 550, sobre la lògica (llistes, màquines d'estats, edició per fotogrames,
+    <li><strong>Proves automàtiques:</strong> unes 650, sobre la lògica (llistes, màquines d'estats, edició per fotogrames,
       recuperació, configuració, ordres) i sobre l'àudio amb senyals generats.</li>
     <li><strong>Proves d'àudio:</strong> <code>OnaBages.ToneCheck</code> genera un to de 1618 Hz, i un cop enregistrat
       l'analitza per detectar talls, clics o mostres perdudes. <code>ToneCheck convivencia</code> comprova que editar un fitxer
@@ -265,6 +269,12 @@ npm start
       la versió editada amb els trossos que es queden (<code>RecordingMarks.MapToEdited</code>) i, en desar, les desa
       ajustades al costat del fitxer nou; la interfície només les dibuixa. «Desar la selecció» (<code>editor.saveSelection</code>)
       fa servir el mateix <code>Mp3Edit.Save</code> amb només els trossos de la selecció i no toca l'edició.</li>
+    <li><strong>Noms i moure marques</strong> (D-114, D-115, D-118): <code>recorder.nameMark</code> hi posa nom (com a molt 60
+      caràcters) i <code>editor.moveMark</code> la mou. <strong>Qui és l'amo de les marques:</strong> mentre un enregistrador
+      enregistra o té el fitxer pendent, les marques són seves (<code>Recorder.Marks</code>, ordenades per temps); el
+      router envia el moviment a <code>Recorder.MoveMark</code> i l'editor les torna a llegir
+      (<code>EditorSession.ReloadMarks</code>). Si no, l'editor les mou directament al fitxer <code>.marques</code>. La
+      numeració és la de l'original (1, 2, 3...) també després de retallar.</li>
     <li><strong>Alarma de silenci</strong> (D-121): el fil de codificació, just abans de LAME, mira si tot el bloc és per
       sota del llindar i suma o posa a zero un comptador atòmic (<code>_silentFrames</code>); <code>Recorder.Tick</code>
       (cada 100 ms) encén o apaga <code>SilenceAlarm</code> i avisa la interfície. Es mesura el que queda al fitxer, no
@@ -297,7 +307,17 @@ npm start
       a tots els grànuls del fragment, arrodonit cap avall perquè mai no passi de l'objectiu.</li>
     <li><strong>Forma d'ona</strong> (<code>WaveformPeaks</code>): un pic per fotograma, calculat en un fil de prioritat baixa i
       desat a la memòria cau.</li>
-    <li>Desar escriu en un temporal i el substitueix. Mai no obre un fitxer que s'està enregistrant.</li>
+    <li>Desar escriu en un temporal i el substitueix. Si es desa a sobre de l'original mentre encara es calcula la forma
+      d'ona, primer s'atura i s'espera el fil dels pics, que té el fitxer obert (D-116).</li>
+    <li><strong>Enregistrament en curs</strong> (D-117–D-119): l'editor obre una <strong>fotografia</strong> del fitxer que
+      creix (<code>EditorSession.Open(path, live: true)</code>, <code>Live</code>): l'índex de fotogrames fins on era, sense
+      memòria cau de pics. No en fa cap còpia ni hi escriu mai: <code>Mp3Edit.Growing</code> només comprova que el
+      fitxer no s'ha escurçat, i Media Foundation el pot llegir encara que estigui obert per escriure. Es pot escoltar,
+      seleccionar, moure marques i «Desar la selecció»; la resta d'ordres d'edició responen <code>bad_state</code>.
+      <code>editor.refresh</code> torna a fer la fotografia; quan l'enregistrador s'atura, la interfície ho fa sola
+      (<code>recordings.changed</code>) i el fitxer deixa de ser en directe.</li>
+    <li><strong>Estat «ocupat»:</strong> les feines en segon pla (obrir, desar) netegen <code>Busy</code> en últim lloc, perquè
+      qui llegeix l'estat sense el bloqueig no vegi «lliure» abans que l'edició nova estigui a punt.</li>
   </ul>
 
   <h3 id="recuperacio">Recuperació d'enregistraments</h3>

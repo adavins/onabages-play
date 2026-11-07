@@ -461,8 +461,8 @@ Editar ràpidament un enregistrament acabat, com amb mp3DirectCut: retallar, tre
 
 **Segona versió:**
 - Fos d'entrada i de sortida. Fet (fase 4, D-073–D-075): sobre la selecció, sense recodificar, amb els botons «Fos d'entrada» i «Fos de sortida» (tecles E i S); es veuen a l'ona i se senten a la previsualització.
-- Marcadors.
-- Normalització del volum del fitxer.
+- Marcadors. Fet (fase 5, D-110–D-119): marques posades mentre s'enregistra (botó MARCA, amb nom opcional), que es veuen i es mouen a l'editor, per seleccionar i desar el tros entre marques; també amb l'enregistrament en curs.
+- Normalització del volum del fitxer. Fet (fase 5, D-123, D-124): per pic, a la selecció o a tot el fitxer, sense recodificar (passos de 1,5 dB, sense passar mai de l'objectiu; per defecte −1 dBFS).
 
 ## 9.3. Edició sense pèrdua
 
@@ -669,7 +669,9 @@ Fet: **historial d'enregistraments** (D-086, D-087): còpia de cada enregistrame
 
 Fet: **documentació integrada** (D-092–D-094): manual d'usuari i documentació tècnica en dos fitxers HTML autoportables (`docs/`), que s'obren al navegador amb el botó «?» de l'aplicació.
 
-Candidates: equalitzador per reproductor (ajornat de la fase 4, D-073), botonera de talls (cartwall), detector de silenci, punts cue d'inici i final, biblioteca musical amb cerca, inicis programats, control MIDI o per *fader start*, usuaris.
+Fet: **alarma de silenci als enregistradors** (D-121, D-122): mentre s'enregistra, si el que entra al fitxer és per sota de −50 dBFS durant 30 s (configurable al perfil), el panell parpelleja en vermell i surt un avís. No atura mai l'enregistrament.
+
+Candidates: equalitzador per reproductor (ajornat de la fase 4, D-073), botonera de talls (cartwall), punts cue d'inici i final, biblioteca musical amb cerca, inicis programats, control MIDI o per *fader start*, usuaris.
 
 # 15. Proves i criteris de qualitat
 

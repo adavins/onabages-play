@@ -145,6 +145,9 @@ public sealed partial class CommandRouter
                 "editor.save" => EditorSave(msg),
                 "editor.saveSelection" => EditorSaveSelection(msg),
                 "editor.moveMark" => EditorMoveMark(msg),
+                "editor.addMark" => EditorAddMark(msg),
+                "editor.removeMark" => EditorRemoveMark(msg),
+                "editor.nameMark" => EditorNameMark(msg),
                 "editor.peaks" => EditorPeaks(msg),
                 "editor.play" => EditorPlay(msg),
                 "editor.stop" => EditorDo(e => e.StopPlayback()),
@@ -364,13 +367,7 @@ public sealed partial class CommandRouter
         int number = (int)RequireNumber(msg, "number", "el número de la marca (1, 2...)");
         double seconds = RequireNumber(msg, "seconds", "la posició en segons");
         var editor = _state.Editor;
-        // Si el fitxer és d'un enregistrador que enregistra o el té pendent (pas 24b; D-118), les marques són seves: ho fa ell
-        // (si l'editor escrivís el fitxer, l'enregistrador el tornaria a escriure amb la marca següent o en posar-hi nom).
-        var owner = editor.Path is { } path
-            ? _state.Recorders.FirstOrDefault(r => r.State is RecorderState.Recording or RecorderState.Pending
-                && string.Equals(r.FilePath, path, StringComparison.OrdinalIgnoreCase))
-            : null;
-        if (owner is not null)
+        if (MarksOwner() is { } owner)
         {
             owner.MoveMark(number, editor.OriginalSecondsOfMark(number, seconds));
             editor.ReloadMarks();
@@ -378,6 +375,86 @@ public sealed partial class CommandRouter
         else
         {
             editor.MoveMark(number, seconds);
+        }
+        return EditorState();
+    }
+
+    /// <summary>
+    /// L'enregistrador que és l'amo de les marques del fitxer obert a l'editor, si n'hi ha (pas 24b; D-118): el que l'enregistra
+    /// o el té pendent. Llavors els canvis de marques els fa ell (si l'editor escrivís el fitxer de marques, l'enregistrador
+    /// el tornaria a escriure amb la marca següent o en posar-hi nom). Si no, l'editor.
+    /// </summary>
+    private Recorder? MarksOwner() => _state.Editor.Path is { } path
+        ? _state.Recorders.FirstOrDefault(r => r.State is RecorderState.Recording or RecorderState.Pending
+            && string.Equals(r.FilePath, path, StringComparison.OrdinalIgnoreCase))
+        : null;
+
+    /// <summary>Nom d'una marca (opcional): text de com a molt 60 caràcters; buit = sense nom.</summary>
+    private static string? MarkName(JsonNode? node)
+    {
+        if (node is null) return null;
+        string name = ReadString(node) ?? throw new BadParamsException("'name' ha de ser un text.");
+        if (name.Trim().Length > Recorder.MaxMarkNameLength)
+            throw new BadParamsException($"El nom de la marca pot tenir com a molt {Recorder.MaxMarkNameLength} caràcters.");
+        return Recorder.CleanMarkName(name);
+    }
+
+    /// <summary>Afegeix una marca (fase 5, pas 27a; D-125): <c>seconds</c> (de la versió editada) i <c>name</c> opcional.</summary>
+    private JsonObject EditorAddMark(JsonObject msg)
+    {
+        double seconds = RequireNumber(msg, "seconds", "la posició en segons");
+        string? name = MarkName(msg["name"]);
+        var editor = _state.Editor;
+        int number;
+        if (MarksOwner() is { } owner)
+        {
+            number = owner.AddMark(editor.OriginalSeconds(seconds), name);
+            editor.ReloadMarks();
+        }
+        else
+        {
+            number = editor.AddMark(seconds, name);
+        }
+        var result = EditorState();
+        result["number"] = number;
+        return result;
+    }
+
+    /// <summary>Esborra la marca <c>number</c> (pas 27a; D-125). Les de després es renumeren.</summary>
+    private JsonObject EditorRemoveMark(JsonObject msg)
+    {
+        int number = (int)RequireNumber(msg, "number", "el número de la marca (1, 2...)");
+        var editor = _state.Editor;
+        if (MarksOwner() is { } owner)
+        {
+            editor.CheckMark(number);
+            owner.RemoveMark(number);
+            editor.ReloadMarks();
+        }
+        else
+        {
+            editor.RemoveMark(number);
+        }
+        return EditorState();
+    }
+
+    /// <summary>Posa nom a la marca <c>number</c> (pas 27a; D-125): <c>name</c> (text; buit o null = sense nom).</summary>
+    private JsonObject EditorNameMark(JsonObject msg)
+    {
+        int number = (int)RequireNumber(msg, "number", "el número de la marca (1, 2...)");
+        if (!msg.ContainsKey("name"))
+            throw new BadParamsException("Falta el camp 'name' (el nom, o un text buit per treure'l).");
+        string? name = MarkName(msg["name"]);
+        var editor = _state.Editor;
+        if (MarksOwner() is { } owner)
+        {
+            editor.CheckMark(number);
+            owner.NameMark(number, name);
+            editor.ReloadMarks();
+        }
+        else
+        {
+            editor.NameMark(number, name);
         }
         return EditorState();
     }

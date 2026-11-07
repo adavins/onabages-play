@@ -235,6 +235,52 @@ public class EditorLiveTests : IDisposable
     }
 
     [Fact]
+    public void Afegir_esborrar_i_posar_nom_mentre_s_enregistra_passa_per_l_enregistrador()
+    {
+        _recorder.Start();
+        RecordAndWait(1.0, 0);
+        _recorder.Mark();               // 1 a 1 s
+        RecordAndWait(2.0, 2.5);
+        Editor(Send("editor.open", new JsonObject { ["path"] = _recorder.FilePath! }));
+        Assert.True(WaitIdle()["live"]!.GetValue<bool>());
+
+        // Una marca abans de la que hi havia: passa a ser la 1 a tot arreu.
+        var r = Send("editor.addMark", new JsonObject { ["seconds"] = 0.5, ["name"] = "Inici" });
+        Assert.Equal(1, r["result"]!["number"]!.GetValue<int>());
+        Assert.Equal([0.5, 1.0], Seconds(Editor(r)));
+        Assert.Equal([0.5, 1.0], _recorder.Marks.Select(m => Math.Round(m.Seconds, 2)));
+        Assert.Equal("Inici", _recorder.Marks[0].Name);
+
+        Editor(Send("editor.nameMark", new JsonObject { ["number"] = 2, ["name"] = "Entrevista" }));
+        Assert.Equal("Entrevista", _recorder.Marks[1].Name);
+
+        // L'enregistrador en posa una de nova i reescriu el fitxer: les de l'editor s'hi mantenen.
+        _input!.PushTone(1.0);
+        _recorder.Mark();
+        Assert.Equal(["Inici", "Entrevista", null], RecordingMarks.Read(_recorder.FilePath!).Select(m => m.Name));
+
+        Editor(Send("editor.removeMark", new JsonObject { ["number"] = 1 }));
+        Assert.Equal(["Entrevista", null], _recorder.Marks.Select(m => m.Name));
+        Assert.Equal(["Entrevista", null], RecordingMarks.Read(_recorder.FilePath!).Select(m => m.Name));
+        _recorder.Stop();
+    }
+
+    [Fact]
+    public void Una_marca_afegida_no_pot_anar_mes_enlla_del_que_s_ha_enregistrat()
+    {
+        _recorder.Start();
+        _input!.PushTone(1.0);
+        Assert.Equal(1, _recorder.AddMark(99));
+        Assert.Equal(_recorder.Elapsed.TotalSeconds, _recorder.Marks.Single().Seconds, 2);
+        Assert.Throws<RecorderCommandException>(() => _recorder.RemoveMark(2));
+        _recorder.RemoveMark(1);
+        Assert.Empty(_recorder.Marks);
+        _recorder.Stop();
+        _recorder.AddMark(0.5);          // pendent: també
+        Assert.Single(_recorder.Marks);
+    }
+
+    [Fact]
     public void Una_marca_no_es_pot_moure_mes_enlla_del_que_s_ha_enregistrat()
     {
         _recorder.Start();

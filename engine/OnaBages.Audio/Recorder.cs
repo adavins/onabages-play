@@ -438,9 +438,7 @@ public sealed class Recorder : IDisposable
     /// </summary>
     public void NameMark(int number, string? name)
     {
-        name = string.IsNullOrWhiteSpace(name) ? null : name.Trim();
-        if (name is { Length: > MaxMarkNameLength })
-            throw new RecorderCommandException($"El nom de la marca pot tenir com a molt {MaxMarkNameLength} caràcters.");
+        name = CleanMarkName(name);
         lock (_sync)
         {
             if (State is not (RecorderState.Recording or RecorderState.Pending))
@@ -475,6 +473,54 @@ public sealed class Recorder : IDisposable
         }
         RaiseStateChanged();
         WriteMarksFile("La marca s'ha mogut, però no s'ha pogut desar al disc");
+    }
+
+    /// <summary>
+    /// Afegeix una marca a <paramref name="seconds"/> de l'enregistrament (fase 5, pas 27a; D-125), mentre s'enregistra o
+    /// quan és pendent: des de l'editor (com <see cref="MoveMark"/>). Com a molt fins on s'ha enregistrat. Les marques queden
+    /// ordenades per temps (les de després es renumeren). Retorna el número de la marca nova.
+    /// </summary>
+    public int AddMark(double seconds, string? name = null)
+    {
+        name = CleanMarkName(name);
+        int number;
+        lock (_sync)
+        {
+            if (State is not (RecorderState.Recording or RecorderState.Pending))
+                throw new RecorderCommandException("Aquest enregistrador no té cap enregistrament on posar marques.");
+            var mark = new RecordingMark(Math.Clamp(double.IsFinite(seconds) ? seconds : 0, 0, Elapsed.TotalSeconds), name);
+            number = _marks.FindLastIndex(m => m.Seconds <= mark.Seconds) + 2; // darrere de les que són al mateix punt
+            _marks.Insert(number - 1, mark);
+            _changed = true;
+        }
+        RaiseStateChanged();
+        WriteMarksFile("La marca s'ha posat, però no s'ha pogut desar al disc");
+        return number;
+    }
+
+    /// <summary>Esborra la marca <paramref name="number"/> (pas 27a; D-125), mentre s'enregistra o quan és pendent. Les de després es renumeren.</summary>
+    public void RemoveMark(int number)
+    {
+        lock (_sync)
+        {
+            if (State is not (RecorderState.Recording or RecorderState.Pending))
+                throw new RecorderCommandException("Aquest enregistrador no té cap enregistrament amb marques.");
+            if (number < 1 || number > _marks.Count)
+                throw new RecorderCommandException($"No hi ha cap marca {number}.");
+            _marks.RemoveAt(number - 1);
+            _changed = true;
+        }
+        RaiseStateChanged();
+        WriteMarksFile("La marca s'ha esborrat, però no s'ha pogut desar al disc");
+    }
+
+    /// <summary>Nom d'una marca net: sense espais als extrems, buit = sense nom. Massa llarg: error.</summary>
+    public static string? CleanMarkName(string? name)
+    {
+        name = string.IsNullOrWhiteSpace(name) ? null : name.Trim();
+        if (name is { Length: > MaxMarkNameLength })
+            throw new RecorderCommandException($"El nom de la marca pot tenir com a molt {MaxMarkNameLength} caràcters.");
+        return name;
     }
 
     /// <summary>

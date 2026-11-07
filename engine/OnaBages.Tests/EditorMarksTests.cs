@@ -148,10 +148,10 @@ public class EditorMarksTests : IDisposable
         Open(mp3);
         Send("editor.delete", new JsonObject { ["start"] = 0, ["end"] = 20 * Frame }); // −0,48 s
 
-        // Passar la 1 per darrere de la 2: conserva el número mentre l'editor és obert.
+        // Passar la 1 per darrere de la 2: es renumeren per ordre de temps (D-125; abans conservava el número).
         var editor = Send("editor.moveMark", new JsonObject { ["number"] = 1, ["seconds"] = 2.0 });
 
-        Assert.Equal([(2, 1.92), (1, 2.0)], Marks(editor));
+        Assert.Equal([(1, 1.92), (2, 2.0)], Marks(editor));
         Assert.Equal([2.4, 2.48], RecordingMarks.Read(mp3).Select(m => Math.Round(m.Seconds, 3)));
         Assert.True(editor["modified"]!.GetValue<bool>()); // pel tall, no per la marca
     }
@@ -169,6 +169,89 @@ public class EditorMarksTests : IDisposable
         msg["number"] = 2;
         Assert.Equal("bad_state", _router.Handle(msg.ToJsonString())["error"]!["code"]!.GetValue<string>());
         Assert.Equal(0.24, RecordingMarks.Read(mp3).Single().Seconds);
+    }
+
+    // --- Afegir, esborrar i posar nom des de l'editor (fase 5, pas 27a; D-125) ---
+
+    private JsonObject Fail(string cmd, JsonObject fields)
+    {
+        var msg = new JsonObject { ["v"] = 1, ["id"] = ++_id, ["cmd"] = cmd };
+        foreach (var (key, value) in fields) msg[key] = value?.DeepClone();
+        var r = _router.Handle(msg.ToJsonString());
+        Assert.False(r["ok"]!.GetValue<bool>(), r.ToJsonString());
+        return r["error"]!.AsObject();
+    }
+
+    [Fact]
+    public void Afegir_una_marca_al_mig_renumera_les_seguents_i_es_desa_de_seguida()
+    {
+        string mp3 = CreateMp3(3);
+        RecordingMarks.Write(mp3, [new RecordingMark(0.6, "A"), new RecordingMark(2.0, "B")]);
+        Open(mp3);
+
+        var r = _router.Handle(new JsonObject { ["v"] = 1, ["id"] = 50, ["cmd"] = "editor.addMark", ["seconds"] = 1.2, ["name"] = "  Nova " }.ToJsonString());
+        Assert.Equal(2, r["result"]!["number"]!.GetValue<int>());
+        var editor = r["result"]!["editor"]!.AsObject();
+
+        Assert.Equal([(1, 0.6), (2, 1.2), (3, 2.0)], Marks(editor));
+        Assert.False(editor["modified"]!.GetValue<bool>());
+        Assert.Equal(["A", "Nova", "B"], RecordingMarks.Read(mp3).Select(m => m.Name));
+    }
+
+    [Fact]
+    public void Un_fitxer_sense_marques_en_pot_tenir_i_despres_d_un_tall_va_en_temps_de_l_original()
+    {
+        string mp3 = CreateMp3(3);
+        Open(mp3);
+        Send("editor.delete", new JsonObject { ["start"] = 0, ["end"] = 20 * Frame }); // −0,48 s
+
+        var editor = Send("editor.addMark", new JsonObject { ["seconds"] = 1.0 });
+
+        Assert.Equal([(1, 1.0)], Marks(editor));
+        var saved = RecordingMarks.Read(mp3).Single();
+        Assert.Equal(1.48, Math.Round(saved.Seconds, 3));
+        Assert.Null(saved.Name);
+    }
+
+    [Fact]
+    public void Esborrar_i_posar_nom()
+    {
+        string mp3 = CreateMp3(3);
+        RecordingMarks.Write(mp3, [new RecordingMark(0.6), new RecordingMark(1.5), new RecordingMark(2.0)]);
+        Open(mp3);
+
+        var editor = Send("editor.removeMark", new JsonObject { ["number"] = 2 });
+        Assert.Equal([(1, 0.6), (2, 2.0)], Marks(editor));
+
+        editor = Send("editor.nameMark", new JsonObject { ["number"] = 2, ["name"] = "Entrevista" });
+        Assert.Equal("Entrevista", editor["marks"]![1]!["name"]!.GetValue<string>());
+        Assert.Equal([null, "Entrevista"], RecordingMarks.Read(mp3).Select(m => m.Name));
+
+        Send("editor.nameMark", new JsonObject { ["number"] = 2, ["name"] = "" });   // treure el nom
+        Assert.Null(RecordingMarks.Read(mp3)[1].Name);
+
+        Send("editor.removeMark", new JsonObject { ["number"] = 1 });
+        Send("editor.removeMark", new JsonObject { ["number"] = 1 });
+        Assert.Empty(RecordingMarks.Read(mp3));
+    }
+
+    [Fact]
+    public void Errors_de_les_marques_de_l_editor()
+    {
+        string mp3 = CreateMp3(3);
+        RecordingMarks.Write(mp3, [new RecordingMark(0.24)]);
+        Open(mp3);
+        string tooLong = new('x', 61);
+
+        Assert.Equal("bad_params", Fail("editor.nameMark", new JsonObject { ["number"] = 1, ["name"] = tooLong })["code"]!.GetValue<string>());
+        Assert.Equal("bad_params", Fail("editor.nameMark", new JsonObject { ["number"] = 1 })["code"]!.GetValue<string>());
+        Assert.Equal("bad_params", Fail("editor.addMark", new JsonObject { ["seconds"] = 1, ["name"] = tooLong })["code"]!.GetValue<string>());
+        Assert.Equal("bad_state", Fail("editor.removeMark", new JsonObject { ["number"] = 3 })["code"]!.GetValue<string>());
+        // Una marca d'un tros eliminat no es pot esborrar ni canviar (no es veu).
+        Send("editor.delete", new JsonObject { ["start"] = 0, ["end"] = 20 * Frame });
+        Assert.Equal("bad_state", Fail("editor.removeMark", new JsonObject { ["number"] = 1 })["code"]!.GetValue<string>());
+        Assert.Equal("bad_state", Fail("editor.nameMark", new JsonObject { ["number"] = 1, ["name"] = "x" })["code"]!.GetValue<string>());
+        Assert.Single(RecordingMarks.Read(mp3));
     }
 
     [Fact]

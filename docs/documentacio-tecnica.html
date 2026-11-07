@@ -270,11 +270,12 @@ npm start
       ajustades al costat del fitxer nou; la interfície només les dibuixa. «Desar la selecció» (<code>editor.saveSelection</code>)
       fa servir el mateix <code>Mp3Edit.Save</code> amb només els trossos de la selecció i no toca l'edició.</li>
     <li><strong>Noms i moure marques</strong> (D-114, D-115, D-118): <code>recorder.nameMark</code> hi posa nom (com a molt 60
-      caràcters) i <code>editor.moveMark</code> la mou. <strong>Qui és l'amo de les marques:</strong> mentre un enregistrador
+      caràcters) i <code>editor.moveMark</code> la mou; des de l'editor també se n'afegeixen, se n'esborren i se'ls posa nom (<code>editor.addMark</code>, <code>removeMark</code>, <code>nameMark</code>; D-125). <strong>Qui és l'amo de les marques:</strong> mentre un enregistrador
       enregistra o té el fitxer pendent, les marques són seves (<code>Recorder.Marks</code>, ordenades per temps); el
       router envia el moviment a <code>Recorder.MoveMark</code> i l'editor les torna a llegir
-      (<code>EditorSession.ReloadMarks</code>). Si no, l'editor les mou directament al fitxer <code>.marques</code>. La
-      numeració és la de l'original (1, 2, 3...) també després de retallar.</li>
+      (<code>EditorSession.ReloadMarks</code>). Si no, l'editor les canvia directament al fitxer <code>.marques</code>. Un sol lloc del router
+      (<code>MarksOwner</code>) decideix qui és l'amo. Sempre es numeren per ordre de temps de l'original (1, 2, 3...),
+      també després de retallar.</li>
     <li><strong>Alarma de silenci</strong> (D-121): el fil de codificació, just abans de LAME, mira si tot el bloc és per
       sota del llindar i suma o posa a zero un comptador atòmic (<code>_silentFrames</code>); <code>Recorder.Tick</code>
       (cada 100 ms) encén o apaga <code>SilenceAlarm</code> i avisa la interfície. Es mesura el que queda al fitxer, no

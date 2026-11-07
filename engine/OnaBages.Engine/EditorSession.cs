@@ -142,22 +142,98 @@ public sealed class EditorSession : IDisposable
         lock (_sync)
         {
             var edit = RequireReady();
-            if (Live) throw new EditorStateException("Mentre s'enregistra, les marques es mouen a través de l'enregistrador.");
+            if (Live) throw new EditorStateException(LiveMarks);
             double original = OriginalSecondsOf(edit, number, seconds);
-            var previous = _marks[number - 1];
-            _marks[number - 1] = previous with { Seconds = original };
-            try
-            {
-                RecordingMarks.Write(edit.Index.Path, _marks);
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                _marks[number - 1] = previous;
-                throw new EditorStateException($"No s'ha pogut desar la marca: {ex.Message}");
-            }
+            var marks = new List<RecordingMark>(_marks);
+            marks[number - 1] = marks[number - 1] with { Seconds = original };
+            WriteMarks(edit, marks);
         }
         RaiseChanged();
     }
+
+    /// <summary>
+    /// Afegeix una marca a <paramref name="seconds"/> de la versió editada (fase 5, pas 27a; D-125) i la desa de seguida al
+    /// fitxer de marques (no es desfà amb <c>editor.undo</c>). Les marques queden ordenades per temps de l'original: les de
+    /// després es renumeren. Retorna el número de la nova.
+    /// </summary>
+    public int AddMark(double seconds, string? name)
+    {
+        int number;
+        lock (_sync)
+        {
+            var edit = RequireReady();
+            if (Live) throw new EditorStateException(LiveMarks);
+            var mark = new RecordingMark(OriginalSecondsAt(edit, seconds), name);
+            var marks = new List<RecordingMark>(_marks);
+            number = marks.FindLastIndex(m => m.Seconds <= mark.Seconds) + 2;
+            marks.Insert(number - 1, mark);
+            WriteMarks(edit, marks, sort: false);
+        }
+        RaiseChanged();
+        return number;
+    }
+
+    /// <summary>Esborra la marca <paramref name="number"/> (pas 27a; D-125). Les de després es renumeren. Només les que es veuen.</summary>
+    public void RemoveMark(int number)
+    {
+        lock (_sync)
+        {
+            var edit = RequireReady();
+            if (Live) throw new EditorStateException(LiveMarks);
+            RequireVisibleMark(edit, number);
+            var marks = new List<RecordingMark>(_marks);
+            marks.RemoveAt(number - 1);
+            WriteMarks(edit, marks, sort: false);
+        }
+        RaiseChanged();
+    }
+
+    /// <summary>Posa (o treu, amb un nom buit) el nom de la marca <paramref name="number"/> (pas 27a; D-125).</summary>
+    public void NameMark(int number, string? name)
+    {
+        lock (_sync)
+        {
+            var edit = RequireReady();
+            if (Live) throw new EditorStateException(LiveMarks);
+            RequireVisibleMark(edit, number);
+            var marks = new List<RecordingMark>(_marks);
+            marks[number - 1] = marks[number - 1] with { Name = name };
+            WriteMarks(edit, marks, sort: false);
+        }
+        RaiseChanged();
+    }
+
+    /// <summary>
+    /// Temps de l'original d'un punt de la versió editada (pas 27a: per afegir una marca a través de l'enregistrador, que és
+    /// l'amo de les marques mentre enregistra o té el fitxer pendent).
+    /// </summary>
+    public double OriginalSeconds(double seconds)
+    {
+        lock (_sync) return OriginalSecondsAt(RequireReady(), seconds);
+    }
+
+    /// <summary>Comprova que la marca <paramref name="number"/> existeixi i es vegi (no sigui en un tros eliminat).</summary>
+    public void CheckMark(int number)
+    {
+        lock (_sync) RequireVisibleMark(RequireReady(), number);
+    }
+
+    // Dins de _sync. Desa les marques al fitxer i, si ha anat bé, les fa servir (si no, es queden les d'abans i es diu).
+    private void WriteMarks(Mp3Edit edit, List<RecordingMark> marks, bool sort = true)
+    {
+        if (sort) marks.Sort((a, b) => a.Seconds.CompareTo(b.Seconds));
+        try
+        {
+            RecordingMarks.Write(edit.Index.Path, marks);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            throw new EditorStateException($"No s'han pogut desar les marques: {ex.Message}");
+        }
+        _marks = marks;
+    }
+
+    private const string LiveMarks = "Mentre s'enregistra, les marques es canvien a través de l'enregistrador.";
 
     /// <summary>
     /// On hauria d'anar la marca <paramref name="number"/> en temps de l'original si es mou a <paramref name="seconds"/> de
@@ -183,13 +259,23 @@ public sealed class EditorSession : IDisposable
     /// <summary>Temps de la versió editada → temps de l'original, per a la marca <paramref name="number"/> (dins de _sync).</summary>
     private double OriginalSecondsOf(Mp3Edit edit, int number, double seconds)
     {
+        RequireVisibleMark(edit, number);
+        return OriginalSecondsAt(edit, seconds);
+    }
+
+    // Dins de _sync.
+    private void RequireVisibleMark(Mp3Edit edit, int number)
+    {
         if (number < 1 || number > _marks.Count)
             throw new EditorStateException($"No hi ha cap marca {number}.");
-        double fs = edit.Index.FrameSeconds;
-        if (!RecordingMarks.MapToEdited(_marks, edit.Segments, fs, edit.Index.FrameCount).Any(m => m.Number == number))
+        if (!RecordingMarks.MapToEdited(_marks, edit.Segments, edit.Index.FrameSeconds, edit.Index.FrameCount).Any(m => m.Number == number))
             throw new EditorStateException($"La marca {number} és en un tros eliminat.");
+    }
 
-        // Amb els decimals del fotograma.
+    /// <summary>Temps de la versió editada → temps de l'original (dins de _sync), amb els decimals del fotograma.</summary>
+    private static double OriginalSecondsAt(Mp3Edit edit, double seconds)
+    {
+        double fs = edit.Index.FrameSeconds;
         double frame = Math.Clamp(seconds / fs, 0, edit.FrameCount);
         int whole = Math.Min((int)Math.Floor(frame), edit.FrameCount - 1);
         return (edit.ToOriginal(whole) + (frame - whole)) * fs;

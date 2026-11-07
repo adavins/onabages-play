@@ -57,6 +57,7 @@
 
   /* Llista de reproducció (js/ui/playlist-view.js) */
   --obp-pl-row-h: calc(1.7rem * var(--obp-ui-scale));
+  --obp-pl-row-factor: 1;           /* alçada de les files de les llistes dels reproductors (⚙ › Reproductors; pas 21) */
   --obp-pl-playing-bg: #1f6b43;     /* la que sona (verd) */
   --obp-pl-last-bg: #1d4f8c;        /* l'última reproduïda (blau) */
   --obp-pl-selected-bg: #3a4048;    /* seleccionada (més clara) */
@@ -1331,7 +1332,7 @@ body.engine-offline .side-content {
   display: flex;
   align-items: center;
   gap: 0.3rem;
-  height: var(--obp-pl-row-h);
+  height: calc(var(--obp-pl-row-h) * var(--obp-pl-row-factor));
   padding: 0 0.3rem;
   border-bottom: 1px solid rgb(255 255 255 / 0.04);
   cursor: default;
@@ -1900,7 +1901,7 @@ body.engine-offline .side-content {
 
 /* La fila del separador: franja gruixuda del color, fons tenyit i el nom en majúscules. */
 .pl-row.pl-section {
-  height: calc(var(--obp-pl-row-h) * 1.15);
+  height: calc(var(--obp-pl-row-h) * var(--obp-pl-row-factor) * 1.15);
   margin-top: 2px;
   background: color-mix(in srgb, var(--section) 28%, transparent);
   box-shadow: inset 6px 0 0 var(--section);

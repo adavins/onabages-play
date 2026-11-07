@@ -114,6 +114,9 @@ public sealed class EngineConfig
     /// <summary>Amagar el mesurador dels enregistradors que no enregistren (fase 5, pas 14c; del perfil). Per defecte, no.</summary>
     public bool HideIdleRecorderMeters { get; set; }
 
+    /// <summary>Alçada de les files de les llistes dels reproductors, en % de la normal (fase 5, pas 21; del perfil).</summary>
+    public int PlaylistRowHeight { get; set; } = 100;
+
     /// <summary>
     /// Ordre dels reproductors a la pantalla, d'esquerra a dreta (fase 5, pas 16a; del perfil): identificadors.
     /// Buida = per número. Els que no hi surten van al final, per número.
@@ -205,4 +208,6 @@ public sealed class EngineConfig
     public const int MaxPlayers = 6;
     public const int MaxRecorders = 6; // fase 5, pas 14a (D-101): abans 4
     public const int MaxEndWarningSeconds = 60;
+    public const int MinPlaylistRowHeight = 100;
+    public const int MaxPlaylistRowHeight = 200;
 }

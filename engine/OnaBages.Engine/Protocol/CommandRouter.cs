@@ -370,7 +370,7 @@ public sealed partial class CommandRouter
 
     /// <summary>
     /// Canvia només els ajustos que s'envien (docs/protocol.md, «settings.set»):
-    /// "ui": { zoom, recordersPerRow, endWarningSeconds, hideIdleRecorderMeters, playerOrder, recorderOrder }, "layout": { players, recorders } i "program": { name }.
+    /// "ui": { zoom, recordersPerRow, endWarningSeconds, hideIdleRecorderMeters, playlistRowHeight, playerOrder, recorderOrder }, "layout": { players, recorders } i "program": { name }.
     /// Primer es comprova tot; si algun valor és fora de marge, no es canvia res.
     /// </summary>
     private JsonObject SettingsSet(JsonObject msg)
@@ -398,6 +398,7 @@ public sealed partial class CommandRouter
         bool? hideIdleMeters = null;
         if (ui?["hideIdleRecorderMeters"] is { } hideNode)
             hideIdleMeters = hideNode is JsonValue hv && hv.TryGetValue(out bool hb) ? hb : throw new BadParamsException("'ui.hideIdleRecorderMeters' ha de ser true o false.");
+        int? rowHeight = OptionalInt(ui?["playlistRowHeight"], "ui.playlistRowHeight", EngineConfig.MinPlaylistRowHeight, EngineConfig.MaxPlaylistRowHeight);
         List<string>? playerOrder = OptionalOrder(ui?["playerOrder"], "ui.playerOrder", EngineConfig.MaxPlayers);
         List<string>? recorderOrder = OptionalOrder(ui?["recorderOrder"], "ui.recorderOrder", EngineConfig.MaxRecorders);
         int? players = OptionalInt(layout?["players"], "layout.players", 1, EngineConfig.MaxPlayers);
@@ -427,6 +428,7 @@ public sealed partial class CommandRouter
             if (perRow is { } r) c.RecordersPerRow = r;
             if (warning is { } w) c.EndWarningSeconds = w;
             if (hideIdleMeters is { } hm) c.HideIdleRecorderMeters = hm;
+            if (rowHeight is { } rh) c.PlaylistRowHeight = rh;
             if (playerOrder is not null) c.PlayerOrder = playerOrder;
             if (recorderOrder is not null) c.RecorderOrder = recorderOrder;
             // El nombre d'elements s'aplica en tornar a arrencar el motor. Les assignacions i els ajustos
@@ -493,6 +495,7 @@ public sealed partial class CommandRouter
         var (zoom, perRow, warning, players, recorders, programName) =
             config.Read(c => (c.UiZoom, c.RecordersPerRow, c.EndWarningSeconds, c.PlayerCount, c.RecorderCount, c.ProgramName));
         bool hideIdleMeters = config.Read(c => c.HideIdleRecorderMeters);
+        int rowHeight = config.Read(c => c.PlaylistRowHeight);
         // Còpia dins del bloqueig: la llista de la configuració no surt d'aquí.
         var (playerOrder, recorderOrder) = config.Read(c => (OrderJson(c.PlayerOrder), OrderJson(c.RecorderOrder)));
         var (profileId, profileName) = config.Read(c => (c.ProfileId, c.ProfileName));
@@ -539,6 +542,7 @@ public sealed partial class CommandRouter
             // Presets del compressor/limitador dels reproductors (fase 4, pas 4b).
             ["processingPresets"] = ProcessingPresetsJson(),
             ["ui"] = new JsonObject { ["zoom"] = zoom, ["recordersPerRow"] = perRow, ["endWarningSeconds"] = warning, ["hideIdleRecorderMeters"] = hideIdleMeters,
+                ["playlistRowHeight"] = rowHeight, ["minPlaylistRowHeight"] = EngineConfig.MinPlaylistRowHeight, ["maxPlaylistRowHeight"] = EngineConfig.MaxPlaylistRowHeight,
                 ["playerOrder"] = playerOrder, ["recorderOrder"] = recorderOrder },
             ["layout"] = new JsonObject { ["players"] = players, ["recorders"] = recorders },
             ["program"] = new JsonObject { ["name"] = programName },

@@ -402,7 +402,7 @@ function zoomChanged(zoom) {
 // ---------------------------------------------------------------------------
 
 /**
- * Aplica els ajustos del motor: escala, enregistradors per fila, nom del programa i avís de reiniciar.
+ * Aplica els ajustos del motor: escala, enregistradors per fila, alçada de les files de les llistes, nom del programa i avís de reiniciar.
  * (L'avís de final de pista el llegeix cada reproductor de store.settings.)
  * @param {any} settings
  */
@@ -418,6 +418,8 @@ function applySettings(settings) {
   els.programName.textContent = programName;
   els.programName.classList.toggle('d-none', !programName || programName.toLowerCase() === profileName.toLowerCase());
   document.documentElement.style.setProperty('--obp-recorders-per-row', String(settings.ui.recordersPerRow));
+  // Alçada de les files de les llistes dels reproductors (pas 21): 100 = la normal.
+  document.documentElement.style.setProperty('--obp-pl-row-factor', String((settings.ui.playlistRowHeight ?? 100) / 100));
   els.restartNotice.classList.toggle('d-none', !settings.restartNeeded);
   els.restartNotice.title = settings.restartNeeded
     ? `Has canviat el nombre de reproductors o d'enregistradors (${settings.layout.players} i ${settings.layout.recorders}).\n` +

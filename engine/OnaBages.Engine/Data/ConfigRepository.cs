@@ -672,6 +672,8 @@ public sealed class ConfigRepository
         // Ordre a la pantalla (pas 16a; camps opcionals, sense canvi de versió). Un ordre que no és vàlid no compta.
         config.PlayerOrder = ReadOrder(root["ui"]?["playerOrder"], EngineConfig.MaxPlayers);
         config.RecorderOrder = ReadOrder(root["ui"]?["recorderOrder"], EngineConfig.MaxRecorders);
+        if (Int(root["ui"]?["playlistRowHeight"]) is { } rowHeight) // pas 21; camp opcional, sense canvi de versió
+            config.PlaylistRowHeight = Math.Clamp(rowHeight, EngineConfig.MinPlaylistRowHeight, EngineConfig.MaxPlaylistRowHeight);
         if (Int(root["ui"]?["endWarningSeconds"]) is { } warning)
             config.EndWarningSeconds = Math.Clamp(warning, 0, EngineConfig.MaxEndWarningSeconds);
         if (Int(root["layout"]?["players"]) is { } players)
@@ -907,6 +909,7 @@ public sealed class ConfigRepository
             ["recordersPerRow"] = config.RecordersPerRow,
             ["endWarningSeconds"] = config.EndWarningSeconds,
             ["hideIdleRecorderMeters"] = config.HideIdleRecorderMeters,
+            ["playlistRowHeight"] = config.PlaylistRowHeight,
             ["playerOrder"] = OrderJson(config.PlayerOrder),
             ["recorderOrder"] = OrderJson(config.RecorderOrder),
         },

@@ -142,6 +142,33 @@ public class SettingsTests : IDisposable
     }
 
     [Fact]
+    public void L_alcada_de_les_files_de_les_llistes_es_desa_al_perfil()
+    {
+        var s = Settings("""{ "v": 1, "id": 1, "cmd": "settings.get" }""");
+        Assert.Equal(100, s["ui"]!["playlistRowHeight"]!.GetValue<int>()); // per defecte, la normal
+        Assert.Equal(EngineConfig.MinPlaylistRowHeight, s["ui"]!["minPlaylistRowHeight"]!.GetValue<int>());
+        Assert.Equal(EngineConfig.MaxPlaylistRowHeight, s["ui"]!["maxPlaylistRowHeight"]!.GetValue<int>());
+
+        s = Settings("""{ "v": 1, "id": 2, "cmd": "settings.set", "ui": { "playlistRowHeight": 150 } }""");
+
+        Assert.Equal(150, s["ui"]!["playlistRowHeight"]!.GetValue<int>());
+        Assert.Equal(150, _repository.Load().Config.PlaylistRowHeight);
+        string profile = Directory.GetFiles(Path.GetDirectoryName(_repository.FilePath)!, "perfil.json", SearchOption.AllDirectories).Single();
+        Assert.Contains("\"playlistRowHeight\": 150", File.ReadAllText(profile)); // al perfil, no a la configuració de l'ordinador
+    }
+
+    [Theory]
+    [InlineData(99)]
+    [InlineData(201)]
+    public void L_alcada_de_les_files_fora_de_marge_es_rebutja(int value)
+    {
+        var r = _router.Handle($$"""{ "v": 1, "id": 1, "cmd": "settings.set", "ui": { "playlistRowHeight": {{value}} } }""");
+
+        Assert.Equal("bad_params", ErrorCode(r));
+        Assert.Equal(100, _repository.Load().Config.PlaylistRowHeight);
+    }
+
+    [Fact]
     public void La_durada_del_fade_out_es_desa_al_perfil()
     {
         var s = Settings("""{ "v": 1, "id": 1, "cmd": "settings.get" }""");

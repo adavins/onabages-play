@@ -56,6 +56,12 @@ export function editSettings(settings, running, pin) {
   const fadeOptions = fadeChoices
     .map((ms) => `<option value="${ms}"${ms === fadeMs ? ' selected' : ''}>${String(ms / 1000).replace('.', ',')} s${ms === 2000 ? ' (per defecte)' : ''}</option>`)
     .join('');
+  // Alçada de les files de les llistes (pas 21): percentatges fixos (i el desat, si fos un altre).
+  const rowHeight = settings.ui?.playlistRowHeight ?? 100;
+  const rowChoices = [...new Set([100, 115, 130, 150, 175, 200, rowHeight])].sort((a, b) => a - b);
+  const rowOptions = rowChoices
+    .map((h) => `<option value="${h}"${h === rowHeight ? ' selected' : ''}>${h} %${h === 100 ? ' (normal, per defecte)' : ''}</option>`)
+    .join('');
   const trim = settings.trim ?? { thresholdDb: -60, leadMs: 10, tailMs: 50, thresholds: [-40, -50, -60, -70, -80] };
   const trimOptions = (trim.thresholds ?? [-40, -50, -60, -70, -80])
     .map((/** @type {number} */ t) => `<option value="${t}"${t === trim.thresholdDb ? ' selected' : ''}>${String(t).replace('-', '−')} dBFS${t === -60 ? ' (recomanat)' : ''}</option>`)
@@ -138,6 +144,16 @@ export function editSettings(settings, running, pin) {
         </div>
       </div>
       <div class="form-text mb-3">El temps restant es posa vermell i parpelleja. 0 = sense avís.</div>
+
+      <h3 class="obp-settings-section">Llistes de reproducció</h3>
+      <div class="obp-settings-grid">
+        <label for="st-row-height">Alçada de les files</label>
+        <select id="st-row-height" class="form-select form-select-sm">${rowOptions}</select>
+      </div>
+      <div class="form-text mb-3">
+        Més alçada separa més les pistes i fa més fàcil encertar-les amb el ratolí o en una pantalla tàctil,
+        però se'n veuen menys alhora. La lletra no canvia.
+      </div>
 
       <h3 class="obp-settings-section">Fade-out</h3>
       <div class="obp-settings-grid">
@@ -430,6 +446,7 @@ export function editSettings(settings, running, pin) {
             recordersPerRow: Number($('#st-per-row').value),
             endWarningSeconds: Number(warning.value),
             hideIdleRecorderMeters: $('#st-hide-idle-meters').checked,
+            playlistRowHeight: Number($('#st-row-height').value),
           },
           layout: { players: Number(players.value), recorders: Number(recorders.value) },
           program: { name: $('#st-program').value.trim() },

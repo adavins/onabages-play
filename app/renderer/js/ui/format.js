@@ -36,3 +36,9 @@ export function formatDuration(/** @type {number} */ totalSeconds) {
   const sec = String(s % 60).padStart(2, '0');
   return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`;
 }
+
+/** Hora del rellotge amb segons (p. ex. «12:04:09»), arrodonida al segon. @param {number} ms  ms des de 1970 */
+export function clockText(ms) {
+  const d = new Date(Math.round(ms / 1000) * 1000);
+  return [d.getHours(), d.getMinutes(), d.getSeconds()].map((n) => String(n).padStart(2, '0')).join(':');
+}

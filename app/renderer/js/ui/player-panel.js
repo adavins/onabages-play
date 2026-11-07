@@ -9,7 +9,7 @@ import { DeviceSelect } from './device-select.js';
 import { LevelMeter } from './meter.js';
 import { VolumeFader } from './fader.js';
 import { PlaylistView, sectionOf } from './playlist-view.js';
-import { escapeHtml, formatDuration } from './format.js';
+import { escapeHtml, formatDuration, clockText } from './format.js';
 import { HANDLE_HTML } from './panel-order.js';
 import { openProcessingDialog } from './processing-dialog.js';
 
@@ -451,12 +451,6 @@ export class PlayerPanel {
     clearTimeout(this.#messageTimer);
     this.#messageTimer = window.setTimeout(() => { this.#el.message.textContent = ''; }, MESSAGE_MS);
   }
-}
-
-/** Hora del rellotge amb segons (p. ex. «12:04:09»), arrodonida al segon. @param {number} ms */
-function clockText(ms) {
-  const d = new Date(Math.round(ms / 1000) * 1000);
-  return [d.getHours(), d.getMinutes(), d.getSeconds()].map((n) => String(n).padStart(2, '0')).join(':');
 }
 
 /** @param {HTMLElement} button @param {boolean} enabled */

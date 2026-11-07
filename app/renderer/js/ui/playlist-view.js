@@ -15,7 +15,7 @@
 // - Separadors de secció (D-042): botó «Secció» o tecla S; doble clic, nom i color; el botó ▾ (o ←/→)
 //   plega la secció; una secció plegada s'arrossega amb totes les seves pistes.
 
-import { escapeHtml, formatDuration } from './format.js';
+import { escapeHtml, formatDuration, clockText } from './format.js';
 import { showContextMenu } from './context-menu.js';
 import { PATHS_DRAG_TYPE, draggedPaths } from './drag-types.js';
 import { choose, showInfo } from './dialogs.js';
@@ -50,6 +50,10 @@ export class PlaylistView {
   #renderKey = '';
   #dragging = false;
   #pendingRender = false;
+  /** Text del peu sense selecció: totes les pistes de la llista (es calcula a #render). */
+  #totalText = '';
+  /** Hora d'acabar de la selecció que es mostra (ms), perquè no tremoli. Vegeu #renderSummary. @type {number | null} */
+  #shownEnd = null;
 
   /**
    * @param {string} playerId
@@ -94,6 +98,8 @@ export class PlaylistView {
     this.#rows.addEventListener('contextmenu', (e) => this.#onContextMenu(/** @type {MouseEvent} */ (e)));
     this.#rows.addEventListener('keydown', (e) => this.#onKey(e));
     this.#setupDrag();
+    // L'hora d'acabar de la selecció avança amb el rellotge encara que el reproductor no soni (pas 19).
+    window.setInterval(() => { if (this.#selected.size > 0) this.#renderSummary(); }, 1000);
   }
 
   /**
@@ -163,10 +169,77 @@ export class PlaylistView {
     const count = tracks.length;
     const unknown = tracks.filter((/** @type {any} */ i) => i.status === 'analyzing').length;
     const problems = tracks.filter((/** @type {any} */ i) => i.status === 'error' || i.status === 'missing').length;
-    this.#footer.textContent = count === 0 ? '' :
+    this.#totalText = count === 0 ? '' :
       `${count} ${count === 1 ? 'pista' : 'pistes'} · ${formatDuration(totalDuration)}` +
       (unknown > 0 ? ' · comprovant…' : '') +
       (problems > 0 ? ` · ⚠ ${problems} amb problemes` : '');
+    this.#renderSummary();
+  }
+
+  /**
+   * Peu de la llista (pas 19). Sense selecció: el total de la llista. Amb selecció: quantes pistes, quanta
+   * durada i a quina hora s'acabarien.
+   *  - Una capçalera de secció seleccionada compta totes les pistes de la secció.
+   *  - Si la pista que sona (o en pausa) és entre les seleccionades, en compta el que li queda, i l'hora
+   *    surt d'ara + el que li queda + la resta. Si no hi és, compta com si les seleccionades comencessin ara.
+   * Les durades són les dels fitxers sencers (el retall de silencis i els fosos no es descompten).
+   */
+  #renderSummary() {
+    const tracks = this.#countedTracks();
+    if (tracks.length === 0) {
+      this.#shownEnd = null;
+      this.#footer.textContent = this.#totalText;
+      this.#footer.title = '';
+      this.#footer.classList.remove('pl-summary-selection');
+      return;
+    }
+
+    const p = this.#player;
+    const started = p.state === 'playing' || p.state === 'paused';
+    let seconds = 0;
+    let unknown = 0;
+    let includesCurrent = false;
+    for (const t of tracks) {
+      if (started && t.id === p.currentItemId && p.duration > 0) {
+        seconds += Math.max(0, p.duration - p.position);
+        includesCurrent = true;
+      } else if (t.duration != null) {
+        seconds += t.duration;
+      } else {
+        unknown++;
+      }
+    }
+
+    // L'hora només es canvia si la nova difereix més de 0,75 s: la posició arriba amb unes dècimes de soroll.
+    const end = Date.now() + seconds * 1000;
+    if (this.#shownEnd === null || Math.abs(end - this.#shownEnd) > 750) this.#shownEnd = end;
+
+    const n = tracks.length;
+    const clock = clockText(this.#shownEnd);
+    this.#footer.textContent = `${n} sel. · ${formatDuration(seconds)}${unknown > 0 ? ' +?' : ''} · acaba ${clock}`;
+    this.#footer.title =
+      `${n} ${n === 1 ? 'pista seleccionada' : 'pistes seleccionades'}: ${formatDuration(seconds)}` +
+      (includesCurrent ? ' (de la que sona, només el que li queda)' : '') + '.\n' +
+      (includesCurrent ? `S'acabarien a les ${clock}.` : `Si comencessin ara, s'acabarien a les ${clock}.`) +
+      (unknown > 0 ? `\n${unknown} encara sense durada: no es compten.` : '') +
+      '\nAmb el retall de silencis, poden acabar uns segons abans.';
+    this.#footer.classList.add('pl-summary-selection');
+  }
+
+  /** Pistes que compten per al peu: les seleccionades i les de les seccions seleccionades, sense repetir, en ordre. */
+  #countedTracks() {
+    if (this.#selected.size === 0) return [];
+    /** @type {any[]} */
+    const result = [];
+    let inSelectedSection = false;
+    for (const item of this.#playlist.items) {
+      if (isSection(item)) {
+        inSelectedSection = this.#selected.has(item.id);
+      } else if (inSelectedSection || this.#selected.has(item.id)) {
+        result.push(item);
+      }
+    }
+    return result;
   }
 
   /** Fila d'un separador de secció: botó per plegar, nom, i quantes pistes i quanta durada té. */
@@ -242,6 +315,7 @@ export class PlaylistView {
 
     for (const row of /** @type {NodeListOf<HTMLElement>} */ (this.#rows.querySelectorAll('.pl-row')))
       row.classList.toggle('pl-selected', this.#selected.has(/** @type {string} */ (row.dataset.id)));
+    this.#renderSummary(); // la selecció o la posició han canviat
   }
 
   /** S'ha acabat d'arrossegar: si mentrestant ha canviat la llista, ara es redibuixa. */

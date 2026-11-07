@@ -1468,6 +1468,18 @@ body.engine-offline .side-content {
   text-overflow: ellipsis;
 }
 
+/* Amb pistes seleccionades, el peu en diu la durada i l'hora d'acabar (pas 19): es distingeix del total. */
+.pl-summary.pl-summary-selection {
+  color: var(--obp-info);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Perquè hi càpiga, mentre hi ha selecció els botons del peu només tenen la icona (l'ajuda diu què fan). */
+.pl-footer:has(.pl-summary-selection) .pl-action-label {
+  display: none;
+}
+
 /* Volum per sobre de 0 dB (fader d'enregistrament): es diu amb color i amb el «+» del valor. */
 .fader.boosted .fader-value { color: var(--obp-info); font-weight: 600; }
 

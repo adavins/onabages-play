@@ -285,6 +285,18 @@ npm start
     <li>Es compten les mostres perdudes i els avisos de Windows, i s'escriuen al registre amb la posició.</li>
   </ul>
 
+  <h3 id="botonera">Botonera d'instantanis</h3>
+  <ul>
+    <li><code>CartWall</code> (D-127): sortida pròpia, sempre oberta (envia silenci), i <strong>8 veus</strong> creades d'entrada.
+      El fil d'àudio (<code>CartWall.Mixer</code>) barreja les veus actives en blocs de 20 ms, sense crear objectes.</li>
+    <li><strong>Sona a l'instant:</strong> de cada botó es guarden els primers 3 s descodificats (<code>LoadHead</code>, en
+      segon pla, a la freqüència de la sortida). En prémer-lo, la veu comença per aquesta memòria i un fil de lectura obre
+      el fitxer just on s'acaba (<code>AudioFileSource.Open(..., exactStart: true)</code>) i omple la resta.</li>
+    <li>Fil de les ordres ↔ fil d'àudio: la veu es prepara i s'hi posa <code>Active</code> en últim lloc; el fil d'àudio
+      posa <code>Ended</code> quan s'acaba o quan acaba el fos d'aturar, i <code>Tick</code> allibera la veu (atura el fil de
+      lectura). Una veu només es torna a fer servir quan el fil d'àudio ja l'ha deixat.</li>
+  </ul>
+
   <h3 id="dsp">Processament (DSP)</h3>
   <ul>
     <li><strong>Compressor/limitador</strong> (<code>DynamicsProcessor</code>): com el SqrSoft del Winamp, amb anticipació

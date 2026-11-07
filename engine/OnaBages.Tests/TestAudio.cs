@@ -111,6 +111,9 @@ internal sealed class FakeOutput(int sampleRate = 48000, int channels = 2) : IAu
     public event Action<Exception?>? Stopped;
 
     public void Init(IWaveProvider source) => _source = source;
+
+    /// <summary>La font connectada (per llegir-ne directament, p. ex. per comptar objectes creats).</summary>
+    public IWaveProvider Source => _source!;
     public void Play() => IsPlaying = true;
     public void Pause() => IsPlaying = false;
     public void Stop() => IsPlaying = false;

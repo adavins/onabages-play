@@ -152,6 +152,7 @@ Per defecte hi ha dos enregistradors, `"1"` i `"2"`; se'n poden configurar fins 
 | `recorder.setGain` | `recorder`, `db`: volum d'enregistrament de `-60` (silenci) a `+12`; per defecte `0`. Fora de marge, es queda al límit | tots. S'aplica de seguida (també a mig enregistrament), amb una rampa curta sense clics. El que passa de 0 dBFS es retalla (si el limitador és activat, abans es limita) | `{ recorder }` |
 | `recorder.setLimiter` | `recorder`, `enabled` (true/false) | tots. Limitador del que es desa al fitxer (fase 5, D-083), després del volum: el so no passa del sostre `settings.recorderLimiter.ceilingDb` (per defecte −1 dB). Mira 1,5 ms endavant i abaixa just abans d'un cop, sense retallar-lo; per sota del sostre no toca res (sense compressió). S'aplica de seguida, també a mig enregistrament (transició de 10 ms, sense clics). Desactivat per defecte. Es desa al perfil | `{ recorder }` |
 | `recorder.stop` | `recorder` | `recording`. La interfície **sempre** ha de demanar confirmació abans d'enviar-la | `{ recorder }` |
+| `recorder.mark` | `recorder` | `recording`. **Marca** (fase 5, D-110): afegeix una marca a la posició d'ara de l'enregistrament (precisió d'un fotograma MP3) i desa totes les marques a `Nom.mp3.marques`, al costat del fitxer (i de la còpia de l'historial). Si el fitxer de marques no es pot escriure, la marca es queda a la memòria, es respon `bad_state` amb el motiu i es torna a provar amb la marca següent. L'enregistrament no es toca mai | `{ recorder }` |
 
 Fitxer: `<carpeta>\<nom>_AAAA-MM-DD_HH-MM-SS.mp3` (si ja existeix, s'hi afegeix `_2`, `_3`...). MP3 320 kbps CBR estèreo, a la freqüència de l'entrada. Mentre s'enregistra hi ha un marcador `<fitxer>.mp3.rec` (JSON) que s'esborra en aturar correctament.
 
@@ -166,7 +167,7 @@ Objecte `recorder` (també a `state.get` i a l'esdeveniment `recorder.state`):
   "elapsed": 125.4, "fileSize": 5017600, "freeDiskBytes": 146028888064, "lowDiskSpace": false,
   "sampleRate": 48000, "bitrateKbps": 320,
   "samplesLost": 0, "captureGlitches": 0, "inputActive": true,
-  "error": null }
+  "error": null, "marks": [ { "seconds": 62.016, "name": null } ] }
 ```
 
 - `state`: `idle` (inactiu), `recording`, `pending` (fitxer acabat, a `file`), `error`.
@@ -175,6 +176,7 @@ Objecte `recorder` (també a `state.get` i a l'esdeveniment `recorder.state`):
 - `archive`: `{ path, error, errorDetail }`: còpia d'historial de l'enregistrament en curs o de l'últim (fase 5, D-086). `path` és null si no n'hi ha. `error` diu per què no s'ha pogut crear o s'ha deixat d'escriure (disc ple, unitat desconnectada...); l'enregistrament continua igualment i la còpia és vàlida fins on arriba. `error` és un text curt per a l'operador; `errorDetail`, la carpeta i el missatge de Windows.
 - `elapsed`: segons enregistrats. `fileSize`: bytes escrits. `freeDiskBytes`: espai lliure a la unitat del fitxer mentre s'enregistra, i a la de `folder` quan no (`null` si no se sap, p. ex. en una unitat de xarxa). `lowDiskSpace`: queda menys de l'equivalent a 2 hores d'enregistrament (uns 288 MB a 320 kbps).
 - `samplesLost`: mostres perdudes perquè el disc no ha anat prou ràpid. `captureGlitches`: vegades que Windows ha avisat que s'han perdut dades de captura. Tots dos han de ser 0.
+- `marks`: marques de l'enregistrament en curs o del pendent (`recorder.mark`; fase 5, D-110), per ordre. `seconds` des del principi de l'enregistrament; `name` de moment sempre és `null`. Es buida en començar-ne un altre o en desar o descartar el pendent.
 - `inputActive`: l'entrada és oberta i el mesurador funciona. **L'entrada s'obre en triar-la, no en començar a enregistrar** (per veure el nivell abans d'enregistrar); `recorder.start` fa servir la mateixa entrada i comença a l'instant. Si l'entrada es perd quan no s'enregistra, no és cap error: `inputActive` passa a `false` i el motor la torna a obrir quan torna (cada 3 s ho prova).
 - `error`: el motiu, en català, quan `state` és `error`. Si l'entrada es desconnecta mentre s'enregistra, el fitxer es tanca correctament (vàlid fins a aquell moment) i `file` hi continua apuntant. Per continuar, `recorder.start` en fa un de nou.
 
@@ -532,3 +534,13 @@ Objecte `processing` (al reproductor, a `player.setProcessing` i a cada preset):
 ## 6. Previst (no implementat)
 
 - Enregistradors: editar (fase 3)
+
+## Fitxer de marques d'un enregistrament (`Nom.mp3.marques`)
+
+Fase 5, D-110. JSON al costat de l'MP3 (escriptura segura: temporal + substitució). Segueix l'enregistrament en desar-lo (`recording.save`), va a la paperera amb ell (`recording.discard`) i també n'hi ha un al costat de la còpia de l'historial (que s'esborra amb la neteja de l'historial). Si està malmès, es llegeix com si no hi hagués marques.
+
+```json
+{ "schemaVersion": 1, "marks": [ { "seconds": 62.016 }, { "seconds": 845.2, "name": "Entrevista" } ] }
+```
+
+- `seconds`: posició des del principi del fitxer. `name` és opcional.

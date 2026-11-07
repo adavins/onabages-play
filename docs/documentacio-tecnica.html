@@ -259,6 +259,9 @@ npm start
       independent, i el fitxer és vàlid en tot moment (també per tallar-lo a l'editor).</li>
     <li>Un sol fitxer per enregistrament, amb <code>Flush(true)</code> (escriptura física) cada 2 s.</li>
     <li>Marcador <code>&lt;fitxer&gt;.mp3.rec</code> mentre s'enregistra; s'esborra en aturar correctament.</li>
+    <li><strong>Marques</strong> (<code>recorder.mark</code>, <code>RecordingMarks</code>): a <code>&lt;fitxer&gt;.mp3.marques</code>
+      (JSON), mai dins de l'MP3. Es desen senceres a cada marca, des del fil de les ordres (no el d'àudio), i segueixen
+      el fitxer en desar-lo, descartar-lo i a l'historial.</li>
     <li><strong>Historial d'enregistraments:</strong> el mateix fil escriu els mateixos bytes a una còpia
       (<code>RecordingArchive</code>). Un error a la còpia no afecta mai l'enregistrament principal.</li>
     <li>Es compten les mostres perdudes i els avisos de Windows, i s'escriuen al registre amb la posició.</li>

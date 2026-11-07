@@ -580,6 +580,7 @@ Les dues opcions poden conviure: configuració i perfils en JSON (fàcils de cop
 | Historial de reproducció | CSV diari | `%APPDATA%\OnaBages\historial\` |
 | Enregistraments | MP3 | Carpetes de treball i de destinació |
 | Marcadors de recuperació | `.rec` (JSON) | Al costat de l'enregistrament |
+| Marques d'un enregistrament (D-110) | `.marques` (JSON) | Al costat de l'enregistrament (i de la còpia de l'historial) |
 | Formes d'ona | Fitxer de pics (`.obpk`), es guarden 60 dies des de l'últim ús | `%APPDATA%\OnaBages\cache\formes-ona\` |
 | Anàlisi de sonoritat | JSON (memòria cau) | `%APPDATA%\OnaBages\cache\` |
 | Registre tècnic del motor | Text, un fitxer per dia (`motor-AAAA-MM-DD.log`), es guarden 30 dies (D-045) | `%APPDATA%\OnaBages\logs\` |

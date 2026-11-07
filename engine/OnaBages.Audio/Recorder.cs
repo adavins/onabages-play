@@ -101,6 +101,10 @@ public sealed class Recorder : IDisposable
     private volatile float _meterCeiling = float.MaxValue;
     // Còpia d'historial de l'enregistrament en curs (l'escriu el fil de codificació). Null si no n'hi ha.
     private volatile ArchiveCopy? _archive;
+    // Marques de l'enregistrament en curs o del pendent (pas 23a). Dins de _sync.
+    private readonly List<RecordingMark> _marks = [];
+    // Perquè dues marques seguides no escriguin el fitxer de marques alhora (i l'última escriptura sigui la completa).
+    private readonly Lock _marksFile = new();
 
     /// <param name="id">Identificador ("1", "2"...).</param>
     /// <param name="openInput">Obre una entrada per identificador de dispositiu. Per defecte, WASAPI.</param>
@@ -337,6 +341,60 @@ public sealed class Recorder : IDisposable
         RaiseStateChanged();
     }
 
+    /// <summary>Marques de l'enregistrament en curs o del pendent (pas 23a), per ordre. Còpia.</summary>
+    public IReadOnlyList<RecordingMark> Marks
+    {
+        get { lock (_sync) return [.. _marks]; }
+    }
+
+    /// <summary>
+    /// Posa una marca a la posició d'ara de l'enregistrament (pas 23a; D-110) i desa totes les marques al fitxer
+    /// <c>Nom.mp3.marques</c> (i al costat de la còpia de l'historial, si n'hi ha). Només mentre s'enregistra.
+    /// L'enregistrament no es toca mai: si el fitxer de marques no es pot escriure, la marca es queda a la memòria
+    /// (es tornarà a provar amb la marca següent) i es diu.
+    /// </summary>
+    public RecordingMark Mark()
+    {
+        RecordingMark mark;
+        lock (_sync)
+        {
+            if (State != RecorderState.Recording)
+                throw new RecorderCommandException("Només es poden posar marques mentre s'enregistra.");
+            mark = new RecordingMark(Elapsed.TotalSeconds);
+            _marks.Add(mark);
+            _changed = true;
+        }
+        RaiseStateChanged();
+
+        lock (_marksFile)
+        {
+            string? path, archive;
+            List<RecordingMark> marks;
+            lock (_sync)
+            {
+                path = FilePath;
+                archive = ArchiveError is null ? ArchivePath : null;
+                marks = [.. _marks];
+            }
+            if (path is null) return mark;
+            try
+            {
+                RecordingMarks.Write(path, marks);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                throw new RecorderCommandException($"La marca s'ha posat, però no s'ha pogut desar al disc ({ex.Message}). Es tornarà a provar amb la marca següent.");
+            }
+            // La còpia de l'historial és secundària: si no es pot, no es diu res.
+            if (archive is not null)
+            {
+                try { RecordingMarks.Write(archive, marks); }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+            }
+        }
+        return mark;
+    }
+
     /// <summary>Atura l'enregistrament, tanca el fitxer (vàlid) i passa a Pendent.</summary>
     public void Stop()
     {
@@ -370,6 +428,7 @@ public sealed class Recorder : IDisposable
             // L'enregistrament ja és a la llista: l'enregistrador queda net, com si fos nou.
             FilePath = null;
             StartedAt = null;
+            _marks.Clear(); // ja són al fitxer de marques
             Interlocked.Exchange(ref _framesCaptured, 0);
             Interlocked.Exchange(ref _fileSize, 0);
             SetState(RecorderState.Idle);
@@ -494,6 +553,7 @@ public sealed class Recorder : IDisposable
             FilePath = path;
             SampleRate = input.SampleRate;
             StartedAt = startedAt;
+            _marks.Clear();
 
             var encoderForThread = encoder;
             var fileForThread = file;

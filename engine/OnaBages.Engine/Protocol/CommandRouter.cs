@@ -116,6 +116,7 @@ public sealed partial class CommandRouter
                 "recorder.setDevice" => RecorderSetDevice(msg),
                 "recorder.start" => RecorderStart(msg),
                 "recorder.stop" => RecorderCommand(msg, r => r.Stop()),
+                "recorder.mark" => RecorderCommand(msg, r => r.Mark()),
                 "recorder.configure" => RecorderConfigure(msg),
                 "recorder.setGain" => RecorderSetGain(msg),
                 "recorder.setLimiter" => RecorderSetLimiter(msg),

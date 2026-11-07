@@ -236,6 +236,12 @@ public sealed class RecordingList
             try { _sendToRecycleBin(path); }
             catch (Exception ex) { throw new RecordingCommandException($"No s'ha pogut enviar a la paperera: {ex.Message}"); }
         }
+        // Les marques (pas 23a) també van a la paperera; si no es pot, no impedeix descartar.
+        if (File.Exists(RecordingMarks.PathFor(path)))
+        {
+            try { _sendToRecycleBin(RecordingMarks.PathFor(path)); }
+            catch (Exception) { }
+        }
 
         lock (_sync) _items.RemoveAll(i => i.Id == id);
         Changed?.Invoke();
@@ -288,6 +294,15 @@ public sealed class RecordingList
         catch (Exception ex)
         {
             problem = $"No s'ha pogut desar a {target}: {ex.Message}";
+        }
+        // Les marques (pas 23a) segueixen l'enregistrament. Si no es poden moure, l'àudio ja és desat: es diu.
+        if (problem is null)
+        {
+            try { RecordingMarks.Move(source, target); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                problem = $"S'ha desat, però les marques s'han quedat a {RecordingMarks.PathFor(source)}: {ex.Message}";
+            }
         }
 
         lock (_sync)

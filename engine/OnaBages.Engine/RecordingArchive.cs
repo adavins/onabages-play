@@ -1,4 +1,5 @@
 using System.Globalization;
+using OnaBages.Audio;
 
 namespace OnaBages.Engine;
 
@@ -91,6 +92,8 @@ public static class RecordingArchive
                 {
                     File.Delete(file);
                     deleted++;
+                    // Les seves marques (pas 23a), si n'hi ha.
+                    if (File.Exists(RecordingMarks.PathFor(file))) File.Delete(RecordingMarks.PathFor(file));
                 }
                 catch (IOException) { /* obert: es tornarà a provar la propera vegada */ }
                 catch (UnauthorizedAccessException) { }

@@ -30,6 +30,12 @@ public static class RecorderJson
         ["captureGlitches"] = recorder.CaptureGlitches,
         ["inputActive"] = recorder.InputActive,
         ["error"] = recorder.ErrorMessage,
+        // Marques de l'enregistrament en curs o del pendent (fase 5, pas 23a): recorder.mark.
+        ["marks"] = new JsonArray(recorder.Marks.Select(m => (JsonNode)new JsonObject
+        {
+            ["seconds"] = Math.Round(m.Seconds, 3),
+            ["name"] = m.Name,
+        }).ToArray()),
     };
 
     public static JsonArray All(IEnumerable<Recorder> recorders) =>

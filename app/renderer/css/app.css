@@ -1585,6 +1585,19 @@ body.engine-offline .side-content {
   animation: obp-blink 0.5s steps(2, start) infinite;
 }
 
+/* MARCA (fase 5, pas 23b): només mentre s'enregistra; el nombre de marques es veu sempre, també amb el panell estret. */
+.btn-control.rec-mark { flex: 1; white-space: nowrap; }
+.rec-mark-count:not(:empty) {
+  margin-left: 0.3rem;
+  padding: 0 0.35rem;
+  border-radius: 0.6rem;
+  background: var(--bs-info);
+  color: #000;
+  font-size: 0.8em;
+  font-weight: 700;
+}
+.btn-control.rec-mark:hover .rec-mark-count { background: #000; color: var(--bs-info); }
+
 /* Panell estret: als botons només s'hi veu la icona (el text surt en passar-hi el ratolí),
    menys a «Prem de nou per aturar», que s'ha de llegir sempre. */
 @container (max-width: 20rem) {
@@ -2013,6 +2026,8 @@ body.engine-offline .side-content {
 }
 
 .obp-toast > .bi { color: var(--bs-warning); font-size: 1.1rem; line-height: 1.2; }
+.obp-toast-info { border-color: var(--bs-info); background: #123540; }
+.obp-toast-info > .bi { color: var(--bs-info); }
 .obp-toast-hiding { opacity: 0; }
 
 @keyframes obp-toast-in {

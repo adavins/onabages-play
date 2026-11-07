@@ -6,6 +6,7 @@
 // - Aturar: cal prémer-lo dues vegades (la primera el «arma» uns segons), per evitar aturades accidentals.
 // - Pendent: Escoltar (preescolta), Desar (diàleg de Windows) o Descartar (paperera, amb confirmació).
 // - LIM (fase 5, D-083): limitador del que es desa al fitxer; es pot activar i desactivar en qualsevol moment.
+// - MARCA (fase 5, pas 23b; D-110): mentre s'enregistra, posa una marca a la posició d'ara (es veuran a l'editor).
 
 import { RECORDER_STATES, stateBadge } from './states.js';
 import { deviceWarning } from './device-line.js';
@@ -17,6 +18,7 @@ import { saveRecording, discardRecording } from './recording-actions.js';
 import { togglePreview } from './cue-actions.js';
 import { escapeHtml, fileName, formatBytes, formatDuration } from './format.js';
 import { HANDLE_HTML } from './panel-order.js';
+import { showToast } from './toast.js';
 
 /** @typedef {import('../store.js').Store} Store */
 /** @typedef {(cmd: string, params?: object) => Promise<any>} Request */
@@ -103,6 +105,9 @@ export class RecorderPanel {
           <button class="btn btn-outline-light btn-control rec-stop js-stop" type="button" title="Aturar (cal prémer-lo dues vegades)">
             <i class="bi bi-stop-fill"></i><span class="rec-label js-stop-label"> Aturar</span>
           </button>
+          <button class="btn btn-outline-info btn-control rec-mark js-mark d-none" type="button">
+            <i class="bi bi-bookmark-plus-fill"></i><span class="rec-label"> Marca</span><span class="rec-mark-count js-mark-count"></span>
+          </button>
           <button class="btn btn-outline-light btn-control rec-action rec-preview preview-btn js-preview d-none" type="button" title="Escoltar-lo per la preescolta">
             <i class="bi bi-headphones"></i><span class="rec-label js-preview-label"> Escoltar</span>
           </button>
@@ -143,6 +148,7 @@ export class RecorderPanel {
     });
     this.#el.start.addEventListener('click', () => this.#send('recorder.start'));
     this.#el.stop.addEventListener('click', () => this.#stopPressed());
+    this.#el.mark.addEventListener('click', () => this.#mark());
     this.#el.preview.addEventListener('click', () => this.#preview());
     this.#el.edit.addEventListener('click', () => {
       const item = this.#store.pendingRecording(this.#id);
@@ -221,6 +227,12 @@ export class RecorderPanel {
     el.stop.classList.toggle('d-none', pending);
     setEnabled(el.stop, recording);
     if (!recording) this.#disarmStop();
+    const marks = r.marks ?? [];
+    el.mark.classList.toggle('d-none', !recording);
+    el['mark-count'].textContent = marks.length > 0 ? String(marks.length) : '';
+    el.mark.title = "Posar una marca aquí (es veurà a l'editor)" + (marks.length > 0 ? `
+
+${marksText(marks)}` : '');
     const item = pending ? this.#store.pendingRecording(this.#id) : undefined;
     const previewing = !!item && this.#store.isPreviewing(item.path);
     el.preview.classList.toggle('d-none', !pending);
@@ -254,6 +266,8 @@ export class RecorderPanel {
   #sizesText(/** @type {any} */ r) {
     const parts = [];
     if (r.file) parts.push(formatBytes(r.fileSize ?? 0));
+    const marks = r.marks?.length ?? 0;
+    if (marks > 0) parts.push(marks === 1 ? '1 marca' : `${marks} marques`);
     if (r.freeDiskBytes > 0) {
       const bytesPerHour = ((r.bitrateKbps || 320) * 1000 / 8) * 3600;
       const hours = Math.floor(r.freeDiskBytes / bytesPerHour);
@@ -293,6 +307,19 @@ export class RecorderPanel {
     }
     this.#disarmStop();
     this.#send('recorder.stop');
+  }
+
+  /** MARCA: el motor la posa a la posició d'ara; un avís breu ho confirma. */
+  async #mark() {
+    try {
+      const result = await this.#request('recorder.mark', { recorder: this.#id });
+      const marks = result?.recorder?.marks ?? [];
+      const last = marks[marks.length - 1];
+      if (last) showToast(this.element, `Marca ${marks.length} a ${formatDuration(last.seconds)}`,
+        { kind: 'info', icon: 'bi-bookmark-check-fill', ms: 2500 });
+    } catch (err) {
+      showToast(this.element, /** @type {Error} */ (err).message);
+    }
   }
 
   #disarmStop() {
@@ -336,6 +363,11 @@ export class RecorderPanel {
     clearTimeout(this.#messageTimer);
     this.#messageTimer = window.setTimeout(() => { this.#el.message.textContent = ''; }, MESSAGE_MS);
   }
+}
+
+/** «Marques: 1 a 0:12 · 2 a 5:30»: per a l'ajuda del botó. */
+function marksText(/** @type {{ seconds: number }[]} */ marks) {
+  return 'Marques: ' + marks.map((m, i) => `${i + 1} a ${formatDuration(m.seconds)}`).join(' · ');
 }
 
 /** «−1,0»: dB amb un decimal, coma i signe menys de debò. */

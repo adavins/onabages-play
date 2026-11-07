@@ -24,6 +24,7 @@ public sealed class EditorSession : IDisposable
     private readonly string? _cacheFolder;
     private CancellationTokenSource? _job;
     private CancellationTokenSource? _peaksJob;
+    private Thread? _peaksThread; // el fil que calcula la forma d'ona (mentre ho fa, té el fitxer obert)
     private DateTime _lastProgressEvent;
     private DateTime _lastPeaksEvent;
     private byte[]? _peaks;      // pics del fitxer obert (de l'original, no de la versió editada)
@@ -244,11 +245,27 @@ public sealed class EditorSession : IDisposable
             var gains = edit.Gains;
             // Les marques, on queden a la versió que es desa (pas 23c).
             var marks = RecordingMarks.MapToEdited(_marks, segments, edit.Index.FrameSeconds, edit.Index.FrameCount).Select(m => m.Mark).ToList();
+            // Desar a sobre del fitxer obert mentre encara es calcula la forma d'ona (D-116): aquell fil té el fitxer obert
+            // i Windows no deixaria substituir-lo. S'atura el càlcul (després de desar es fa de nou, del fitxer desat) i,
+            // abans de substituir, s'espera que el fil l'hagi deixat.
+            Thread? peaksReading = null;
+            if (_peaksJob is not null && string.Equals(saved, System.IO.Path.GetFullPath(edit.Index.Path), StringComparison.OrdinalIgnoreCase))
+            {
+                peaksReading = _peaksThread;
+                CancelPeaks();
+            }
             StartJob("saving", token =>
             {
+                peaksReading?.Join(TimeSpan.FromSeconds(10)); // s'atura en pocs mil·lisegons
                 edit.Save(saved, p => ReportProgress(p), token);
                 return Mp3FrameIndex.Build(saved, token);
-            }, onDone: index =>
+            },
+            // Si no s'ha pogut desar, el fitxer obert continua igual: la forma d'ona aturada es torna a calcular.
+            onFailed: () =>
+            {
+                if (_peaks is null && Edit is { } current) StartPeaks(current.Index);
+            },
+            onDone: index =>
             {
                 // L'àudio ja és desat. Les marques, al costat; si no n'hi ha cap, no hi ha d'haver fitxer
                 // (si es desa a sobre i s'han eliminat totes). Si no es poden escriure, es diu.
@@ -372,8 +389,11 @@ public sealed class EditorSession : IDisposable
         return Edit ?? throw new EditorStateException("No hi ha cap fitxer obert a l'editor.");
     }
 
-    /// <summary>Feina en segon pla. En acabar (dins del bloqueig): <paramref name="onDone"/> o l'error a <see cref="Error"/>.</summary>
-    private void StartJob(string busy, Func<CancellationToken, Mp3FrameIndex> work, Action<Mp3FrameIndex> onDone)
+    /// <summary>
+    /// Feina en segon pla. En acabar (dins del bloqueig): <paramref name="onDone"/> o l'error a <see cref="Error"/>
+    /// (i, si n'hi ha, <paramref name="onFailed"/>).
+    /// </summary>
+    private void StartJob(string busy, Func<CancellationToken, Mp3FrameIndex> work, Action<Mp3FrameIndex> onDone, Action? onFailed = null)
     {
         var job = new CancellationTokenSource();
         _job = job;
@@ -400,6 +420,7 @@ public sealed class EditorSession : IDisposable
                 {
                     Error = error;
                     if (busy == "opening") { Path = null; Edit = null; }
+                    onFailed?.Invoke();
                 }
             }
             RaiseChanged();
@@ -423,7 +444,7 @@ public sealed class EditorSession : IDisposable
         var job = new CancellationTokenSource();
         _peaksJob = job;
 
-        StartThread("Editor: forma d'ona", () =>
+        _peaksThread = StartThread("Editor: forma d'ona", () =>
         {
             string? error = null;
             try
@@ -452,12 +473,17 @@ public sealed class EditorSession : IDisposable
         });
     }
 
-    private static void StartThread(string name, Action work) => new Thread(() => work())
+    private static Thread StartThread(string name, Action work)
     {
-        IsBackground = true,
-        Name = name,
-        Priority = ThreadPriority.BelowNormal, // mai per davant de l'àudio ni dels enregistraments
-    }.Start();
+        var thread = new Thread(() => work())
+        {
+            IsBackground = true,
+            Name = name,
+            Priority = ThreadPriority.BelowNormal, // mai per davant de l'àudio ni dels enregistraments
+        };
+        thread.Start();
+        return thread;
+    }
 
     private void CancelJob()
     {

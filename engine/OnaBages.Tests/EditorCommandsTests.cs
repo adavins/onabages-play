@@ -213,6 +213,33 @@ public class EditorCommandsTests : IDisposable
     }
 
     [Fact]
+    public void Es_pot_desar_a_sobre_mentre_encara_es_calcula_la_forma_d_ona()
+    {
+        // D-116: abans fallava («el fitxer és obert en un altre lloc»), perquè el càlcul el tenia obert.
+        string source = CreateMp3(120);
+        Editor(Send("editor.open", new JsonObject { ["path"] = source }));
+        var opened = WaitIdle();
+        Assert.True(opened["peaksDone"]!.GetValue<int>() < opened["originalFrames"]!.GetValue<int>(),
+            "La prova només té sentit si la forma d'ona encara no s'ha acabat de calcular");
+        Send("editor.delete", new JsonObject { ["start"] = 0, ["end"] = 0.48 });
+
+        Editor(Send("editor.save", new JsonObject { ["overwrite"] = true }));
+        var editor = WaitIdle();
+
+        Assert.Null(editor["error"]);
+        Assert.Equal(source, editor["savedPath"]!.GetValue<string>());
+        Assert.Equal(opened["originalFrames"]!.GetValue<int>() - 20, Mp3FrameIndex.Build(source).FrameCount);
+        // La forma d'ona del fitxer desat es torna a calcular sencera.
+        for (int i = 0; i < 400 && editor["peaksDone"]!.GetValue<int>() < editor["originalFrames"]!.GetValue<int>(); i++)
+        {
+            Thread.Sleep(25);
+            editor = Editor(Send("editor.get"));
+        }
+        Assert.Equal(editor["originalFrames"]!.GetValue<int>(), editor["peaksDone"]!.GetValue<int>());
+        Assert.Null(editor["peaksError"]);
+    }
+
+    [Fact]
     public void Mentre_es_desa_no_es_pot_editar()
     {
         OpenFile(CreateMp3(30));

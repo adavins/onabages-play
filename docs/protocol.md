@@ -75,7 +75,7 @@ Tots els missatges són objectes JSON amb el camp `"v": 1`.
 | `engine.shutdown` | `force` (opcional, `true`) | `{ stopping: true }` i el motor es tanca. Si hi ha enregistraments en curs, es rebutja amb `recording_active`, tret que s'enviï `force: true`: llavors es tanquen correctament (fitxers vàlids, sense marcador `.rec`) abans d'aturar-se | fase 0 (`force`: fase 1) |
 | `devices.list` | `kind`: `"output"`, `"input"` o `"all"` (per defecte); `includeInactive`: `true` per incloure també els desactivats i desconnectats (per defecte, `false`) | `{ devices: [ … ] }` (vegeu 4.1) | fase 1 |
 | `hardware.report` | — | `{ report: { … } }`: resum de l'arrencada (vegeu 4.4) | fase 1 |
-| `settings.get` | — | `{ settings: { profile: { id, name }, ui: { zoom, recordersPerRow, endWarningSeconds, hideIdleRecorderMeters }, layout: { players, recorders }, program: { name }, folders: { history, logs }, restartNeeded } }`: ajustos desats a `config.json` i al perfil actiu (vegeu 4.9) | fase 2 (`layout`, `recordersPerRow`, `endWarningSeconds`, `restartNeeded`: pas 9; `program`: pas 10); `profile`: fase 4 |
+| `settings.get` | — | `{ settings: { profile: { id, name }, ui: { zoom, recordersPerRow, endWarningSeconds, hideIdleRecorderMeters, playerOrder, recorderOrder }, layout: { players, recorders }, program: { name }, folders: { history, logs }, restartNeeded } }`: ajustos desats a `config.json` i al perfil actiu (vegeu 4.9) | fase 2 (`layout`, `recordersPerRow`, `endWarningSeconds`, `restartNeeded`: pas 9; `program`: pas 10); `profile`: fase 4 |
 | `settings.set` | `ui`, `layout`, `program`, `trim` (`{ "thresholdDb": -60, "leadMs": 10, "tailMs": 50 }`: llindar −40, −50, −60, −70 o −80; marges de 0 a 2.000 ms) `recorderLimiter` (`{ "ceilingDb": -1 }`, de −6 a 0: sostre del limitador dels enregistradors; s'aplica de seguida, també a mig enregistrament), `recents` (`{ "clearOnExit": true }`), `recordingArchive` (`{ "enabled": true, "folder": "E:\\Historial", "keepDays": 30 }`: historial d'enregistraments; `folder` `""` = la carpeta per defecte; `keepDays` de 0 = no esborrar mai a 3.650; s'aplica a partir del pròxim enregistrament) i/o `loudness` (`{ "targetLufs": -12 }`, de −24 a −6; s'aplica a tots els reproductors a partir de la pista següent): només els ajustos a canviar, p. ex. `{ "ui": { "zoom": 1.25 } }` (vegeu 4.9) | `{ settings }` amb tots els ajustos. Es desa de seguida. Si algun valor és fora de marge, `bad_params` i no es canvia res | fase 2 |
 
 ### 4.1. Dispositius
@@ -320,7 +320,8 @@ Objecte `settings` (resultat de `settings.get` i `settings.set`):
 
 ```json
 { "profile": { "id": "La Central", "name": "La Central" },
-  "ui": { "zoom": 1.0, "recordersPerRow": 2, "endWarningSeconds": 10, "hideIdleRecorderMeters": false },
+  "ui": { "zoom": 1.0, "recordersPerRow": 2, "endWarningSeconds": 10, "hideIdleRecorderMeters": false,
+          "playerOrder": ["2", "1"], "recorderOrder": [] },
   "layout": { "players": 2, "recorders": 4 },
   "program": { "name": "Magazín dels dissabtes" },
   "folders": { "history": "C:\\Users\\...\\AppData\\Roaming\\OnaBages\\historial",
@@ -335,6 +336,8 @@ Objecte `settings` (resultat de `settings.get` i `settings.set`):
 | `ui.recordersPerRow` | enter de `1` a `6` (per defecte `2`) | Enregistradors per fila a la interfície |
 | `ui.endWarningSeconds` | enter de `0` a `60` (per defecte `10`; `0` = sense avís) | Segons abans del final en què el temps restant d'un reproductor canvia d'aspecte |
 | `ui.hideIdleRecorderMeters` | `true` / `false` (per defecte `false`) | Amagar el mesurador dels enregistradors que no enregistren (fase 5, D-100). Del perfil |
+| `ui.playerOrder` | llista d'identificadors, p. ex. `["2", "1"]` (per defecte `[]` = per número) | Ordre dels reproductors a la pantalla, d'esquerra a dreta (fase 5, D-105). Del perfil; s'aplica de seguida. Cada identificador de `"1"` a `"6"`, sense repetir-ne cap; els que no hi surten van al final, per número |
+| `ui.recorderOrder` | com `ui.playerOrder` | Ordre dels enregistradors a la graella (fase 5, D-105) |
 | `layout.players` | enter de `1` a `6` (per defecte `2`) | Nombre de reproductors |
 | `layout.recorders` | enter de `1` a `6` (per defecte `2`) | Nombre d'enregistradors |
 | `program.name` | text de com a molt 60 caràcters (per defecte `""`; `""` el treu) | Nom del programa: surt a la barra superior i a l'historial de reproducció (D-043). Els espais repetits i els salts de línia es treuen |

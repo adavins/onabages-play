@@ -368,7 +368,7 @@ public sealed partial class CommandRouter
 
     /// <summary>
     /// Canvia només els ajustos que s'envien (docs/protocol.md, «settings.set»):
-    /// "ui": { zoom, recordersPerRow, endWarningSeconds, hideIdleRecorderMeters }, "layout": { players, recorders } i "program": { name }.
+    /// "ui": { zoom, recordersPerRow, endWarningSeconds, hideIdleRecorderMeters, playerOrder, recorderOrder }, "layout": { players, recorders } i "program": { name }.
     /// Primer es comprova tot; si algun valor és fora de marge, no es canvia res.
     /// </summary>
     private JsonObject SettingsSet(JsonObject msg)
@@ -394,6 +394,8 @@ public sealed partial class CommandRouter
         bool? hideIdleMeters = null;
         if (ui?["hideIdleRecorderMeters"] is { } hideNode)
             hideIdleMeters = hideNode is JsonValue hv && hv.TryGetValue(out bool hb) ? hb : throw new BadParamsException("'ui.hideIdleRecorderMeters' ha de ser true o false.");
+        List<string>? playerOrder = OptionalOrder(ui?["playerOrder"], "ui.playerOrder", EngineConfig.MaxPlayers);
+        List<string>? recorderOrder = OptionalOrder(ui?["recorderOrder"], "ui.recorderOrder", EngineConfig.MaxRecorders);
         int? players = OptionalInt(layout?["players"], "layout.players", 1, EngineConfig.MaxPlayers);
         int? recorders = OptionalInt(layout?["recorders"], "layout.recorders", 1, EngineConfig.MaxRecorders);
         string? programName = OptionalProgramName(program?["name"]);
@@ -421,6 +423,8 @@ public sealed partial class CommandRouter
             if (perRow is { } r) c.RecordersPerRow = r;
             if (warning is { } w) c.EndWarningSeconds = w;
             if (hideIdleMeters is { } hm) c.HideIdleRecorderMeters = hm;
+            if (playerOrder is not null) c.PlayerOrder = playerOrder;
+            if (recorderOrder is not null) c.RecorderOrder = recorderOrder;
             // El nombre d'elements s'aplica en tornar a arrencar el motor. Les assignacions i els ajustos
             // dels que es treuen no s'esborren: si es tornen a posar, tornen tal com eren.
             if (players is { } p) c.PlayerCount = p;
@@ -484,6 +488,8 @@ public sealed partial class CommandRouter
         var (zoom, perRow, warning, players, recorders, programName) =
             config.Read(c => (c.UiZoom, c.RecordersPerRow, c.EndWarningSeconds, c.PlayerCount, c.RecorderCount, c.ProgramName));
         bool hideIdleMeters = config.Read(c => c.HideIdleRecorderMeters);
+        // Còpia dins del bloqueig: la llista de la configuració no surt d'aquí.
+        var (playerOrder, recorderOrder) = config.Read(c => (OrderJson(c.PlayerOrder), OrderJson(c.RecorderOrder)));
         var (profileId, profileName) = config.Read(c => (c.ProfileId, c.ProfileName));
         return new JsonObject
         {
@@ -520,7 +526,8 @@ public sealed partial class CommandRouter
             },
             // Presets del compressor/limitador dels reproductors (fase 4, pas 4b).
             ["processingPresets"] = ProcessingPresetsJson(),
-            ["ui"] = new JsonObject { ["zoom"] = zoom, ["recordersPerRow"] = perRow, ["endWarningSeconds"] = warning, ["hideIdleRecorderMeters"] = hideIdleMeters },
+            ["ui"] = new JsonObject { ["zoom"] = zoom, ["recordersPerRow"] = perRow, ["endWarningSeconds"] = warning, ["hideIdleRecorderMeters"] = hideIdleMeters,
+                ["playerOrder"] = playerOrder, ["recorderOrder"] = recorderOrder },
             ["layout"] = new JsonObject { ["players"] = players, ["recorders"] = recorders },
             ["program"] = new JsonObject { ["name"] = programName },
             // Carpetes que la interfície pot obrir (botons de ⚙ Configuració).
@@ -529,6 +536,23 @@ public sealed partial class CommandRouter
             ["restartNeeded"] = players != _state.Players.Count || recorders != _state.Recorders.Count,
         };
     }
+
+    /// <summary>
+    /// Ordre a la pantalla (pas 16a): llista d'identificadors («1», «2»…) sense repetir-ne cap. Si no s'envia, null;
+    /// una llista buida torna a l'ordre per número.
+    /// </summary>
+    private static List<string>? OptionalOrder(JsonNode? node, string name, int max)
+    {
+        if (node is null) return null;
+        if (node is not JsonArray array || array.Any(i => ReadString(i) is null))
+            throw new BadParamsException($"'{name}' ha de ser una llista d'identificadors (p. ex. [\"2\", \"1\"]).");
+        var ids = array.Select(i => ReadString(i)!).ToList();
+        if (!EngineConfig.IsValidOrder(ids, max))
+            throw new BadParamsException($"'{name}' només pot tenir identificadors de 1 a {max}, sense repetir-ne cap.");
+        return ids;
+    }
+
+    private static JsonArray OrderJson(List<string> ids) => new(ids.Select(id => (JsonNode)id).ToArray());
 
     /// <summary>Nom del programa opcional (si no s'envia, null; "" el treu).</summary>
     private static string? OptionalProgramName(JsonNode? node)

@@ -669,6 +669,9 @@ public sealed class ConfigRepository
             config.RecordersPerRow = Math.Clamp(perRow, 1, EngineConfig.MaxRecorders);
         if (root["ui"]?["hideIdleRecorderMeters"] is JsonValue hideIdle && hideIdle.TryGetValue(out bool hide))
             config.HideIdleRecorderMeters = hide; // pas 14c; camp opcional, sense canvi de versió
+        // Ordre a la pantalla (pas 16a; camps opcionals, sense canvi de versió). Un ordre que no és vàlid no compta.
+        config.PlayerOrder = ReadOrder(root["ui"]?["playerOrder"], EngineConfig.MaxPlayers);
+        config.RecorderOrder = ReadOrder(root["ui"]?["recorderOrder"], EngineConfig.MaxRecorders);
         if (Int(root["ui"]?["endWarningSeconds"]) is { } warning)
             config.EndWarningSeconds = Math.Clamp(warning, 0, EngineConfig.MaxEndWarningSeconds);
         if (Int(root["layout"]?["players"]) is { } players)
@@ -838,6 +841,18 @@ public sealed class ConfigRepository
     private static int? Int(JsonNode? node) =>
         node is JsonValue value && value.TryGetValue(out int i) ? i : null;
 
+    /// <summary>Ordre de reproductors o d'enregistradors (pas 16a). Si falta o no és vàlid, buit (= per número).</summary>
+    private static List<string> ReadOrder(JsonNode? node, int max)
+    {
+        if (node is not JsonArray array) return [];
+        var ids = array.Select(Text).ToList();
+        if (ids.Any(id => id is null)) return [];
+        var order = ids.Select(id => id!).ToList();
+        return EngineConfig.IsValidOrder(order, max) ? order : [];
+    }
+
+    private static JsonArray OrderJson(List<string> ids) => new(ids.Select(id => (JsonNode)id).ToArray());
+
     // -----------------------------------------------------------------------
     // Escriptura
     // -----------------------------------------------------------------------
@@ -888,6 +903,8 @@ public sealed class ConfigRepository
             ["recordersPerRow"] = config.RecordersPerRow,
             ["endWarningSeconds"] = config.EndWarningSeconds,
             ["hideIdleRecorderMeters"] = config.HideIdleRecorderMeters,
+            ["playerOrder"] = OrderJson(config.PlayerOrder),
+            ["recorderOrder"] = OrderJson(config.RecorderOrder),
         },
         ["players"] = WriteAssignments(config.Players),
         ["recorders"] = WriteAssignments(config.Recorders),

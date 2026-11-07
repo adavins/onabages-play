@@ -114,6 +114,23 @@ public sealed class EngineConfig
     /// <summary>Amagar el mesurador dels enregistradors que no enregistren (fase 5, pas 14c; del perfil). Per defecte, no.</summary>
     public bool HideIdleRecorderMeters { get; set; }
 
+    /// <summary>
+    /// Ordre dels reproductors a la pantalla, d'esquerra a dreta (fase 5, pas 16a; del perfil): identificadors.
+    /// Buida = per número. Els que no hi surten van al final, per número.
+    /// </summary>
+    public List<string> PlayerOrder { get; set; } = [];
+
+    /// <summary>Ordre dels enregistradors a la graella (fase 5, pas 16a; del perfil). Com <see cref="PlayerOrder"/>.</summary>
+    public List<string> RecorderOrder { get; set; } = [];
+
+    /// <summary>
+    /// Ordre vàlid: identificadors de 1 a <paramref name="max"/> escrits com els fa el motor («1», «2»…), sense repetir-ne cap.
+    /// </summary>
+    public static bool IsValidOrder(IReadOnlyList<string> ids, int max) =>
+        ids.Count <= max
+        && ids.Distinct(StringComparer.Ordinal).Count() == ids.Count
+        && ids.All(id => int.TryParse(id, out int n) && n >= 1 && n <= max && n.ToString() == id);
+
     /// <summary>Nom del programa que es fa (p. ex. «Magazín dels dissabtes»). Surt a la barra superior i a l'historial. Buit = cap.</summary>
     public string ProgramName { get; set; } = "";
 

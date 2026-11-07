@@ -142,6 +142,55 @@ public class SettingsTests : IDisposable
     }
 
     [Fact]
+    public void L_ordre_dels_panells_es_desa_al_perfil()
+    {
+        var s = Settings("""{ "v": 1, "id": 1, "cmd": "settings.get" }""");
+        Assert.Empty(s["ui"]!["playerOrder"]!.AsArray()); // per defecte, per número
+        Assert.Empty(s["ui"]!["recorderOrder"]!.AsArray());
+
+        s = Settings("""{ "v": 1, "id": 2, "cmd": "settings.set", "ui": { "playerOrder": ["2", "1"], "recorderOrder": ["4", "1", "6"] } }""");
+
+        Assert.Equal(["2", "1"], s["ui"]!["playerOrder"]!.AsArray().Select(n => n!.GetValue<string>()));
+        Assert.Equal(["4", "1", "6"], s["ui"]!["recorderOrder"]!.AsArray().Select(n => n!.GetValue<string>()));
+        var saved = _repository.Load().Config;
+        Assert.Equal(["2", "1"], saved.PlayerOrder);
+        Assert.Equal(["4", "1", "6"], saved.RecorderOrder);
+        Assert.False(s["restartNeeded"]!.GetValue<bool>()); // s'aplica de seguida
+
+        // Una llista buida torna a l'ordre per número; el que no s'envia no canvia.
+        Settings("""{ "v": 1, "id": 3, "cmd": "settings.set", "ui": { "playerOrder": [] } }""");
+        saved = _repository.Load().Config;
+        Assert.Empty(saved.PlayerOrder);
+        Assert.Equal(["4", "1", "6"], saved.RecorderOrder);
+    }
+
+    [Theory]
+    [InlineData("""["1", "1"]""")]      // repetit
+    [InlineData("""["7"]""")]           // no hi ha reproductor 7
+    [InlineData("""["0"]""")]
+    [InlineData("""["01"]""")]          // el motor l'escriu «1»
+    [InlineData("""[1, 2]""")]          // números, no textos
+    [InlineData("\"1,2\"")]             // no és una llista
+    [InlineData("""["1","2","3","4","5","6","1"]""")]
+    public void Un_ordre_que_no_es_valid_no_canvia_res(string order)
+    {
+        var r = _router.Handle($$"""{ "v": 1, "id": 1, "cmd": "settings.set", "ui": { "playerOrder": {{order}} } }""");
+
+        Assert.Equal("bad_params", ErrorCode(r));
+        Assert.False(File.Exists(_repository.FilePath));
+    }
+
+    [Fact]
+    public void Un_ordre_malmes_al_perfil_es_llegeix_com_per_numero()
+    {
+        Settings("""{ "v": 1, "id": 1, "cmd": "settings.set", "ui": { "recorderOrder": ["2", "1"] } }""");
+        string profile = Directory.GetFiles(Path.GetDirectoryName(_repository.FilePath)!, "perfil.json", SearchOption.AllDirectories).Single();
+        File.WriteAllText(profile, File.ReadAllText(profile).Replace("\"2\",", "\"1\",")); // ["1", "1"]
+
+        Assert.Empty(_repository.Load().Config.RecorderOrder);
+    }
+
+    [Fact]
     public void Treure_elements_no_esborra_la_seva_configuracio()
     {
         // Configuració amb 4 enregistradors, cada un amb entrada i nom.

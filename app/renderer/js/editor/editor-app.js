@@ -15,6 +15,9 @@ const els = {
   file: $('ed-file'),
   modified: $('ed-modified'),
   saved: $('ed-saved'),
+  live: $('ed-live'),
+  liveText: $('ed-live-text'),
+  refresh: /** @type {HTMLButtonElement} */ ($('ed-refresh')),
   engine: $('ed-engine'),
   open: $('ed-open'),
   save: /** @type {HTMLButtonElement} */ ($('ed-save')),
@@ -67,6 +70,8 @@ let segmentsKey = '';
 let loadedGainsKey = '';
 /** Últimes marques dibuixades (pas 23c). */
 let marksKey = '';
+/** En actualitzar un enregistrament en curs (pas 24c): la vista, el cursor i la selecció que es mantenen. @type {{ cursor: number, selection: any } | null} */
+let refreshView = null;
 /** Sortides de so (per al desplegable). @type {any[]} */
 let outputs = [];
 let cueDeviceName = '';
@@ -123,6 +128,10 @@ async function init() {
     client.addEventListener('ev:recordings.changed', (e) => {
       recordings = /** @type {any} */ (e).detail.recordings ?? [];
       renderControls();
+      // L'enregistrament que es veu en curs s'ha aturat (ja és a la llista): es torna a obrir sencer, ja editable.
+      if (editor?.live && recordings.some((i) => samePath(i.path, editor.path))) {
+        refresh('L\'enregistrament s\'ha aturat: ja el pots editar sencer.');
+      }
     });
     client.addEventListener('ev:cue.state', (e) => { cueDeviceName = deviceName(/** @type {any} */ (e).detail.cue.deviceId); renderDevice(); });
     client.connect();
@@ -225,7 +234,16 @@ function apply(/** @type {any} */ state) {
       const first = segmentsKey === '';
       segmentsKey = key;
       wave.setSegments(state.segments);
-      if (first) wave.zoomAll();
+      if (first && refreshView) {
+        // Actualització (pas 24c): la mateixa vista, cursor i selecció, ara amb més durada.
+        wave.cursor = Math.min(refreshView.cursor, wave.frames);
+        const sel = refreshView.selection;
+        wave.selection = sel && sel.end <= wave.frames ? sel : null;
+        refreshView = null;
+        wave.requestDraw();
+      } else if (first) {
+        wave.zoomAll();
+      }
     }
     // Fosos (fase 4, pas 6c): l'ona es dibuixa amb el volum que tindrà.
     const gainsKey = JSON.stringify(state.gains ?? []);
@@ -305,6 +323,15 @@ function render() {
   els.file.title = open ? editor.path : '';
   document.title = open ? `${fileName(editor.path)} — Editor` : 'Editor — Ona Bages Play';
   els.modified.classList.toggle('d-none', !editor?.modified);
+  // Enregistrament en curs (pas 24c): fins on arriba la fotografia.
+  const live = open && !!editor.live;
+  els.live.classList.toggle('d-none', !live);
+  els.liveText.textContent = live && editor.duration != null ? `Enregistrant · vista fins a ${formatTime(editor.duration, false)}` : 'Enregistrant';
+  els.live.title = live
+    ? "Aquest fitxer s'està enregistrant. Veus el que hi havia quan l'has obert (Actualitzar per veure'n més).\n" +
+      "Pots escoltar, seleccionar, moure les marques i desar trossos amb «Desar la selecció». Per retallar, fer fosos o desar-lo sencer, espera que s'aturi."
+    : '';
+  els.refresh.classList.toggle('d-none', !live);
   els.saved.classList.toggle('d-none', !editor?.savedPath || editor.modified);
   els.empty.classList.toggle('d-none', open);
 
@@ -357,6 +384,12 @@ function renderControls() {
   els.markPrev.disabled = !hasMarks;
   els.markSel.disabled = !hasMarks;
   els.markNext.disabled = !hasMarks;
+  // Enregistrament en curs (pas 24c): només escoltar, seleccionar, marques i desar trossos.
+  const live = !!editor?.live;
+  els.refresh.disabled = !ready;
+  if (live) {
+    for (const b of [els.save, els.saveAs, els.trimStart, els.trimEnd, els.del, els.keep, els.fadeIn, els.fadeOut, els.undo, els.redo]) b.disabled = true;
+  }
   els.device.disabled = !connected;
 
   // Play ↔ Stop: només es canvia la classe (si es reconstruís el botó, es perdrien clics).
@@ -428,6 +461,21 @@ async function openFile(/** @type {string} */ path) {
   if (!path || !(await confirmDiscard('Obrir un altre fitxer'))) return;
   showMessage('');
   await send('editor.open', { path });
+}
+
+/**
+ * Actualitzar un enregistrament en curs (pas 24c): el motor en torna a fer la fotografia (amb el que s'ha enregistrat
+ * i les marques noves) o, si ja s'ha aturat, l'obre sencer. Es mantenen la vista, el cursor i la selecció.
+ */
+async function refresh(/** @type {string} */ message = '') {
+  if (!editor?.open || editor.busy) return;
+  refreshView = { cursor: wave.cursor, selection: wave.selection };
+  loadedPath = ''; // perquè es torni a carregar la forma d'ona (el fitxer ha crescut)
+  if (await send('editor.refresh')) {
+    if (message) showMessage(message);
+  } else {
+    refreshView = null;
+  }
 }
 
 async function chooseAndOpen() {
@@ -679,6 +727,7 @@ function setupButtons() {
   els.saveAs.addEventListener('click', saveAs);
   els.saveRec.addEventListener('click', saveRecordingEdited);
   els.saveSel.addEventListener('click', saveSelection);
+  els.refresh.addEventListener('click', () => refresh());
   els.home.addEventListener('click', () => moveCursor(0));
   els.play.addEventListener('click', togglePlay);
   els.playSel.addEventListener('click', playSelection);
@@ -742,6 +791,12 @@ function setupKeyboard() {
       if (wave.cancelMarkDrag()) return; // Esc a mig arrossegar una marca: torna on era
       wave.selection = null; wave.requestDraw(); renderTimes();
     };
+
+    // Enregistrament en curs (pas 24c): F5 actualitza; les tecles d'editar i desar no fan res (els botons ho expliquen).
+    if (e.key === 'F5' && editor?.live) action = () => refresh();
+    const editKey = e.key === 'Delete' || e.key === 'Backspace' || (ctrl && ['s', 'z', 'y'].includes(e.key.toLowerCase()))
+      || (!ctrl && ['e', 's'].includes(e.key.toLowerCase()));
+    if (editor?.live && editKey) action = null;
 
     if (action && !(editor?.busy)) {
       e.preventDefault();

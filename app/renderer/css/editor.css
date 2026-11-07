@@ -36,7 +36,8 @@
 }
 
 .ed-modified,
-.ed-saved {
+.ed-saved,
+.ed-live {
   flex: none;
   padding: 0.15rem 0.5rem;
   border-radius: 0.3rem;
@@ -46,8 +47,10 @@
 
 .ed-modified { background: var(--bs-warning); color: #000; }
 .ed-saved { background: var(--bs-success); color: #fff; }
+.ed-live { background: var(--bs-danger); color: #fff; }
 .ed-modified.d-none,
-.ed-saved.d-none { display: none; }
+.ed-saved.d-none,
+.ed-live.d-none { display: none; }
 
 .ed-actions {
   display: flex;

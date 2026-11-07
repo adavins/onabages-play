@@ -157,8 +157,10 @@ export class RecorderPanel {
     this.#el.mark.addEventListener('click', () => this.#mark());
     this.#el.preview.addEventListener('click', () => this.#preview());
     this.#el.edit.addEventListener('click', () => {
-      const item = this.#store.pendingRecording(this.#id);
-      if (item) /** @type {any} */ (window).onabages?.openEditor(item.path); // finestra de l'editor (fase 3)
+      // Pendent: el fitxer acabat. Enregistrant (pas 24c): el fitxer en curs, que l'editor obre només per llegir.
+      const r = this.#store.recorders.get(this.#id);
+      const path = r?.state === 'recording' ? r.file : this.#store.pendingRecording(this.#id)?.path;
+      if (path) /** @type {any} */ (window).onabages?.openEditor(path); // finestra de l'editor (fase 3)
     });
     this.#el.save.addEventListener('click', () => this.#save());
     this.#el.discard.addEventListener('click', () => this.#discard());
@@ -246,8 +248,11 @@ ${marksText(marks)}` : '');
     el.preview.title = previewing ? 'Aturar la preescolta' : 'Escoltar-lo per la preescolta';
     el['preview-label'].textContent = previewing ? ' Aturar' : ' Escoltar';
     setEnabled(el.preview, !!item?.exists && !item?.busy);
-    el.edit.classList.toggle('d-none', !pending);
-    setEnabled(el.edit, !!item?.exists && !item?.busy);
+    el.edit.classList.toggle('d-none', !pending && !recording);
+    setEnabled(el.edit, recording ? !!r.file : !!item?.exists && !item?.busy);
+    el.edit.title = recording
+      ? "Obrir-lo a l'editor mentre s'enregistra: per moure les marques i desar trossos (no s'hi pot retallar fins que s'aturi)"
+      : "Obrir-lo a l'editor";
     el.save.classList.toggle('d-none', !pending);
     el.discard.classList.toggle('d-none', !pending);
     setEnabled(el.save, !!item?.exists && !item?.busy);

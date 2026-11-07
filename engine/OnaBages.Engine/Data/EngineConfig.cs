@@ -204,6 +204,12 @@ public sealed class EngineConfig
     /// <summary>Reproductors que normalitzen (per defecte, cap: D-070).</summary>
     public HashSet<string> NormalizedPlayers { get; } = [];
 
+    /// <summary>Reproductors amb l'anivellador activat (fase 5, pas 30b; D-135; per defecte, cap).</summary>
+    public HashSet<string> LeveledPlayers { get; } = [];
+
+    /// <summary>El màxim que pot pujar l'anivellador (dB, comú a tots els reproductors).</summary>
+    public double LevelerMaxBoostDb { get; set; } = Leveler.DefaultMaxBoostDb;
+
     /// <summary>Objectiu de la normalització en LUFS (per defecte −12: D-070).</summary>
     public double LoudnessTargetLufs { get; set; } = DefaultLoudnessTargetLufs;
 

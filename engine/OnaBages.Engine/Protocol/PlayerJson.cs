@@ -37,6 +37,13 @@ public static class PlayerJson
             ["leadMs"] = player.Trim.LeadMs,
             ["tailMs"] = player.Trim.TailMs,
         },
+        // Anivellador (fase 5, pas 30b): gainDb és el guany al punt que sona (null = cap). L'objectiu és el de la normalització.
+        ["leveler"] = new JsonObject
+        {
+            ["enabled"] = player.Level,
+            ["maxBoostDb"] = player.LevelerMaxBoostDb,
+            ["gainDb"] = player.LevelerGainDb is { } lg ? Math.Round(lg, 1) : null,
+        },
         // Normalització de sonoritat (fase 4, pas 5b): gainDb és el guany de la pista que sona (null = cap).
         ["normalization"] = new JsonObject
         {
@@ -68,6 +75,7 @@ public static class PlayerJson
                 ["id"] = p.Id,
                 ["position"] = Seconds(p.Position),
                 ["duration"] = Seconds(p.Duration),
+                ["levelerGainDb"] = p.LevelerGainDb is { } lg ? Math.Round(lg, 1) : null, // fase 5, D-135
             });
         }
 

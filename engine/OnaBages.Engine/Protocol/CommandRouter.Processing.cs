@@ -87,6 +87,26 @@ public sealed partial class CommandRouter
     }
 
     /// <summary>
+    /// Anivellador d'un reproductor (fase 5, pas 30b; D-135): player, enabled. Amb una pista carregada s'aplica de seguida
+    /// (sonant, amb un fos imperceptible). Es desa al perfil.
+    /// </summary>
+    private JsonObject PlayerSetLeveler(JsonObject msg)
+    {
+        var player = GetPlayer(msg);
+        if (msg["enabled"] is not JsonValue v || !v.TryGetValue(out bool enabled))
+            throw new BadParamsException("'enabled' ha de ser true o false.");
+
+        double maxBoost = _config?.Read(c => c.LevelerMaxBoostDb) ?? Leveler.DefaultMaxBoostDb;
+        player.SetLeveler(enabled, maxBoost);
+        _config?.Update(c =>
+        {
+            if (enabled) c.LeveledPlayers.Add(player.Id);
+            else c.LeveledPlayers.Remove(player.Id);
+        });
+        return new JsonObject { ["player"] = PlayerJson.Player(player) };
+    }
+
+    /// <summary>
     /// Fos entre pistes que s'encadenen soles (fase 5; D-077): player, ms (de 0 a 10.000; 0 = cap fos).
     /// S'aplica a partir de la pista següent. Es desa al perfil.
     /// </summary>

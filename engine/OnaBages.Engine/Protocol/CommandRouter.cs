@@ -95,6 +95,7 @@ public sealed partial class CommandRouter
                 "player.setVolume" => PlayerSetVolume(msg),
                 "player.setProcessing" => PlayerSetProcessing(msg),
                 "player.setNormalization" => PlayerSetNormalization(msg),
+                "player.setLeveler" => PlayerSetLeveler(msg),
                 "player.setCrossfade" => PlayerSetCrossfade(msg),
                 "player.setTrim" => PlayerSetTrim(msg),
                 "processing.savePreset" => ProcessingSavePreset(msg),
@@ -577,13 +578,15 @@ public sealed partial class CommandRouter
         var recents = msg["recents"] as JsonObject;
         var fadeOut = msg["fadeOut"] as JsonObject;
         var silence = msg["silenceAlarm"] as JsonObject;
-        if (ui is null && layout is null && program is null && loudness is null && trim is null && limiter is null && archive is null && recents is null && fadeOut is null && silence is null)
+        var levelerSettings = msg["leveler"] as JsonObject;
+        if (ui is null && layout is null && program is null && loudness is null && trim is null && limiter is null && archive is null && recents is null && fadeOut is null && silence is null && levelerSettings is null)
             throw new BadParamsException("Falta el camp 'ui', 'layout', 'program', 'loudness', 'trim', 'fadeOut', 'recorderLimiter', 'silenceAlarm', 'recordingArchive' o 'recents' amb els ajustos a canviar.");
         bool? silenceEnabled = null;
         if (silence?["enabled"] is { } silenceNode)
             silenceEnabled = silenceNode is JsonValue sv && sv.TryGetValue(out bool sb) ? sb : throw new BadParamsException("'silenceAlarm.enabled' ha de ser true o false.");
         double? silenceThreshold = OptionalNumber(silence?["thresholdDb"], "silenceAlarm.thresholdDb", Recorder.MinSilenceThresholdDb, Recorder.MaxSilenceThresholdDb);
         int? silenceSeconds = OptionalInt(silence?["seconds"], "silenceAlarm.seconds", Recorder.MinSilenceSeconds, Recorder.MaxSilenceSeconds);
+        double? levelerMaxBoost = OptionalNumber(levelerSettings?["maxBoostDb"], "leveler.maxBoostDb", 0, Leveler.MaxMaxBoostDb);
         int? fadeOutMs = OptionalInt(fadeOut?["ms"], "fadeOut.ms", Player.MinFadeOutMs, Player.MaxFadeOutMs);
         bool? clearOnExit = null;
         if (recents?["clearOnExit"] is { } clearNode)
@@ -642,6 +645,7 @@ public sealed partial class CommandRouter
             if (silenceEnabled is { } se) c.SilenceAlarmEnabled = se;
             if (silenceThreshold is { } st) c.SilenceThresholdDb = Math.Round(st);
             if (silenceSeconds is { } ss) c.SilenceSeconds = ss;
+            if (levelerMaxBoost is { } lmb) c.LevelerMaxBoostDb = Math.Round(lmb);
             if (archiveEnabled is { } ae) c.RecordingArchiveEnabled = ae;
             if (archiveFolder is not null) c.RecordingArchiveFolder = archiveFolder.Length == 0 ? null : archiveFolder;
             if (keepDays is { } kd) c.RecordingArchiveKeepDays = kd;
@@ -669,6 +673,14 @@ public sealed partial class CommandRouter
             var (trimmed, th, lead, tail) = config.Read(c => (c.TrimPlayers.ToHashSet(), c.TrimThresholdDb, c.TrimLeadMs, c.TrimTailMs));
             foreach (var player in _state.Players)
                 player.SetTrim(new Player.TrimSettings(trimmed.Contains(player.Id), th, lead, tail));
+        }
+
+        // El màxim de l'anivellador, a tots els reproductors (a partir de la pista següent).
+        if (levelerMaxBoost is not null)
+        {
+            var (leveled, max) = config.Read(c => (c.LeveledPlayers.ToHashSet(), c.LevelerMaxBoostDb));
+            foreach (var player in _state.Players)
+                player.SetLeveler(leveled.Contains(player.Id), max);
         }
 
         // L'objectiu nou s'aplica a tots els reproductors (a partir de la pista següent).
@@ -749,6 +761,12 @@ public sealed partial class CommandRouter
                 ["ceilingDb"] = config.Read(c => c.RecorderLimiterCeilingDb),
                 ["minCeilingDb"] = Recorder.MinLimiterCeilingDb,
                 ["maxCeilingDb"] = Recorder.MaxLimiterCeilingDb,
+            },
+            // Anivellador (fase 5, pas 30b): el màxim que pot pujar; l'objectiu és el de la normalització (loudness.targetLufs).
+            ["leveler"] = new JsonObject
+            {
+                ["maxBoostDb"] = config.Read(c => c.LevelerMaxBoostDb),
+                ["maxMaxBoostDb"] = Leveler.MaxMaxBoostDb,
             },
             // Alarma de silenci dels enregistradors (fase 5, pas 25a; del perfil).
             ["silenceAlarm"] = config.Read(c => new JsonObject

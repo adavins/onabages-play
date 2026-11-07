@@ -782,6 +782,20 @@ public sealed class ConfigRepository
         }
 
         // Normalització de sonoritat (pas 5b; camp opcional, sense canvi de versió).
+        // Anivellador (fase 5, pas 30b; camp opcional, sense canvi de versió).
+        if (root["leveler"] is JsonObject leveler)
+        {
+            if (leveler["maxBoostDb"] is JsonValue lb && lb.TryGetValue(out double maxBoost) && double.IsFinite(maxBoost))
+                config.LevelerMaxBoostDb = Math.Round(Math.Clamp(maxBoost, 0, Leveler.MaxMaxBoostDb));
+            if (leveler["players"] is JsonArray leveled)
+            {
+                foreach (var item in leveled)
+                {
+                    if (Text(item) is { Length: > 0 } playerId) config.LeveledPlayers.Add(playerId);
+                }
+            }
+        }
+
         if (root["normalization"] is JsonObject normalization)
         {
             if (normalization["targetLufs"] is JsonValue t && t.TryGetValue(out double target) && double.IsFinite(target))
@@ -996,6 +1010,11 @@ public sealed class ConfigRepository
             ["enabled"] = config.SilenceAlarmEnabled,
             ["thresholdDb"] = config.SilenceThresholdDb,
             ["seconds"] = config.SilenceSeconds,
+        },
+        ["leveler"] = new JsonObject
+        {
+            ["maxBoostDb"] = config.LevelerMaxBoostDb,
+            ["players"] = new JsonArray(config.LeveledPlayers.Order(StringComparer.Ordinal).Select(id => (JsonNode)id).ToArray()),
         },
         ["normalization"] = new JsonObject
         {

@@ -261,37 +261,59 @@ public sealed class Player : IDisposable
     /// <paramref name="exact"/>) i, amb el retall, fins a <paramref name="end"/>.
     /// </summary>
     /// <exception cref="AudioFileException">Si no es pot llegir.</exception>
-    private static TrackReader OpenTrack(PlaylistItem item, int sampleRate, TimeSpan start, TimeSpan? end, bool exact)
+    private TrackReader OpenTrack(PlaylistItem item, int sampleRate, TimeSpan start, TimeSpan? end, bool exact)
     {
         var source = AudioFileSource.Open(item.Path, sampleRate, start, exact);
         // El final no pot passar del final del fitxer.
         TimeSpan? limit = end is { } e && e < source.Duration ? e : null;
-        return new TrackReader(source, start, limit is { } l ? l : source.Duration, FramesUntil(start, limit, sampleRate));
+        // Anivellador (D-135): llegeix tant per endavant com cal, a sobre de la lectura de la pista. Sense bloqueig
+        // (també el crida el fil de lectura): són valors simples que es llegeixen sencers.
+        var leveler = _level ? (NormalizationTargetLufs, _levelerMaxBoostDb) : ((double, double)?)null;
+        return new TrackReader(source, start, limit is { } l ? l : source.Duration, FramesUntil(start, limit, sampleRate), sampleRate, leveler);
     }
 
     /// <summary>
     /// Una pista oberta per al fil de lectura: no en dona més mostres de les que toquen (amb el retall,
     /// para a l'últim so més el marge). <see cref="Duration"/> és on s'acaba de sonar (temps del fitxer).
     /// </summary>
-    private sealed class TrackReader(AudioFileSource source, TimeSpan start, TimeSpan duration, long frames) : IDisposable
+    private sealed class TrackReader : IDisposable
     {
-        private long _remaining = frames < 0 ? long.MaxValue : frames * 2; // mostres (estèreo)
+        private readonly AudioFileSource _source;
+        private readonly TimeSpan _start, _duration;
+        private long _remaining; // mostres (estèreo)
+        private readonly Leveler? _leveler;
+
+        /// <param name="leveler">Objectiu (LUFS) i màxim que pot pujar l'anivellador; null = sense anivellador.</param>
+        public TrackReader(AudioFileSource source, TimeSpan start, TimeSpan duration, long frames, int sampleRate,
+            (double TargetLufs, double MaxBoostDb)? leveler)
+        {
+            _source = source;
+            _start = start;
+            _duration = duration;
+            _remaining = frames < 0 ? long.MaxValue : frames * 2;
+            if (leveler is { } l) _leveler = new Leveler(ReadRaw, sampleRate, l.TargetLufs, l.MaxBoostDb);
+        }
+
+        /// <summary>Guany de l'anivellador al punt que s'acaba de llegir (null sense anivellador).</summary>
+        public double? LevelerGainDb => _leveler?.CurrentGainDb;
 
         /// <summary>On comença a sonar (temps del fitxer).</summary>
-        public TimeSpan Start => start;
+        public TimeSpan Start => _start;
 
         /// <summary>On s'acaba de sonar (temps del fitxer): el final o, amb el retall, l'últim so més el marge.</summary>
-        public TimeSpan Duration => duration;
+        public TimeSpan Duration => _duration;
 
-        public int Read(Span<float> buffer)
+        public int Read(Span<float> buffer) => _leveler is { } l ? l.Read(buffer) : ReadRaw(buffer);
+
+        private int ReadRaw(Span<float> buffer)
         {
             if (_remaining <= 0) return 0;
-            int read = source.Read(buffer[..(int)Math.Min(buffer.Length, _remaining)]);
+            int read = _source.Read(buffer[..(int)Math.Min(buffer.Length, _remaining)]);
             _remaining -= read;
             return read;
         }
 
-        public void Dispose() => source.Dispose();
+        public void Dispose() => _source.Dispose();
     }
 
     // --- Normalització de sonoritat (fase 4, pas 5b; D-071) ---
@@ -322,10 +344,62 @@ public sealed class Player : IDisposable
 
     /// <summary>Guany per a una pista amb la configuració d'ara (dB), o null si no se n'hi aplica cap.</summary>
     /// Si sona un sol canal pels dos (D-132), sona 3 dB més fort del que s'ha mesurat (amb el canal buit): es compta.
+    /// Amb l'anivellador (D-135) no se n'aplica cap: ja porta la pista a l'objectiu (seria corregir-ho dues vegades).
     private double? NormalizationFor(PlaylistItem item) =>
-        Normalize && item.LoudnessLufs is { } lufs
+        Normalize && !_level && item.LoudnessLufs is { } lufs
             ? Math.Round(Math.Min(MaxNormalizationBoostDb, NormalizationTargetLufs - lufs - ChannelFixLoudnessDb(item)), 1)
             : null;
+
+    // --- Anivellador (fase 5, pas 30b; D-135) ---
+
+    private volatile bool _level;
+    private double _levelerMaxBoostDb = Leveler.DefaultMaxBoostDb;
+    // Guany de l'anivellador per fotograma escrit (el fil de lectura va uns segons per davant): Tick agafa el del que sona.
+    private readonly ConcurrentQueue<(long Frame, double GainDb)> _levelerGains = new();
+
+    /// <summary>L'anivellador és activat (iguala el volum de la parla mentre sona).</summary>
+    public bool Level => _level;
+
+    /// <summary>El màxim que pot pujar l'anivellador (dB).</summary>
+    public double LevelerMaxBoostDb => _levelerMaxBoostDb;
+
+    /// <summary>Guany de l'anivellador al punt que sona ara (dB), o null si no n'hi ha.</summary>
+    public double? LevelerGainDb { get; private set; }
+
+    /// <summary>
+    /// Activa o desactiva l'anivellador i en fixa el màxim. Si hi ha una pista carregada i canvia l'interruptor, s'aplica
+    /// de seguida: sonant, es torna a obrir on és amb un fos de <see cref="LevelerSwitchFadeMs"/> (no se sent el canvi);
+    /// en pausa o preparada, es torna a obrir al mateix punt. El màxim nou, a partir de la pista següent.
+    /// </summary>
+    public void SetLeveler(bool enabled, double maxBoostDb)
+    {
+        lock (_sync)
+        {
+            _levelerMaxBoostDb = Math.Clamp(double.IsFinite(maxBoostDb) ? maxBoostDb : Leveler.DefaultMaxBoostDb, 0, Leveler.MaxMaxBoostDb);
+            bool changed = enabled != _level;
+            _level = enabled;
+            if (!enabled) LevelerGainDb = null;
+            _changed = true;
+            if (changed && CurrentItemId is { } id && Playlist.Find(id) is { } item)
+            {
+                var position = CurrentPosition();
+                if (State == PlayerState.Playing && _stream is not null && _output is not null)
+                {
+                    CrossfadeTo(item, position, LevelerSwitchFadeMs);
+                }
+                else if (State is PlayerState.Ready or PlayerState.Paused)
+                {
+                    var previous = State;
+                    PrepareItem(id, position);
+                    if (State == PlayerState.Ready && previous == PlayerState.Paused) SetState(PlayerState.Paused);
+                }
+            }
+        }
+        RaiseStateChanged();
+    }
+
+    /// <summary>Fos en activar o desactivar l'anivellador mentre sona (ms).</summary>
+    public const int LevelerSwitchFadeMs = 100;
 
     /// <summary>Quant més fort sona la pista amb la correcció de canals: un canal pels dos, el doble de potència (+3 dB).</summary>
     private static double ChannelFixLoudnessDb(PlaylistItem item) =>
@@ -639,6 +713,13 @@ public sealed class Player : IDisposable
                 // Canals (D-132): si s'ha premut el botó o l'anàlisi ha arribat mentre sonava, de seguida.
                 UpdateChannelFix();
 
+                // Anivellador (D-135): el guany del tros que sona ara.
+                while (_levelerGains.TryPeek(out var g) && g.Frame <= _stream.FramesPlayed)
+                {
+                    _levelerGains.TryDequeue(out _);
+                    LevelerGainDb = _level ? g.GainDb : null;
+                }
+
                 if (State == PlayerState.Playing && _stream.PlayedOut)
                     FinishList();
             }
@@ -786,6 +867,8 @@ public sealed class Player : IDisposable
             IsBackground = true,
             Name = $"Reproductor {Id}: lectura",
         };
+        _levelerGains.Clear(); // el fil nou torna a comptar els fotogrames des de zero
+        LevelerGainDb = null;
         _readerThread.Start();
 
         SetState(PlayerState.Ready);
@@ -796,7 +879,7 @@ public sealed class Player : IDisposable
     /// mentre la nova puja, durant <see cref="CrossfadeMs"/>. Si la pista nova no es pot obrir, la que sona
     /// continua com si res (i es diu per què). Dins de _sync, amb la pista sonant.
     /// </summary>
-    private void CrossfadeTo(PlaylistItem item, TimeSpan startAt)
+    private void CrossfadeTo(PlaylistItem item, TimeSpan startAt, int? fadeMs = null)
     {
         var output = _output!;
         var stream = _stream!;
@@ -837,6 +920,8 @@ public sealed class Player : IDisposable
             IsBackground = true,
             Name = $"Reproductor {Id}: lectura",
         };
+        _levelerGains.Clear(); // el fil nou torna a comptar els fotogrames des de zero
+        LevelerGainDb = null;
         _readerThread.Start();
 
         // 4. Quan hi ha so preparat, el fil d'àudio hi passa amb el fos.
@@ -846,7 +931,7 @@ public sealed class Player : IDisposable
         _keptPosition = startAt;
         _trackStartFrame = 0;
         Playlist.ClearCueIf(item.Id);
-        stream.SwitchTo(ring, (int)((long)_crossfadeMs * sampleRate / 1000), item.ChannelFix);
+        stream.SwitchTo(ring, (int)((long)(fadeMs ?? _crossfadeMs) * sampleRate / 1000), item.ChannelFix);
         _channelFixItem = item.Id;
         _channelFixApplied = item.ChannelFix;
         // L'estat continua sent «sonant», però la pista ha canviat: s'ha d'avisar la interfície.
@@ -1001,6 +1086,9 @@ public sealed class Player : IDisposable
                 {
                     Write(chunk.AsSpan(0, read));
                 }
+
+                // Anivellador (D-135): el guany d'aquest tros, per quan soni.
+                if (source.LevelerGainDb is { } levelerGain) _levelerGains.Enqueue((framesWritten, levelerGain));
             }
         }
         catch (Exception ex)

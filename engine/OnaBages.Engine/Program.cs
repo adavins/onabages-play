@@ -418,6 +418,9 @@ foreach (var player in state.Players)
     // Normalització de sonoritat (fase 4, pas 5b): quins reproductors i amb quin objectiu.
     var (normalize, target) = config.Read(c => (c.NormalizedPlayers.Contains(player.Id), c.LoudnessTargetLufs));
     player.SetNormalization(normalize, target);
+    // Anivellador (fase 5, pas 30b): el del perfil.
+    var (level, levelerMax) = config.Read(c => (c.LeveledPlayers.Contains(player.Id), c.LevelerMaxBoostDb));
+    player.SetLeveler(level, levelerMax);
     // Fos entre pistes encadenades (fase 5).
     player.SetCrossfade(config.Read(c => c.PlayerCrossfadeMs.GetValueOrDefault(player.Id)));
     // Retall de silencis (fase 5).

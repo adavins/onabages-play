@@ -66,7 +66,7 @@ export class PlayerPanel {
     this.element.dataset.panelId = id; // per canviar-lo de lloc (panel-order.js)
     this.element.innerHTML = `
       <div class="card-header panel-header">
-        <span class="panel-header-left">${HANDLE_HTML}<span class="panel-title"><i class="bi bi-music-note-list"></i> Reproductor ${escapeHtml(id)}</span></span>
+        <span class="panel-header-left">${HANDLE_HTML}<span class="panel-title player-number" title="Reproductor ${escapeHtml(id)}"><i class="bi bi-music-note-list"></i> ${escapeHtml(id)}</span></span>
         <span class="panel-header-right">
           <button class="btn btn-sm dsp-btn norm-btn js-norm" type="button"><i class="d-none"></i><span class="norm-label">NORM</span></button>
           <button class="btn btn-sm dsp-btn level-btn js-level" type="button"><i class="d-none"></i><span>NIV</span></button>

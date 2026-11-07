@@ -2208,3 +2208,6 @@ body.engine-offline .side-content {
 /* Botó NIV (anivellador, fase 5, pas 30c; D-136): el mateix estil que NORM, encès en blau. */
 .level-btn.on,
 .level-btn.on:hover { color: #000; background: var(--obp-level); border-color: var(--obp-level); }
+
+/* Capçalera del reproductor: només el número (amb tants botons, «Reproductor 1» no hi cabia; D-137). */
+.player-number { font-size: 1.15em; }

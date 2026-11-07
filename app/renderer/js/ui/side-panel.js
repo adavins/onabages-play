@@ -1,7 +1,8 @@
 // @ts-check
 // Panell lateral de la dreta (fase 4, pas 2b; D-062).
 //
-// - Plegat: només una franja d'icones (Àudios, Llistes, Recents i, a baix, plegar/desplegar).
+// - Plegat: només una franja d'icones (Àudios, Llistes, Botonera, Recents i, a baix, plegar/desplegar).
+// - La icona de la Botonera es posa del seu color mentre hi sona alguna cosa (fase 5, pas 28c).
 // - Obert: la pestanya triada a dalt i la preescolta sempre a baix.
 // - En obrir-lo, la finestra es fa més ampla (ho fa Electron), perquè els reproductors i els
 //   enregistradors no canviïn de mida. Si no pot créixer, el panell surt per sobre (.side-overlay).
@@ -12,7 +13,7 @@
 /** @type {any} API de preload.js */
 const bridge = /** @type {any} */ (window).onabages;
 
-const TABS = ['audios', 'lists', 'recents'];
+const TABS = ['audios', 'lists', 'cart', 'recents'];
 const TAB_STORAGE_KEY = 'obp.sideTab';
 
 /**
@@ -65,6 +66,18 @@ export function setupSidePanel(store) {
     cuePlaying = playing;
     updateToggle();
   });
+  // Botonera: la seva icona s'encén (color + icona d'altaveu) mentre hi sona alguna cosa.
+  const cartButton = /** @type {HTMLElement | null} */ (side.querySelector('.side-btn[data-tab="cart"]'));
+  const updateCart = () => {
+    const on = (store.cart?.playing?.length ?? 0) > 0;
+    cartButton?.classList.toggle('cart-on', on);
+    const icon = cartButton?.querySelector('i');
+    if (icon) icon.className = `bi ${on ? 'bi-volume-up-fill' : 'bi-grid-3x3-gap-fill'}`;
+    if (cartButton) cartButton.title = on ? 'Botonera: hi sona alguna cosa' : 'Botonera (teclat numèric)';
+  };
+  store.addEventListener('cart', updateCart);
+  store.addEventListener('reset', updateCart);
+
   // Qualsevol clic dins del panell (o a les icones) vol dir que l'operador l'està fent servir: ja no es plega sol.
   side.addEventListener('pointerdown', () => { openedByCue = false; });
 

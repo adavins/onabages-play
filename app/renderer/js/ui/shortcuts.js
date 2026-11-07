@@ -19,6 +19,8 @@ export const SHORTCUTS_HELP = [
   ['F1, F2… F6', "Play / Pausa del 1r, 2n… 6è reproductor (d'esquerra a dreta)"],
   ['Maj + F1… F6', 'Stop del 1r… 6è reproductor'],
   ['Ctrl + / Ctrl − / Ctrl 0', 'Escala de la interfície'],
+  ['Teclat numèric: 1… 9, 0', 'Botonera: fer sonar (o aturar) els 10 primers botons de la pàgina'],
+  ['Teclat numèric: + · − · ,', 'Botonera: pàgina següent · anterior · aturar-ho tot'],
   ['A la llista: P', 'Preescoltar la pista seleccionada'],
   ['A la llista: C · D · B · A', 'Cue · Duplicar · Bucle · Avanç automàtic'],
   ['A la llista: Supr', 'Treure les pistes seleccionades'],

@@ -9,6 +9,7 @@ import { PlayerPanel } from './ui/player-panel.js';
 import { RecorderPanel } from './ui/recorder-panel.js';
 import { RecentsPanel } from './ui/recents-panel.js';
 import { CuePanel } from './ui/cue-panel.js';
+import { CartPanel } from './ui/cart-panel.js';
 import { ExplorerTab } from './ui/explorer-tab.js';
 import { editSettings } from './ui/settings-dialog.js';
 import { setupShortcuts, playKey } from './ui/shortcuts.js';
@@ -41,6 +42,7 @@ const els = {
   recorders: $('recorders'),
   recents: $('recents'),
   cue: $('cue'),
+  cart: $('cart'),
   settings: $('btn-settings'),
   editor: $('btn-editor'),
   help: /** @type {HTMLButtonElement} */ ($('btn-help')),
@@ -73,6 +75,8 @@ let recorderPanels = new Map();
 let recentsPanel = null;
 /** @type {CuePanel | null} */
 let cuePanel = null;
+/** @type {CartPanel | null} */
+let cartPanel = null;
 
 startClock();
 setupWindowControls();
@@ -89,6 +93,15 @@ setupHelpMenu(els.help);
 setupLockButton();
 setupProfileMenu({ button: els.profile, request, onSettings: applySettings, onSwitch: restartForProfile });
 setupShortcuts(store, request, (playerId, text) => playerPanels.get(playerId)?.showMessage(text));
+// Teclat numèric: la botonera (pas 28c). No mentre s'escriu en un camp ni amb un diàleg obert.
+window.addEventListener('keydown', (e) => {
+  if (!e.code.startsWith('Numpad') || e.ctrlKey || e.altKey || e.metaKey) return;
+  if (document.querySelector('dialog[open]')) return;
+  if (/** @type {HTMLElement} */ (e.target).closest?.('input, textarea, select, [contenteditable="true"]')) return;
+  if (e.repeat) { if (/^Numpad[0-9]$/.test(e.code)) e.preventDefault(); return; } // mantenir-la premuda no fa sonar-parar-sonar
+  if (!cartPanel?.handleKey(e)) return;
+  e.preventDefault();
+}, { capture: true });
 // Canviar de lloc els panells arrossegant-los per la nansa (pas 16b, D-105).
 setupPanelDrag(els.players, 'player', (from, to) => swapPanels('player', from, to));
 setupPanelDrag(els.recorders, 'recorder', (from, to) => swapPanels('recorder', from, to));
@@ -286,12 +299,15 @@ function setupPanels() {
   store.addEventListener('playlist', (e) => playerPanels.get(/** @type {any} */ (e).detail)?.renderPlaylist());
   // La preescolta: el seu panell i, a les llistes, la fila que hi sona (taronja).
   store.addEventListener('cue', renderAll);
+  store.addEventListener('cart', () => cartPanel?.render());
+  store.addEventListener('cartPosition', () => cartPanel?.renderPlaying());
   store.addEventListener('cuePosition', () => cuePanel?.render());
   store.addEventListener('devices', renderAll);
   store.addEventListener('meters', () => {
     for (const [id, panel] of playerPanels) panel.updateMeter(store.meters.players?.[id], store.meters.playerReduction?.[id]);
     for (const [id, panel] of recorderPanels) panel.updateMeter(store.meters.recorders?.[id], store.meters.recorderReduction?.[id]);
     cuePanel?.updateMeter(store.meters.cue);
+    cartPanel?.updateMeter(store.meters.cart);
   });
 }
 
@@ -301,6 +317,7 @@ function buildPanels() {
   recorderPanels = new Map([...store.recorders.keys()].map((id) => [id, new RecorderPanel(store, id, request)]));
   recentsPanel = new RecentsPanel(store, request);
   cuePanel = new CuePanel(store, request);
+  cartPanel = new CartPanel(store, request);
 
   els.players.replaceChildren(...[...playerPanels.values()].map((p) => p.element));
   els.recorders.replaceChildren(...[...recorderPanels.values()].map((r) => r.element));
@@ -309,6 +326,8 @@ function buildPanels() {
   els.recents = recentsPanel.element;
   els.cue.replaceWith(cuePanel.element);
   els.cue = cuePanel.element;
+  els.cart.replaceWith(cartPanel.element);
+  els.cart = cartPanel.element;
 
   // Explorador del panell lateral (pas 2c): les carpetes són del perfil, i es tornen a llegir en cada connexió.
   const audios = new ExplorerTab('audios', store, request);
@@ -322,6 +341,7 @@ function renderAll() {
   for (const panel of recorderPanels.values()) panel.render();
   recentsPanel?.render();
   cuePanel?.render();
+  cartPanel?.render();
 }
 
 // ---------------------------------------------------------------------------

@@ -13,6 +13,8 @@
 //   'recordings'       ha canviat la llista d'enregistraments acabats (pendents i recents)
 //   'devices'          ha canviat la llista de dispositius
 //   'cue'              ha canviat la preescolta (estat, pista, sortida, volum)
+//   'cart'             ha canviat la botonera (botons, sortida, què sona; fase 5, pas 28c)
+//   'cartPosition'     posició del que sona a la botonera (10 per segon)
 //   'cuePosition'      posició nova de la preescolta (10 per segon, mentre sona)
 //   'meters'           nivells nous dels mesuradors (25 per segon)
 //   'explorerDurations' durades noves d'àudios de l'explorador (detail: { ruta: segons | null }; fase 5, pas 15)
@@ -28,6 +30,8 @@ export class Store extends EventTarget {
   recordings = [];
   /** Preescolta (docs/protocol.md, 4.8). @type {any} */
   cue = null;
+  /** Botonera (docs/protocol.md, 4.15). @type {any} */
+  cart = null;
   /** @type {any[]} */ devices = [];
   /** @type {any} */ hardware = null;
   /** Ajustos (settings.get, docs/protocol.md 4.9). @type {any} */
@@ -73,6 +77,15 @@ export class Store extends EventTarget {
     });
     // Durades dels àudios de l'explorador (pas 15): no es guarden aquí, les fa servir la pestanya Àudios.
     client.addEventListener('ev:explorer.durations', (e) => this.#emit('explorerDurations', /** @type {any} */ (e).detail.durations));
+    client.addEventListener('ev:cart.state', (e) => {
+      this.cart = /** @type {any} */ (e).detail.cart;
+      this.#emit('cart');
+    });
+    client.addEventListener('ev:cart.position', (e) => {
+      if (!this.cart) return;
+      this.cart.playing = /** @type {any} */ (e).detail.playing;
+      this.#emit('cartPosition');
+    });
     client.addEventListener('ev:meters', (e) => {
       this.meters = /** @type {any} */ (e).detail;
       this.#emit('meters');
@@ -94,6 +107,7 @@ export class Store extends EventTarget {
     this.playlists = new Map(state.playlists.map((/** @type {any} */ l) => [l.player, l]));
     this.recordings = state.recordings ?? [];
     this.cue = state.cue ?? null;
+    this.cart = state.cart ?? null;
     this.devices = devices.devices;
     this.#emit('reset');
   }
@@ -134,6 +148,12 @@ export class Store extends EventTarget {
    * La preescolta surt per la mateixa sortida que algun reproductor (és a dir, per antena)?
    * Es calcula aquí perquè canvia també quan es canvia la sortida d'un reproductor.
    */
+  /** La botonera surt per la mateixa sortida que algun reproductor? (Es permet: Windows els barreja.) */
+  get cartSharesPlayerOutput() {
+    const id = this.cart?.deviceId;
+    return !!id && [...this.players.values()].some((p) => p.deviceId === id);
+  }
+
   get cueSharesPlayerOutput() {
     const id = this.cue?.deviceId;
     return !!id && [...this.players.values()].some((p) => p.deviceId === id);

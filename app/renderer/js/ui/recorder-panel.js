@@ -8,6 +8,8 @@
 // - LIM (fase 5, D-083): limitador del que es desa al fitxer; es pot activar i desactivar en qualsevol moment.
 // - MARCA (fase 5, pas 23b; D-110): mentre s'enregistra, posa una marca a la posició d'ara (es veuran a l'editor).
 //   Després surt una barra per posar-hi nom (pas 23e; D-114): opcional, i desapareix sola si no s'escriu res.
+// - Alarma de silenci (fase 5, pas 25b; D-121, D-122): el motor diu quan fa massa estona que entra silenci; el panell
+//   parpelleja en vermell amb un rètol i, quan salta, surt un avís breu. S'apaga sola quan torna el so.
 
 import { RECORDER_STATES, stateBadge } from './states.js';
 import { deviceWarning } from './device-line.js';
@@ -57,6 +59,8 @@ export class RecorderPanel {
   #shownReduction = 0;
   /** Barra oberta per posar nom a una marca (pas 23e). @type {{ element: HTMLElement, input: HTMLInputElement, number: number, timer: number | undefined, done: boolean } | null} */
   #markName = null;
+  /** L'alarma de silenci estava encesa a l'últim render (per avisar només quan salta). */
+  #silenceAlarm = false;
 
   /**
    * @param {Store} store
@@ -103,6 +107,7 @@ export class RecorderPanel {
         </div>
         <div class="rec-low-disk js-low-disk"></div>
         <div class="rec-low-disk js-archive-error"></div>
+        <div class="rec-silence js-silence" role="alert"></div>
 
         <div class="controls">
           <button class="btn btn-danger btn-control rec-start js-start" type="button" title="Enregistrar (sempre en un fitxer nou)">
@@ -217,6 +222,8 @@ export class RecorderPanel {
       ? `<i class="bi bi-exclamation-triangle-fill"></i> Poc espai al disc: queden ${escapeHtml(formatBytes(r.freeDiskBytes))}`
       : '';
 
+    this.#renderSilence(r, recording);
+
     // Còpia d'historial (D-086): si no s'ha pogut fer o s'ha interromput, es diu (l'enregistrament continua).
     el['archive-error'].innerHTML = r.archive?.error
       ? `<i class="bi bi-exclamation-triangle-fill"></i> ${escapeHtml(r.archive.error)}`
@@ -318,6 +325,32 @@ ${marksText(marks)}` : '');
     }
     this.#disarmStop();
     this.#send('recorder.stop');
+  }
+
+  /**
+   * Alarma de silenci (D-122): rètol amb el temps de silenci i panell parpellejant. Quan salta, un avís breu.
+   * @param {any} r
+   * @param {boolean} recording
+   */
+  #renderSilence(r, recording) {
+    const silence = r.silence ?? {};
+    const alarm = recording && !!silence.alarm;
+    this.element.classList.toggle("rec-silence-alarm", alarm);
+    const el = this.#el.silence;
+    if (alarm) {
+      el.innerHTML = `<i class="bi bi-volume-mute-fill" aria-hidden="true"></i> Silenci des de fa ${escapeHtml(formatDuration(silence.seconds ?? 0))}: comprova l'entrada`;
+      el.title = `Fa més de ${silence.alarmSeconds} s que el que s'enregistra és per sota de ${String(silence.thresholdDb).replace("-", "−")} dBFS.
+`
+        + "L'enregistrament continua. L'avís s'apaga sol quan torna el so (es configura a ⚙ Configuració).";
+    } else {
+      el.innerHTML = "";
+      el.title = "";
+    }
+    if (alarm && !this.#silenceAlarm) {
+      showToast(this.element, `Silenci: fa ${silence.alarmSeconds} s que no entra so. Comprova el cable, la taula o el canal.`,
+        { icon: "bi-volume-mute-fill", ms: 10000 });
+    }
+    this.#silenceAlarm = alarm;
   }
 
   /** MARCA: el motor la posa a la posició d'ara; un avís breu ho confirma. */

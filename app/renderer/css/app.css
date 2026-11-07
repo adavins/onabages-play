@@ -1563,6 +1563,23 @@ body.engine-offline .side-content {
 
 .rec-low-disk:empty { display: none; }
 
+/* Alarma de silenci (fase 5, D-122): rètol vermell amb icona i text, i el panell parpelleja. */
+.rec-silence {
+  background: var(--obp-error);
+  color: #fff;
+  border-radius: 0.25rem;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+.rec-silence:empty { display: none; }
+.rec-silence .bi { animation: obp-blink 1s steps(2, start) infinite; }
+
+.recorder.rec-silence-alarm { animation: obp-silence-pulse 1s steps(2, start) infinite; }
+@keyframes obp-silence-pulse {
+  50% { box-shadow: 0 0 0 5px var(--obp-error); }
+}
+
 /* Botons de l'enregistrador: icona i text (més petits que els del reproductor). */
 .recorder .btn-control {
   font-size: 1rem;

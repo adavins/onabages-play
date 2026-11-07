@@ -37,7 +37,7 @@ let lastTab = 'general';
  * @param {{ players: number, recorders: number }} running  quants n'hi ha ara al motor
  * @param {{ profileName: string, hasPin: boolean, set: (pin: string | null) => Promise<void> }} pin
  *   PIN del perfil actiu (pas 13c): `set` el desa de seguida al motor (null el treu)
- * @returns {Promise<{ ui: object, layout: object, program: object, loudness: object, trim: object, fadeOut: object, recorderLimiter: object, recordingArchive: object, recents: object } | null>}
+ * @returns {Promise<{ ui: object, layout: object, program: object, loudness: object, trim: object, fadeOut: object, recorderLimiter: object, silenceAlarm: object, recordingArchive: object, recents: object } | null>}
  */
 export function editSettings(settings, running, pin) {
   const options = (/** @type {number} */ max, /** @type {number} */ selected) =>
@@ -69,6 +69,16 @@ export function editSettings(settings, running, pin) {
   // Sostre del limitador dels enregistradors (fase 5, D-083). Si el desat no hi és, s'hi afegeix.
   const ceiling = Number(settings.recorderLimiter?.ceilingDb ?? -1);
   const ceilings = [...new Set([-0.1, -0.3, -0.5, -1, -2, -3, ceiling])].sort((a, b) => b - a);
+  // Alarma de silenci (fase 5, pas 25b; D-122).
+  const silence = settings.silenceAlarm ?? {};
+  const silenceDb = Number(silence.thresholdDb ?? -50);
+  const silenceDbOptions = [...new Set([-30, -40, -50, -60, -70, silenceDb])].sort((a, b) => b - a)
+    .map((v) => `<option value="${v}"${v === silenceDb ? " selected" : ""}>${String(v).replace("-", "−")} dBFS${v === -50 ? " (recomanat)" : ""}</option>`)
+    .join("");
+  const silenceSeconds = Number(silence.seconds ?? 30);
+  const silenceSecondsOptions = [...new Set([10, 15, 20, 30, 45, 60, 90, 120, 180, 300, silenceSeconds])].sort((a, b) => a - b)
+    .map((v) => `<option value="${v}"${v === silenceSeconds ? " selected" : ""}>${v < 60 ? v + " s" : (v % 60 ? Math.floor(v / 60) + " min " + (v % 60) + " s" : v / 60 + " min")}${v === 30 ? " (recomanat)" : ""}</option>`)
+    .join("");
   const ceilingOptions = ceilings
     .map((c) => `<option value="${c}"${c === ceiling ? ' selected' : ''}>${c.toFixed(1).replace('.', ',').replace('-', '−')} dB${c === -1 ? ' (recomanat)' : ''}</option>`)
     .join('');
@@ -221,6 +231,23 @@ export function editSettings(settings, running, pin) {
         Amb −1,0 dB, l'MP3 no passa de 0 dB en reproduir-lo; amb −0,1 dB, en pot passar una mica.
       </div>
 
+      <h3 class="obp-settings-section">Alarma de silenci</h3>
+      <div class="form-check form-switch mb-1">
+        <input id="st-silence" class="form-check-input" type="checkbox" role="switch"${silence.enabled !== false ? " checked" : ""}>
+        <label class="form-check-label" for="st-silence">Avisar si un enregistrament queda en silenci</label>
+      </div>
+      <div class="obp-settings-grid">
+        <label for="st-silence-db">Silenci: per sota de</label>
+        <select id="st-silence-db" class="form-select form-select-sm">${silenceDbOptions}</select>
+        <label for="st-silence-seconds">Durant</label>
+        <select id="st-silence-seconds" class="form-select form-select-sm">${silenceSecondsOptions}</select>
+      </div>
+      <div class="form-text mb-3">
+        Mentre s'enregistra, si el que entra al fitxer fa aquesta estona que és per sota del nivell (cable desconnectat,
+        taula apagada, canal tancat), el panell es posa en vermell i parpelleja. L'avís s'apaga sol quan torna el so.
+        L'enregistrament no s'atura mai. S'aplica de seguida, a tots els enregistradors.
+      </div>
+
       <h3 class="obp-settings-section">Recents</h3>
       <div class="form-check form-switch mb-1">
         <input id="st-clear-recents" class="form-check-input" type="checkbox" role="switch"${settings.recents?.clearOnExit ? ' checked' : ''}>
@@ -328,6 +355,15 @@ export function editSettings(settings, running, pin) {
     error.textContent = message;
     field.focus();
   };
+
+  // Alarma de silenci: apagada, el nivell i el temps es desactiven.
+  const silenceSwitch = $('#st-silence');
+  const showSilenceEnabled = () => {
+    $('#st-silence-db').disabled = !silenceSwitch.checked;
+    $('#st-silence-seconds').disabled = !silenceSwitch.checked;
+  };
+  silenceSwitch.addEventListener('change', showSilenceEnabled);
+  showSilenceEnabled();
 
   // Historial d'enregistraments: carpeta (triar, per defecte, obrir) i dies. Apagat, les opcions s'enfosqueixen.
   const archiveSwitch = $('#st-archive');
@@ -452,6 +488,11 @@ export function editSettings(settings, running, pin) {
           program: { name: $('#st-program').value.trim() },
           loudness: { targetLufs: Number($('#st-loudness').value) },
           recorderLimiter: { ceilingDb: Number($('#st-limiter').value) },
+          silenceAlarm: {
+            enabled: $('#st-silence').checked,
+            thresholdDb: Number($('#st-silence-db').value),
+            seconds: Number($('#st-silence-seconds').value),
+          },
           recents: { clearOnExit: $('#st-clear-recents').checked },
           recordingArchive: {
             enabled: archiveSwitch.checked,

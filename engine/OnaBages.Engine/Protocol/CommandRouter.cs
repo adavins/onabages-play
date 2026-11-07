@@ -117,6 +117,7 @@ public sealed partial class CommandRouter
                 "recorder.start" => RecorderStart(msg),
                 "recorder.stop" => RecorderCommand(msg, r => r.Stop()),
                 "recorder.mark" => RecorderCommand(msg, r => r.Mark()),
+                "recorder.nameMark" => RecorderNameMark(msg),
                 "recorder.configure" => RecorderConfigure(msg),
                 "recorder.setGain" => RecorderSetGain(msg),
                 "recorder.setLimiter" => RecorderSetLimiter(msg),
@@ -1182,6 +1183,15 @@ public sealed partial class CommandRouter
     {
         foreach (var recorder in _state.Recorders)
             recorder.Release(path);
+    }
+
+    /// <summary>Nom d'una marca (fase 5, pas 23e): recorder, number (1, 2...) i name ("" o null = sense nom).</summary>
+    private JsonObject RecorderNameMark(JsonObject msg)
+    {
+        int number = (int)RequireNumber(msg, "number", "el número de la marca (1, 2...)");
+        string? name = msg["name"] is null ? null
+            : ReadString(msg["name"]) ?? throw new BadParamsException("'name' ha de ser un text.");
+        return RecorderCommand(msg, r => r.NameMark(number, name));
     }
 
     private JsonObject RecorderCommand(JsonObject msg, Action<Recorder> action)

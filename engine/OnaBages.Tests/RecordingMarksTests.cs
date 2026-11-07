@@ -126,6 +126,59 @@ public class RecordingMarksTests : IDisposable
     }
 
     [Fact]
+    public void El_nom_d_una_marca_es_desa_de_seguida_tambe_quan_es_pendent()
+    {
+        using var recorder = NewRecorder();
+        recorder.Start();
+        _input!.PushTone(0.5);
+        recorder.Mark();
+        recorder.Mark();
+
+        recorder.NameMark(2, "  Entrevista  ");
+        Assert.Equal([null, "Entrevista"], recorder.Marks.Select(m => m.Name));
+        Assert.Equal("Entrevista", RecordingMarks.Read(recorder.FilePath!)[1].Name);
+
+        recorder.Stop();
+        recorder.NameMark(1, "Sintonia"); // pendent: encara es pot
+        recorder.NameMark(2, "");         // buit: sense nom
+        Assert.Equal(["Sintonia", null], RecordingMarks.Read(recorder.FilePath!).Select(m => m.Name));
+    }
+
+    [Fact]
+    public void Un_nom_que_no_es_pot_posar()
+    {
+        using var recorder = NewRecorder();
+        Assert.Throws<RecorderCommandException>(() => recorder.NameMark(1, "x")); // inactiu
+        recorder.Start();
+        _input!.PushTone(0.2);
+        recorder.Mark();
+
+        Assert.Throws<RecorderCommandException>(() => recorder.NameMark(2, "x")); // no hi és
+        Assert.Throws<RecorderCommandException>(() => recorder.NameMark(0, "x"));
+        Assert.Throws<RecorderCommandException>(() => recorder.NameMark(1, new string('a', Recorder.MaxMarkNameLength + 1)));
+        Assert.Null(recorder.Marks.Single().Name);
+        recorder.Stop();
+    }
+
+    [Fact]
+    public void Ordre_recorder_nameMark()
+    {
+        var (router, state, _) = NewRouter();
+        var recorder = state.FindRecorder("1")!;
+        recorder.Start();
+        _input!.PushTone(0.5);
+        router.Handle("""{ "v": 1, "id": 1, "cmd": "recorder.mark", "recorder": "1" }""");
+
+        var r = router.Handle("""{ "v": 1, "id": 2, "cmd": "recorder.nameMark", "recorder": "1", "number": 1, "name": "Notícies" }""");
+
+        Assert.True(r["ok"]!.GetValue<bool>(), r.ToJsonString());
+        Assert.Equal("Notícies", r["result"]!["recorder"]!["marks"]![0]!["name"]!.GetValue<string>());
+        var bad = router.Handle("""{ "v": 1, "id": 3, "cmd": "recorder.nameMark", "recorder": "1", "number": 1, "name": 5 }""");
+        Assert.Equal("bad_params", bad["error"]!["code"]!.GetValue<string>());
+        recorder.Stop();
+    }
+
+    [Fact]
     public void En_desar_l_enregistrament_les_marques_el_segueixen()
     {
         var (router, state, list) = NewRouter();

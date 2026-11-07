@@ -7,6 +7,7 @@
 // - Pendent: Escoltar (preescolta), Desar (diàleg de Windows) o Descartar (paperera, amb confirmació).
 // - LIM (fase 5, D-083): limitador del que es desa al fitxer; es pot activar i desactivar en qualsevol moment.
 // - MARCA (fase 5, pas 23b; D-110): mentre s'enregistra, posa una marca a la posició d'ara (es veuran a l'editor).
+//   Després surt una barra per posar-hi nom (pas 23e; D-114): opcional, i desapareix sola si no s'escriu res.
 
 import { RECORDER_STATES, stateBadge } from './states.js';
 import { deviceWarning } from './device-line.js';
@@ -28,6 +29,9 @@ const STOP_CONFIRM_MS = 3000;
 
 /** Quant temps es mostra un missatge (error d'una ordre, avís en desar...). */
 const MESSAGE_MS = 6000;
+
+/** Si no s'escriu res al nom de la marca en aquest temps, la barra es tanca sola (ms). */
+const MARK_NAME_IDLE_MS = 5000;
 
 /** Escala de la barra del limitador (dB): un limitador abaixa poc, i així es veu bé. */
 const LIMITER_SCALE_DB = 12;
@@ -51,6 +55,8 @@ export class RecorderPanel {
   /** @type {string | null} */ #lastFile = null;
   /** Reducció del limitador que es mostra (cau a poc a poc, perquè es pugui llegir). */
   #shownReduction = 0;
+  /** Barra oberta per posar nom a una marca (pas 23e). @type {{ element: HTMLElement, input: HTMLInputElement, number: number, timer: number | undefined, done: boolean } | null} */
+  #markName = null;
 
   /**
    * @param {Store} store
@@ -311,15 +317,63 @@ ${marksText(marks)}` : '');
 
   /** MARCA: el motor la posa a la posició d'ara; un avís breu ho confirma. */
   async #mark() {
+    // Si encara hi ha la barra del nom de la marca anterior, primer es desa el que s'hi hagi escrit.
+    this.#closeMarkName(true);
     try {
       const result = await this.#request('recorder.mark', { recorder: this.#id });
       const marks = result?.recorder?.marks ?? [];
       const last = marks[marks.length - 1];
-      if (last) showToast(this.element, `Marca ${marks.length} a ${formatDuration(last.seconds)}`,
-        { kind: 'info', icon: 'bi-bookmark-check-fill', ms: 2500 });
+      if (last) this.#askMarkName(marks.length, last.seconds);
     } catch (err) {
       showToast(this.element, /** @type {Error} */ (err).message);
     }
+  }
+
+  /**
+   * Barra per posar nom a la marca que s'acaba de posar (pas 23e). La marca ja és al seu lloc: el nom és opcional.
+   * Retorn el desa, Esc la tanca sense nom; si en 5 s no s'hi ha escrit res, es tanca sola.
+   * Les tecles F1–F6 continuen funcionant mentre s'escriu (shortcuts.js no mira on és el focus).
+   */
+  #askMarkName(/** @type {number} */ number, /** @type {number} */ seconds) {
+    const element = document.createElement('form');
+    element.className = 'obp-toast obp-toast-info rec-mark-name';
+    element.innerHTML = `
+      <i class="bi bi-bookmark-check-fill" aria-hidden="true"></i>
+      <span class="rec-mark-name-text">Marca ${number} a ${escapeHtml(formatDuration(seconds))}</span>
+      <input class="form-control form-control-sm" type="text" maxlength="60" autocomplete="off"
+             placeholder="Nom (opcional) i Retorn" aria-label="Nom de la marca ${number}">`;
+    this.element.querySelector(':scope > .obp-toast')?.remove();
+    this.element.append(element);
+    const input = /** @type {HTMLInputElement} */ (element.querySelector('input'));
+    const bar = { element, input, number, timer: /** @type {number | undefined} */ (undefined), done: false };
+    this.#markName = bar;
+
+    element.addEventListener('submit', (e) => { e.preventDefault(); this.#closeMarkName(true); });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); this.#closeMarkName(false); }
+      else if (e.key === 'Enter') { e.preventDefault(); this.#closeMarkName(true); }
+    });
+    // Mentre s'escriu no es tanca sola; si es deixa buida, sí.
+    input.addEventListener('input', () => {
+      clearTimeout(bar.timer);
+      bar.timer = input.value.trim() ? undefined : window.setTimeout(() => this.#closeMarkName(false), MARK_NAME_IDLE_MS);
+    });
+    // Si es clica en un altre lloc: es desa el que s'hi hagi escrit.
+    input.addEventListener('blur', () => this.#closeMarkName(true));
+    bar.timer = window.setTimeout(() => this.#closeMarkName(false), MARK_NAME_IDLE_MS);
+    input.focus();
+  }
+
+  /** Tanca la barra del nom; amb `save`, desa el nom si se n'ha escrit algun. */
+  #closeMarkName(/** @type {boolean} */ save) {
+    const bar = this.#markName;
+    if (!bar || bar.done) return;
+    bar.done = true;
+    this.#markName = null;
+    clearTimeout(bar.timer);
+    const name = bar.input.value.trim();
+    bar.element.remove();
+    if (save && name) this.#send('recorder.nameMark', { number: bar.number, name });
   }
 
   #disarmStop() {
@@ -365,9 +419,9 @@ ${marksText(marks)}` : '');
   }
 }
 
-/** «Marques: 1 a 0:12 · 2 a 5:30»: per a l'ajuda del botó. */
-function marksText(/** @type {{ seconds: number }[]} */ marks) {
-  return 'Marques: ' + marks.map((m, i) => `${i + 1} a ${formatDuration(m.seconds)}`).join(' · ');
+/** «Marques: 1 a 0:12 «Sintonia» · 2 a 5:30»: per a l'ajuda del botó. */
+function marksText(/** @type {{ seconds: number, name?: string | null }[]} */ marks) {
+  return 'Marques: ' + marks.map((m, i) => `${i + 1} a ${formatDuration(m.seconds)}${m.name ? ` «${m.name}»` : ''}`).join(' · ');
 }
 
 /** «−1,0»: dB amb un decimal, coma i signe menys de debò. */

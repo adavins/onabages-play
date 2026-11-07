@@ -20,6 +20,13 @@ public static class RecordingMarks
     public const string Extension = ".marques";
     public const int SchemaVersion = 1;
 
+    // Accents i apòstrofs tal qual ("Notícies", no "Notícies"): el fitxer es pot llegir i no va a cap web.
+    private static readonly System.Text.Json.JsonSerializerOptions JsonOptions = new()
+    {
+        WriteIndented = true,
+        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+    };
+
     /// <summary>On són les marques de <paramref name="mp3Path"/>.</summary>
     public static string PathFor(string mp3Path) => mp3Path + Extension;
 
@@ -39,7 +46,7 @@ public static class RecordingMarks
         string tmp = path + ".tmp";
         using (var stream = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None))
         {
-            byte[] bytes = new UTF8Encoding(false).GetBytes(root.ToJsonString(new() { WriteIndented = true }));
+            byte[] bytes = new UTF8Encoding(false).GetBytes(root.ToJsonString(JsonOptions));
             stream.Write(bytes, 0, bytes.Length);
             stream.Flush(flushToDisk: true);
         }

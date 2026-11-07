@@ -2028,6 +2028,11 @@ body.engine-offline .side-content {
 .obp-toast > .bi { color: var(--bs-warning); font-size: 1.1rem; line-height: 1.2; }
 .obp-toast-info { border-color: var(--bs-info); background: #123540; }
 .obp-toast-info > .bi { color: var(--bs-info); }
+
+/* Nom de la marca que s'acaba de posar (recorder-panel.js; pas 23e): el text i, al costat, el camp. */
+.obp-toast.rec-mark-name { align-items: center; cursor: default; }
+.rec-mark-name-text { white-space: nowrap; font-weight: 600; }
+.rec-mark-name input { flex: 1; min-width: 6rem; }
 .obp-toast-hiding { opacity: 0; }
 
 @keyframes obp-toast-in {

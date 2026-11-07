@@ -74,6 +74,12 @@ public class EditorMarksTests : IDisposable
         Send("editor.open", new JsonObject { ["path"] = path });
         var editor = WaitIdle();
         Assert.Null(editor["error"]);
+        // S'espera que acabi la forma d'ona: mentre es calcula, el fitxer és obert i no es pot desar a sobre.
+        for (int i = 0; i < 200 && editor["peaksDone"]!.GetValue<int>() < editor["originalFrames"]!.GetValue<int>(); i++)
+        {
+            Thread.Sleep(25);
+            editor = Send("editor.get");
+        }
         return editor;
     }
 

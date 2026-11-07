@@ -365,7 +365,42 @@ public sealed class Recorder : IDisposable
             _changed = true;
         }
         RaiseStateChanged();
+        WriteMarksFile("La marca s'ha posat, però no s'ha pogut desar al disc");
+        return mark;
+    }
 
+    /// <summary>Llargada màxima del nom d'una marca (pas 23e).</summary>
+    public const int MaxMarkNameLength = 60;
+
+    /// <summary>
+    /// Posa (o canvia) el nom de la marca <paramref name="number"/> (1, 2, 3...; fase 5, pas 23e; D-114), mentre s'enregistra
+    /// o quan és pendent. Un nom buit la deixa sense nom. Com a molt <see cref="MaxMarkNameLength"/> caràcters. Es desa
+    /// de seguida al fitxer de marques.
+    /// </summary>
+    public void NameMark(int number, string? name)
+    {
+        name = string.IsNullOrWhiteSpace(name) ? null : name.Trim();
+        if (name is { Length: > MaxMarkNameLength })
+            throw new RecorderCommandException($"El nom de la marca pot tenir com a molt {MaxMarkNameLength} caràcters.");
+        lock (_sync)
+        {
+            if (State is not (RecorderState.Recording or RecorderState.Pending))
+                throw new RecorderCommandException("Aquest enregistrador no té cap enregistrament amb marques.");
+            if (number < 1 || number > _marks.Count)
+                throw new RecorderCommandException($"No hi ha cap marca {number}.");
+            _marks[number - 1] = _marks[number - 1] with { Name = name };
+            _changed = true;
+        }
+        RaiseStateChanged();
+        WriteMarksFile("El nom s'ha posat, però no s'ha pogut desar al disc");
+    }
+
+    /// <summary>
+    /// Desa totes les marques al fitxer de marques (i al de la còpia de l'historial). Fora de _sync; mai des del fil d'àudio.
+    /// Si no es pot, les marques es queden a la memòria (es tornarà a provar la vegada següent) i es diu amb <paramref name="failure"/>.
+    /// </summary>
+    private void WriteMarksFile(string failure)
+    {
         lock (_marksFile)
         {
             string? path, archive;
@@ -376,14 +411,14 @@ public sealed class Recorder : IDisposable
                 archive = ArchiveError is null ? ArchivePath : null;
                 marks = [.. _marks];
             }
-            if (path is null) return mark;
+            if (path is null) return;
             try
             {
                 RecordingMarks.Write(path, marks);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                throw new RecorderCommandException($"La marca s'ha posat, però no s'ha pogut desar al disc ({ex.Message}). Es tornarà a provar amb la marca següent.");
+                throw new RecorderCommandException($"{failure} ({ex.Message}). Es tornarà a provar amb la marca següent.");
             }
             // La còpia de l'historial és secundària: si no es pot, no es diu res.
             if (archive is not null)
@@ -392,7 +427,6 @@ public sealed class Recorder : IDisposable
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
             }
         }
-        return mark;
     }
 
     /// <summary>Atura l'enregistrament, tanca el fitxer (vàlid) i passa a Pendent.</summary>

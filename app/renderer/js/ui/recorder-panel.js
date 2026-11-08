@@ -6,6 +6,8 @@
 // - Aturar: cal prémer-lo dues vegades (la primera el «arma» uns segons), per evitar aturades accidentals.
 // - Pendent: Escoltar (preescolta), Desar (diàleg de Windows) o Descartar (paperera, amb confirmació).
 // - LIM (fase 5, D-083): limitador del que es desa al fitxer; es pot activar i desactivar en qualsevol moment.
+// - NIV (fase 5, pas 32b; D-146): anivellador de la parla (p. ex. una entrevista que arriba de la taula); el fitxer queda
+//   anivellat. Es pot activar i desactivar en qualsevol moment; mentre treballa, la barra «Anivellador» en diu el guany.
 // - MARCA (fase 5, pas 23b; D-110): mentre s'enregistra, posa una marca a la posició d'ara (es veuran a l'editor).
 //   Després surt una barra per posar-hi nom (pas 23e; D-114): opcional, i desapareix sola si no s'escriu res.
 // - Alarma de silenci (fase 5, pas 25b; D-121, D-122): el motor diu quan fa massa estona que entra silenci; el panell
@@ -16,6 +18,7 @@ import { deviceWarning } from './device-line.js';
 import { DeviceSelect } from './device-select.js';
 import { LevelMeter } from './meter.js';
 import { VolumeFader } from './fader.js';
+import { LevelerBar } from './leveler-bar.js';
 import { editRecorderSettings } from './recorder-settings.js';
 import { saveRecording, discardRecording } from './recording-actions.js';
 import { togglePreview } from './cue-actions.js';
@@ -49,6 +52,7 @@ export class RecorderPanel {
   #deviceSelect;
   #meter;
   #fader;
+  #levelerBar = new LevelerBar();
   /** @type {Record<string, HTMLElement>} */ #el = {};
   /** @type {number | undefined} */ #messageTimer;
   /** Primera pulsació d'Aturar feta: fins quan s'espera la segona. @type {number | undefined} */
@@ -82,6 +86,7 @@ export class RecorderPanel {
           <i class="bi bi-record-circle"></i> <span class="js-name"></span> <i class="bi bi-pencil rec-edit"></i>
         </button></span>
         <span class="panel-header-right">
+          <button class="btn btn-sm dsp-btn level-btn js-level" type="button"><i class="d-none"></i><span>NIV</span></button>
           <button class="btn btn-sm dsp-btn js-lim" type="button"><i class="d-none"></i><span>LIM</span></button>
           <span class="js-state"></span>
         </span>
@@ -150,12 +155,19 @@ export class RecorderPanel {
     this.#fader = new VolumeFader((db) => this.#send('recorder.setGain', { db }),
       { min: -60, max: 12, icon: 'bi-mic', label: 'Volum d\'enregistrament' });
     this.#el['fader-slot'].appendChild(this.#fader.element);
+    // Sota el fader, la barra de l'anivellador (D-148): què hi fa ara el NIV (el mesurador és l'entrada, abans del NIV).
+    this.#el['fader-slot'].after(this.#levelerBar.element);
 
     this.#el.title.addEventListener('click', () => this.#editSettings());
     // LIM: activa o desactiva el limitador (de seguida, també a mig enregistrament).
     this.#el.lim.addEventListener('click', () => {
       const enabled = !!this.#store.recorders.get(this.#id)?.limiter?.enabled;
       this.#send('recorder.setLimiter', { enabled: !enabled });
+    });
+    // NIV: activa o desactiva l'anivellador (de seguida, també a mig enregistrament).
+    this.#el.level.addEventListener('click', () => {
+      const enabled = !!this.#store.recorders.get(this.#id)?.leveler?.enabled;
+      this.#send('recorder.setLeveler', { enabled: !enabled });
     });
     this.#el.start.addEventListener('click', () => this.#send('recorder.start'));
     this.#el.stop.addEventListener('click', () => this.#stopPressed());
@@ -210,6 +222,17 @@ export class RecorderPanel {
       : `Limitador desactivat. Clica per activar-lo: el que es desi no passarà de ${ceiling} dB (de seguida, també mentre s'enregistra).`;
     /** @type {HTMLElement} */ (el.lim.querySelector('i')).className = limiter.enabled ? 'bi bi-check-lg' : 'd-none';
     el.gr.classList.toggle('d-none', !limiter.enabled);
+
+    // Anivellador (D-146): botó encès (color i marca ✓), com el dels reproductors.
+    const level = !!r.leveler?.enabled;
+    const target = String(this.#store.settings?.loudness?.targetLufs ?? -12).replace('-', '−');
+    el.level.classList.toggle('on', level);
+    el.level.setAttribute('aria-pressed', String(level));
+    el.level.title = level
+      ? `Anivellador ACTIVAT: iguala el volum de la parla del que s'enregistra cap a ${target} LUFS (el fitxer queda anivellat). Clica per desactivar-lo (de seguida, també mentre s'enregistra).`
+      : `Anivellador desactivat. Clica per igualar el volum de la parla (p. ex. una entrevista amb una veu fluixa i una de forta) cap a ${target} LUFS. El fitxer quedarà anivellat. De seguida, també mentre s'enregistra.`;
+    /** @type {HTMLElement} */ (el.level.querySelector('i')).className = level ? 'bi bi-check-lg' : 'd-none';
+    this.#levelerBar.setVisible(level);
 
     // Temps, fitxer, mida i espai lliure.
     el.elapsed.textContent = formatDuration(r.elapsed ?? 0);
@@ -269,7 +292,9 @@ ${marksText(marks)}` : '');
   }
 
   /** Nivells nous del motor (esdeveniment meters): [esquerre, dret] en dBFS, i quant abaixa el limitador (dB). */
-  updateMeter(/** @type {number[] | undefined} */ levels, /** @type {number | undefined} */ reduction) {
+  updateMeter(/** @type {number[] | undefined} */ levels, /** @type {number | undefined} */ reduction,
+    /** @type {{ gainDb: number, hold?: boolean } | null | undefined} */ leveler = null) {
+    this.#levelerBar.update(leveler);
     if (levels) this.#meter.update(levels);
     if (reduction !== undefined && !this.#el.gr.classList.contains('d-none')) {
       this.#shownReduction = Math.max(reduction, this.#shownReduction - 0.4);

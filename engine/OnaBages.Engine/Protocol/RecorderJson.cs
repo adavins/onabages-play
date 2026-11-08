@@ -15,6 +15,8 @@ public static class RecorderJson
         ["gainDb"] = recorder.GainDb,
         // Limitador (fase 5, pas 9a): recorder.setLimiter; el sostre és de settings.recorderLimiter.
         ["limiter"] = new JsonObject { ["enabled"] = recorder.LimiterEnabled, ["ceilingDb"] = recorder.LimiterCeilingDb },
+        // Anivellador (fase 5, pas 32a): recorder.setLeveler; gainDb és el guany d'ara (null si no treballa).
+        ["leveler"] = new JsonObject { ["enabled"] = recorder.LevelerEnabled, ["gainDb"] = Round(recorder.LevelerGainDb) },
         ["deviceId"] = recorder.DeviceId,
         ["file"] = recorder.FilePath,
         // Còpia d'historial (fase 5, pas 10a): on és i, si ha fallat, per què (l'enregistrament continua igualment).
@@ -67,6 +69,7 @@ public static class RecorderJson
                 ["samplesLost"] = r.SamplesLost,
                 ["captureGlitches"] = r.CaptureGlitches,
                 ["silence"] = Silence(r),
+                ["levelerGainDb"] = Round(r.LevelerGainDb),
             });
         }
 
@@ -83,6 +86,8 @@ public static class RecorderJson
         ["thresholdDb"] = r.SilenceThresholdDb,
         ["alarmSeconds"] = r.SilenceSeconds,
     };
+
+    private static double? Round(double? value) => value is { } v ? Math.Round(v, 1) : null;
 
     public static string State(RecorderState state) => state switch
     {

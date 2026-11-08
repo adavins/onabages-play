@@ -325,6 +325,49 @@ public sealed class Recorder : IDisposable
     /// <summary>Quant ha abaixat el limitador des de l'última crida (dB, ≥ 0). 0 si no s'enregistra.</summary>
     public float TakeLimiterReductionDb() => _limiter?.TakeMaxReductionDb() ?? 0f;
 
+    // --- Anivellador (fase 5, pas 32a; D-146) ---
+
+    // El fil de les ordres l'activa o el desactiva; el de codificació el llegeix (i el crea o el buida).
+    private volatile bool _levelerEnabled;
+    // L'anivellador de l'enregistrament en curs (és del fil de codificació), per a l'indicador.
+    private volatile Leveler? _leveler;
+
+    /// <summary>L'anivellador (NIV) és activat. Per defecte, no.</summary>
+    public bool LevelerEnabled { get; private set; }
+
+    /// <summary>Nivell al qual l'anivellador porta la parla (LUFS): el de la normalització dels reproductors.</summary>
+    public double LevelerTargetLufs { get; private set; } = -12;
+
+    /// <summary>El màxim que pot pujar l'anivellador (dB).</summary>
+    public double LevelerMaxBoostDb { get; private set; } = Leveler.DefaultMaxBoostDb;
+
+    /// <summary>Guany de l'anivellador ara mateix (dB), o null si no treballa (desactivat o sense enregistrar).</summary>
+    public double? LevelerGainDb => _leveler?.CurrentGainDb;
+
+    /// <summary>L'anivellador està en pausa: no hi ha veu i manté el guany (D-149). False si no treballa.</summary>
+    public bool LevelerHolding => _leveler?.Holding ?? false;
+
+    /// <summary>
+    /// Anivellador (NIV): iguala el volum de la parla del que s'enregistra (p. ex. una entrevista amb una veu fluixa i una
+    /// de forta), com el dels reproductors, però <b>el fitxer queda anivellat</b>. Va després del volum d'enregistrament i
+    /// abans del limitador. Es pot activar i desactivar a mig enregistrament: mira 1 s endavant, i en desactivar-lo surt
+    /// tot el que tenia dins; no es perd ni es repeteix cap mostra. Si ja treballa, l'objectiu i el màxim nous s'apliquen
+    /// de seguida (el guany hi va a poc a poc; D-147).
+    /// </summary>
+    public void SetLeveler(bool enabled, double targetLufs, double maxBoostDb)
+    {
+        lock (_sync)
+        {
+            LevelerEnabled = enabled;
+            if (double.IsFinite(targetLufs)) LevelerTargetLufs = Math.Round(Math.Clamp(targetLufs, -30, -6), 1);
+            if (double.IsFinite(maxBoostDb)) LevelerMaxBoostDb = Math.Clamp(maxBoostDb, 0, Leveler.MaxMaxBoostDb);
+            _levelerEnabled = enabled;
+            _leveler?.SetLimits(LevelerTargetLufs, LevelerMaxBoostDb); // si ja treballa, de seguida (D-147)
+            _changed = true;
+        }
+        RaiseStateChanged();
+    }
+
     /// <summary>Si l'alarma de silenci vigila aquest enregistrador (per defecte, sí).</summary>
     public bool SilenceAlarmEnabled { get; private set; } = true;
 
@@ -727,7 +770,7 @@ public sealed class Recorder : IDisposable
             _limiter = limiter;
             _archive = archive;
             var archiveForThread = archive;
-            _encoderThread = new Thread(() => EncoderLoop(ring, encoderForThread, fileForThread, path, limiter, archiveForThread))
+            _encoderThread = new Thread(() => EncoderLoop(ring, encoderForThread, fileForThread, path, limiter, archiveForThread, input.SampleRate))
             {
                 IsBackground = true, // el motor atura els enregistradors en tancar-se (Dispose)
                 Name = $"Enregistrador {Id}: codificació",
@@ -806,10 +849,16 @@ public sealed class Recorder : IDisposable
     }
 
     /// <summary>
-    /// Fil de codificació: memòria → estèreo → volum → limitador → LAME → fitxer. Bolcat físic cada 2 s.
+    /// Fil de codificació: memòria → estèreo → volum → [NIV] → limitador → LAME → fitxer. Bolcat físic cada 2 s.
     /// En acabar (o si hi ha un error) tanca el fitxer; si tot ha anat bé, esborra el marcador.
+    ///
+    /// L'anivellador (fase 5, pas 32a; D-146) «estira» el so: llegeix 1 s endavant. Per això la lectura de la memòria és
+    /// una funció que espera fins que hi ha so (i, mentre espera, continua fent el bolcat al disc), i que retorna 0 quan
+    /// s'atura o quan s'ha de desactivar l'anivellador: així surt tot el que tenia dins, sense perdre ni repetir res.
+    /// Sense anivellador, el so passa exactament com abans.
     /// </summary>
-    private void EncoderLoop(SampleRingBuffer ring, LameEncoder encoder, FileStream file, string path, DynamicsProcessor limiter, ArchiveCopy? archive)
+    private void EncoderLoop(SampleRingBuffer ring, LameEncoder encoder, FileStream file, string path, DynamicsProcessor limiter,
+        ArchiveCopy? archive, int sampleRate)
     {
         int channels = _inputChannels;
         var input = new float[ChunkFrames * channels];
@@ -817,9 +866,39 @@ public sealed class Recorder : IDisposable
         var sinceFlush = Stopwatch.StartNew();
         float appliedGain = _gain;
         var appliedLimiter = limiter.Settings;
+        Leveler? leveler = null;
         bool ok = false;
 
-        // Volum, limitador i, per acabar, el que encara passi de ±1 es retalla (com sempre).
+        void FlushIfDue()
+        {
+            if (sinceFlush.Elapsed < FlushInterval) return;
+            file.Flush(flushToDisk: true);
+            archive?.Flush();
+            sinceFlush.Restart();
+        }
+
+        // So de la memòria, en estèreo i amb el volum, a «destination». Espera fins que n'hi ha.
+        int ReadRaw(Span<float> destination)
+        {
+            int maxFrames = Math.Min(destination.Length / 2, ChunkFrames);
+            while (true)
+            {
+                if (leveler is not null && !_levelerEnabled) return 0; // desactivar: que surti el que té dins
+                int read = ring.Read(input.AsSpan(0, maxFrames * channels));
+                if (read > 0)
+                {
+                    int frames = read / channels;
+                    ToStereo(input, frames, channels, destination);
+                    appliedGain = ApplyGain(destination, frames, appliedGain, _gain);
+                    return frames * 2;
+                }
+                if (_stopEncoder) return 0; // aturat i memòria buida
+                Thread.Sleep(10);
+                FlushIfDue();
+            }
+        }
+
+        // Limitador i, per acabar, el que encara passi de ±1 es retalla (com sempre).
         void Process(int frames)
         {
             var settings = _limiterSettings;
@@ -828,7 +907,6 @@ public sealed class Recorder : IDisposable
                 limiter.Settings = settings;
                 appliedLimiter = settings;
             }
-            appliedGain = ApplyGain(stereo, frames, appliedGain, _gain);
             limiter.Process(stereo.AsSpan(0, frames * 2));
             for (int i = 0; i < frames * 2; i++) stereo[i] = Math.Clamp(stereo[i], -1f, 1f);
         }
@@ -837,33 +915,34 @@ public sealed class Recorder : IDisposable
         {
             while (true)
             {
-                int read = ring.Read(input.AsSpan(0, input.Length - input.Length % channels));
-                if (read > 0)
+                if (_levelerEnabled && leveler is null)
                 {
-                    int frames = read / channels;
-                    ToStereo(input, frames, channels, stereo);
+                    leveler = new Leveler(ReadRaw, sampleRate, LevelerTargetLufs, LevelerMaxBoostDb);
+                    _leveler = leveler;
+                }
+
+                int samples = leveler is not null ? leveler.Read(stereo) : ReadRaw(stereo);
+                if (samples > 0)
+                {
+                    int frames = samples / 2;
                     Process(frames);
                     CountSilence(stereo, frames);
                     var mp3 = encoder.Encode(stereo, frames * 2);
                     file.Write(mp3);
                     archive?.Write(mp3);
                     Interlocked.Exchange(ref _fileSize, file.Position);
-                }
-                else if (_stopEncoder)
-                {
-                    break; // aturat i memòria buida
-                }
-                else
-                {
-                    Thread.Sleep(10);
+                    FlushIfDue();
+                    continue;
                 }
 
-                if (sinceFlush.Elapsed >= FlushInterval)
+                if (leveler is not null)
                 {
-                    file.Flush(flushToDisk: true);
-                    archive?.Flush();
-                    sinceFlush.Restart();
+                    // L'anivellador s'ha buidat (desactivat o aturada): a partir d'ara, sense.
+                    leveler = null;
+                    _leveler = null;
+                    if (!_stopEncoder) continue;
                 }
+                if (_stopEncoder && ring.Count == 0) break; // aturat i memòria buida
             }
 
             // El limitador encara té dins seu l'últim 1,5 ms de so: s'hi passa silenci perquè surti.
@@ -917,11 +996,11 @@ public sealed class Recorder : IDisposable
     }
 
     /// <summary>Converteix a estèreo: mono es duplica; més de 2 canals, els dos primers.</summary>
-    private static void ToStereo(float[] input, int frames, int channels, float[] stereo)
+    private static void ToStereo(float[] input, int frames, int channels, Span<float> stereo)
     {
         if (channels == 2)
         {
-            Array.Copy(input, stereo, frames * 2);
+            input.AsSpan(0, frames * 2).CopyTo(stereo);
             return;
         }
         for (int i = 0; i < frames; i++)
@@ -938,7 +1017,7 @@ public sealed class Recorder : IDisposable
     /// el limitador (si és activat) i, després, es retalla el que encara passi de ±1 (el
     /// mesurador ja ho mostra com a saturació). Retorna el guany aplicat al final del bloc.
     /// </summary>
-    private static float ApplyGain(float[] stereo, int frames, float from, float to)
+    private static float ApplyGain(Span<float> stereo, int frames, float from, float to)
     {
         if (from == 1f && to == 1f) return to;
 
@@ -968,6 +1047,7 @@ public sealed class Recorder : IDisposable
         _encoderThread?.Join(TimeSpan.FromSeconds(60)); // buidar 10 s de memòria triga molt menys
         _encoderThread = null;
         _limiter = null;
+        _leveler = null;
         if (ArchiveError is null && _archive?.Error is { } archiveError)
             SetArchiveFailed(archiveError);
         _archive = null;

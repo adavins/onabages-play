@@ -2289,3 +2289,22 @@ body.engine-offline .side-content {
 .stream-server-row { display: flex; gap: 0.5rem; }
 .stream-server-host { flex: 1; }
 .stream-server-port { width: 7rem; }
+
+/* Barra «Anivellador» (js/ui/leveler-bar.js; D-148): zero a prop de l'esquerra; blau cap a la dreta (puja), més clar cap a l'esquerra (baixa). */
+.lev-row { grid-template-columns: auto 1fr 4.3rem; }
+.lev-bar {
+  position: relative;
+  height: 0.45rem;
+  background: var(--bs-tertiary-bg);
+  border-radius: 0.2rem;
+}
+.lev-fill { position: absolute; top: 0; bottom: 0; left: 0; width: 0; background: var(--obp-level); border-radius: 0.1rem; }
+.lev-fill.down { opacity: 0.55; }
+/* Marques: cada 6 dB, suaus; el 0 dB, blanca i més alta que la barra, perquè es llegeixi d'un cop d'ull (D-149). */
+.lev-tick { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--bs-secondary-color); opacity: 0.45; }
+.lev-zero { position: absolute; top: -0.2rem; bottom: -0.2rem; width: 2px; margin-left: -1px; background: var(--bs-emphasis-color); border-radius: 1px; }
+.lev-row .gr-value { color: var(--obp-level); white-space: nowrap; }
+.lev-row .gr-value .bi { margin-right: 0.15rem; }
+/* En pausa (sense veu): manté el guany; la barra s'apaga una mica i surt ⏸. */
+.lev-row.lev-hold .lev-fill { opacity: 0.35; }
+.lev-row.lev-hold .gr-value { color: var(--bs-secondary-color); }

@@ -505,7 +505,8 @@
   <ul>
     <li><strong>NIV</strong> (anivellador): iguala el volum de la parla, com <a href="#niv">el dels reproductors</a>, amb el
       mateix objectiu. Mira 1 segon endavant: en activar-lo mentre s'emet, l'emissió es retarda 1 segon (els oients no ho
-      noten) i, en desactivar-lo, aquest segon s'envia de cop. No es perd res.</li>
+      noten) i, en desactivar-lo, aquest segon s'envia de cop. No es perd res. Sota el fader, la barra
+      <em>Anivellador</em> diu quant puja o baixa ara.</li>
     <li><strong>DSP</strong> (compressor): obre la mateixa finestra que als <a href="#processament">reproductors</a>, amb els
       mateixos presets.</li>
     <li><strong>LIM</strong> (limitador): el que s'emet no passa mai del sostre (per defecte −1 dB), com als
@@ -571,6 +572,25 @@
     <li>Un clic l'activa o el desactiva, també mentre s'enregistra. Activat, és lila amb una ✓.</li>
     <li>Sota el volum surt la barra <em>Limitador</em>, que diu quant abaixa.</li>
     <li>El sostre (per defecte −1 dB) es canvia a ⚙ Configuració &gt; Enregistradors.</li>
+  </ul>
+
+  <h3 id="niv-enregistradors">Anivellador (NIV)</h3>
+  <p>El botó <strong>NIV</strong> iguala el volum de la parla mentre s'enregistra. És útil quan el que entra ve directament
+    de la taula, com una entrevista en directe amb un micròfon que queda fluix i un altre de fort. Funciona com
+    <a href="#niv">el NIV dels reproductors</a>, amb el mateix objectiu i el mateix màxim (⚙ Configuració), però amb una
+    diferència important: <strong>el fitxer queda anivellat</strong> (i la còpia de l'historial, també). No es pot desfer.</p>
+  <ul>
+    <li>Per defecte està desactivat: activa'l només quan calgui. Un clic l'activa o el desactiva, també mentre s'enregistra.
+      Activat, és blau amb una ✓.</li>
+    <li>Activat, sota el fader surt la barra <em>Anivellador</em>, que diu quant puja (cap a la dreta) o baixa (cap a
+      l'esquerra) ara mateix, amb el número (p. ex. «+6,5 dB»). El mesurador de dalt continua mostrant el que entra, abans
+      del NIV, perquè puguis ajustar el volum amb el fader al moment: el NIV va 1 segon endarrerit. La marca blanca de la
+      barra és 0 dB; les suaus, cada 6 dB.</li>
+    <li>Quan no hi ha veu (silenci o només soroll de fons), el NIV <strong>manté el guany</strong> que tenia, perquè no pugi
+      el soroll entre frases: la barra s'apaga una mica i surt <i class="bi bi-pause-fill"></i>. Quan es torna a parlar,
+      continua des d'allà.</li>
+    <li>Està pensat per a la veu: si l'enregistrament porta música, també l'anivellarà.</li>
+    <li>Va abans del limitador: amb tots dos activats, primer s'iguala la parla i després el LIM vigila els cops.</li>
   </ul>
 
   <h3 id="alarma-silenci">Alarma de silenci</h3>

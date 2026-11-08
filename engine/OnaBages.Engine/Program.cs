@@ -433,6 +433,13 @@ if (archiveFolder is not null && archiveKeepDays > 0)
 foreach (var recorder in state.Recorders)
     recorder.SetLimiter(config.Read(c => c.LimitedRecorders.Contains(recorder.Id)), config.Read(c => c.RecorderLimiterCeilingDb));
 
+// Anivellador de cada enregistrador (fase 5, pas 32a): el que hi ha al perfil, amb l'objectiu i el màxim dels reproductors.
+foreach (var recorder in state.Recorders)
+{
+    var (level, target, max) = config.Read(c => (c.LeveledRecorders.Contains(recorder.Id), c.LoudnessTargetLufs, c.LevelerMaxBoostDb));
+    recorder.SetLeveler(level, target, max);
+}
+
 // Alarma de silenci dels enregistradors (fase 5, pas 25a): la del perfil.
 CommandRouter.ApplySilenceAlarm(config, state.Recorders);
 

@@ -33,7 +33,9 @@ public sealed class Leveler
     private readonly Func<Span<float>, int> _source;
     private readonly int _blockFrames;
     private readonly int _lookahead, _window, _peakGuard;
-    private readonly double _targetLufs, _maxBoostDb, _maxCutDb;
+    private readonly double _maxCutDb;
+    // Es poden canviar mentre treballa (SetLimits, des d'un altre fil): es llegeixen amb Volatile.
+    private double _targetLufs, _maxBoostDb;
     private readonly double _upPerBlock, _downPerBlock;
     private readonly LoudnessMeter.Biquad[] _shelf = new LoudnessMeter.Biquad[2];
     private readonly LoudnessMeter.Biquad[] _highPass = new LoudnessMeter.Biquad[2];
@@ -50,6 +52,7 @@ public sealed class Leveler
     private double _gainDb;         // guany al final de l'últim bloc que ha sortit
     private double _desiredDb;      // l'últim guany volgut (es manté a les pauses)
     private bool _started;
+    private bool _holding;          // ara no hi ha veu a prop: el guany es manté (per a l'indicador; D-149)
     private float[] _out = [];
     private int _outPos, _outLen;
 
@@ -76,8 +79,24 @@ public sealed class Leveler
         }
     }
 
+    /// <summary>
+    /// Canvia l'objectiu i el màxim mentre treballa (fase 5, D-147): el guany hi va a poc a poc, amb les velocitats de sempre
+    /// (sense salts). Es pot cridar des d'un altre fil.
+    /// </summary>
+    public void SetLimits(double targetLufs, double maxBoostDb)
+    {
+        if (double.IsFinite(targetLufs)) Volatile.Write(ref _targetLufs, targetLufs);
+        if (double.IsFinite(maxBoostDb)) Volatile.Write(ref _maxBoostDb, Math.Clamp(maxBoostDb, 0, MaxMaxBoostDb));
+    }
+
     /// <summary>Guany que s'aplica ara (dB, al final de l'últim bloc que ha sortit). Per a l'indicador.</summary>
     public double CurrentGainDb => Volatile.Read(ref _gainDb);
+
+    /// <summary>
+    /// En pausa: al tros que surt ara no hi ha veu a prop (silenci o soroll de fons), i el guany es manté on era (no puja).
+    /// Per a l'indicador (D-149).
+    /// </summary>
+    public bool Holding => Volatile.Read(ref _holding);
 
     /// <summary>Omple <paramref name="buffer"/> amb mostres anivellades. 0 = s'ha acabat la pista.</summary>
     public int Read(Span<float> buffer)
@@ -154,9 +173,11 @@ public sealed class Leveler
             if (speechCount >= MinSpeechBlocks)
             {
                 double level = -0.691 + 10 * Math.Log10(speech / speechCount);
-                _desiredDb = Math.Clamp(_targetLufs - level, -_maxCutDb, _maxBoostDb);
+                _desiredDb = Volatile.Read(ref _targetLufs) - level;
             }
         }
+        // Dins dels límits (també a les pauses: si s'abaixa el màxim mentre treballa, el guany hi baixa de seguida).
+        _desiredDb = Math.Clamp(_desiredDb, -_maxCutDb, Volatile.Read(ref _maxBoostDb));
         // (Amb poca parla a la finestra, o cap, es manté l'últim guany volgut: a les pauses no puja.)
 
         double gain = !_started ? _desiredDb
@@ -167,6 +188,7 @@ public sealed class Leveler
         for (int j = Math.Max(3, i - 2); j <= Math.Min(_energy.Count - 1, i + 2) && !speechHere; j++)
             speechHere = Block400(j) >= absoluteGate;
         if (_started && !speechHere && gain > _gainDb) gain = _gainDb;
+        Volatile.Write(ref _holding, !speechHere);
 
         // No saturar: el pic d'aquest bloc i dels que venen de seguida, amb el guany, no pot passar del sostre.
         float peak = 0;

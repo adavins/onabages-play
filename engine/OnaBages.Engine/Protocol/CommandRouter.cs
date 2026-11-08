@@ -122,6 +122,7 @@ public sealed partial class CommandRouter
                 "recorder.configure" => RecorderConfigure(msg),
                 "recorder.setGain" => RecorderSetGain(msg),
                 "recorder.setLimiter" => RecorderSetLimiter(msg),
+                "recorder.setLeveler" => RecorderSetLeveler(msg),
                 "recording.save" => RecordingSave(msg),
                 "recording.saveEdited" => RecordingSaveEdited(msg),
                 "recording.discard" => RecordingDiscard(msg),
@@ -701,6 +702,16 @@ public sealed partial class CommandRouter
                 player.SetLeveler(leveled.Contains(player.Id), max);
         }
 
+        // L'objectiu o el màxim han canviat: també als enregistradors i a l'emissor d'streaming (pas 32a; D-146).
+        // Si el NIV ja treballa, s'apliquen de seguida (D-147).
+        if (levelerMaxBoost is not null || target is not null)
+        {
+            var (leveledRecorders, levelTarget, levelMax) = config.Read(c => (c.LeveledRecorders.ToHashSet(), c.LoudnessTargetLufs, c.LevelerMaxBoostDb));
+            foreach (var recorder in _state.Recorders)
+                recorder.SetLeveler(leveledRecorders.Contains(recorder.Id), levelTarget, levelMax);
+            _state.Streamer.SetLeveler(_state.Streamer.LevelerEnabled, levelTarget, levelMax);
+        }
+
         // L'objectiu nou s'aplica a tots els reproductors (a partir de la pista següent).
         if (target is not null)
         {
@@ -1268,6 +1279,27 @@ public sealed partial class CommandRouter
         {
             if (enabled) c.LimitedRecorders.Add(recorder.Id);
             else c.LimitedRecorders.Remove(recorder.Id);
+        });
+        return new JsonObject { ["recorder"] = RecorderJson.Recorder(recorder) };
+    }
+
+    /// <summary>
+    /// Anivellador d'un enregistrador (fase 5, pas 32a; D-146): recorder, enabled. S'aplica de seguida, també a mig
+    /// enregistrament (el fitxer queda anivellat). L'objectiu i el màxim són els dels reproductors. Es desa al perfil.
+    /// </summary>
+    private JsonObject RecorderSetLeveler(JsonObject msg)
+    {
+        var recorder = GetRecorder(msg);
+        if (msg["enabled"] is not JsonValue v || !v.TryGetValue(out bool enabled))
+            throw new BadParamsException("'enabled' ha de ser true o false.");
+
+        var (target, maxBoost) = _config?.Read(c => (c.LoudnessTargetLufs, c.LevelerMaxBoostDb))
+            ?? (EngineConfig.DefaultLoudnessTargetLufs, Leveler.DefaultMaxBoostDb);
+        recorder.SetLeveler(enabled, target, maxBoost);
+        _config?.Update(c =>
+        {
+            if (enabled) c.LeveledRecorders.Add(recorder.Id);
+            else c.LeveledRecorders.Remove(recorder.Id);
         });
         return new JsonObject { ["recorder"] = RecorderJson.Recorder(recorder) };
     }

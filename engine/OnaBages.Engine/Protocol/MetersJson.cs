@@ -27,10 +27,13 @@ public static class MetersJson
         var recorderLevels = new JsonObject();
         // Abaixada del limitador de cada enregistrador (dB, ≥ 0; 0 si no s'enregistra).
         var recorderReductions = new JsonObject();
+        // Anivellador de cada enregistrador ara: { gainDb, hold } (null si no treballa; fase 5, D-148 i D-149).
+        var recorderLeveler = new JsonObject();
         foreach (var r in recorders)
         {
             recorderLevels[r.Id] = Levels(r.Meter.Take());
             recorderReductions[r.Id] = Math.Round(r.TakeLimiterReductionDb(), 1);
+            recorderLeveler[r.Id] = Leveler(r.LevelerGainDb, r.LevelerHolding);
         }
 
         var ev = Messages.Event("meters");
@@ -38,6 +41,7 @@ public static class MetersJson
         ev["playerReduction"] = reductions;
         ev["recorders"] = recorderLevels;
         ev["recorderReduction"] = recorderReductions;
+        ev["recorderLeveler"] = recorderLeveler;
         if (cue is not null)
             ev["cue"] = Levels(cue.TakePeaks());
         if (cart is not null)
@@ -51,9 +55,14 @@ public static class MetersJson
                 ["processing"] = Math.Round(streamer.TakeDynamicsReductionDb(), 1),
                 ["limiter"] = Math.Round(streamer.TakeLimiterReductionDb(), 1),
             };
+            ev["streamLeveler"] = Leveler(streamer.LevelerGainDb, streamer.LevelerHolding);
         }
         return ev;
     }
+
+    /// <summary>{ gainDb, hold }: el guany de l'anivellador i si està en pausa (sense veu, manté el guany); null si no treballa.</summary>
+    private static JsonObject? Leveler(double? gainDb, bool hold) =>
+        gainDb is { } g ? new JsonObject { ["gainDb"] = Math.Round(g, 1), ["hold"] = hold } : null;
 
     private static JsonArray Levels((float Left, float Right) peaks) =>
         [PeakMeter.ToDb(peaks.Left), PeakMeter.ToDb(peaks.Right)];

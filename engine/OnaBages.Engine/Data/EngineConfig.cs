@@ -220,6 +220,9 @@ public sealed class EngineConfig
     /// <summary>Reproductors amb l'anivellador activat (fase 5, pas 30b; D-135; per defecte, cap).</summary>
     public HashSet<string> LeveledPlayers { get; } = [];
 
+    /// <summary>Enregistradors amb l'anivellador activat (fase 5, pas 32a; D-146; per defecte, cap).</summary>
+    public HashSet<string> LeveledRecorders { get; } = [];
+
     /// <summary>El màxim que pot pujar l'anivellador (dB, comú a tots els reproductors).</summary>
     public double LevelerMaxBoostDb { get; set; } = Leveler.DefaultMaxBoostDb;
 

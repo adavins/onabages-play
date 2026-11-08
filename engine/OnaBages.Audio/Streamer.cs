@@ -187,6 +187,9 @@ public sealed class Streamer : IDisposable
     /// <summary>Guany de l'anivellador ara mateix (dB), o null si no treballa.</summary>
     public double? LevelerGainDb => _leveler?.CurrentGainDb;
 
+    /// <summary>L'anivellador està en pausa: no hi ha veu i manté el guany (D-149). False si no treballa.</summary>
+    public bool LevelerHolding => _leveler?.Holding ?? false;
+
     /// <summary>Quant ha abaixat el compressor (DSP) des de l'última crida (dB, ≥ 0).</summary>
     public float TakeDynamicsReductionDb() => _dsp?.TakeMaxReductionDb() ?? 0f;
 
@@ -273,7 +276,7 @@ public sealed class Streamer : IDisposable
     /// <summary>
     /// Anivellador (NIV). Es pot activar o desactivar mentre s'emet. Mira 1 s endavant: en activar-lo, l'emissió
     /// s'endarrereix 1 s (els oients no ho noten, el seu reproductor té més memòria); en desactivar-lo, aquest segon
-    /// s'envia de cop. No es perd ni es repeteix cap mostra. L'objectiu i el màxim s'apliquen en tornar-lo a activar.
+    /// s'envia de cop. No es perd ni es repeteix cap mostra. Si ja treballa, l'objectiu i el màxim nous s'apliquen de seguida (D-147).
     /// </summary>
     public void SetLeveler(bool enabled, double? targetLufs = null, double? maxBoostDb = null)
     {
@@ -283,6 +286,7 @@ public sealed class Streamer : IDisposable
             if (targetLufs is { } t && double.IsFinite(t)) LevelerTargetLufs = Math.Round(Math.Clamp(t, -30, -6), 1);
             if (maxBoostDb is { } m && double.IsFinite(m)) LevelerMaxBoostDb = Math.Clamp(m, 0, Leveler.MaxMaxBoostDb);
             _levelerEnabled = enabled;
+            _leveler?.SetLimits(LevelerTargetLufs, LevelerMaxBoostDb); // si ja treballa, de seguida (D-147)
             _changed = true;
         }
         RaiseStateChanged();

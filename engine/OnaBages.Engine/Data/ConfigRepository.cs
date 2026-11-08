@@ -799,6 +799,14 @@ public sealed class ConfigRepository
                     if (Text(item) is { Length: > 0 } playerId) config.LeveledPlayers.Add(playerId);
                 }
             }
+            // Enregistradors amb el NIV (pas 32a; camp opcional, sense canvi de versió).
+            if (leveler["recorders"] is JsonArray leveledRecorders)
+            {
+                foreach (var item in leveledRecorders)
+                {
+                    if (Text(item) is { Length: > 0 } recorderId) config.LeveledRecorders.Add(recorderId);
+                }
+            }
         }
 
         if (root["normalization"] is JsonObject normalization)
@@ -1022,6 +1030,7 @@ public sealed class ConfigRepository
         {
             ["maxBoostDb"] = config.LevelerMaxBoostDb,
             ["players"] = new JsonArray(config.LeveledPlayers.Order(StringComparer.Ordinal).Select(id => (JsonNode)id).ToArray()),
+            ["recorders"] = new JsonArray(config.LeveledRecorders.Order(StringComparer.Ordinal).Select(id => (JsonNode)id).ToArray()),
         },
         ["normalization"] = new JsonObject
         {

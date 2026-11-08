@@ -200,6 +200,8 @@ export function editSettings(settings, running, pin) {
         normalització (p. ex. una entrevista amb una veu fluixa i una de forta). Va a poc a poc, mira un segon endavant,
         no puja les pauses ni el soroll de fons i no satura. Si la veu fluixa té molt soroll a sota, pujar-la també el puja:
         per això té un màxim. Amb el NIV, el NORM no s'aplica. S'aplica a partir de la pista següent.
+        El mateix màxim i el mateix objectiu valen per al NIV dels enregistradors i de l'streaming (allà s'apliquen
+        de seguida, també mentre s'enregistra o s'emet).
       </div>
 
       <h3 class="obp-settings-section">Retall de silencis</h3>

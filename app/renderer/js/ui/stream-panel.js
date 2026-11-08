@@ -14,6 +14,7 @@ import { deviceWarning } from './device-line.js';
 import { DeviceSelect } from './device-select.js';
 import { LevelMeter } from './meter.js';
 import { VolumeFader } from './fader.js';
+import { LevelerBar } from './leveler-bar.js';
 import { openStreamProcessingDialog } from './processing-dialog.js';
 import { manageStreamServers } from './stream-servers-dialog.js';
 import { choose } from './dialogs.js';
@@ -37,6 +38,7 @@ export class StreamPanel {
   #deviceSelect;
   #meter;
   #fader;
+  #levelerBar = new LevelerBar();
   /** @type {Record<string, HTMLElement>} */ #el = {};
   /** @type {number | undefined} */ #messageTimer;
   #serversKey = '';
@@ -139,6 +141,8 @@ export class StreamPanel {
     this.#fader = new VolumeFader((db) => this.#send('stream.setGain', { db }),
       { min: -60, max: 12, icon: 'bi-broadcast', label: 'Volum de l\'emissió' });
     this.#el['fader-slot'].appendChild(this.#fader.element);
+    // Sota el fader, la barra de l'anivellador (D-148): què hi fa ara el NIV (el mesurador és l'entrada, abans del NIV).
+    this.#el['fader-slot'].after(this.#levelerBar.element);
 
     this.#el.server.addEventListener('change', () => {
       const serverId = /** @type {HTMLSelectElement} */ (this.#el.server).value;
@@ -241,7 +245,6 @@ export class StreamPanel {
       if (s.state === 'streaming') parts.push(`connectat fa ${formatDuration(p.connectedSeconds ?? 0)}`);
       parts.push(`${formatBytes(p.bytesSent ?? 0)} enviats`);
       if (p.reconnects > 0) parts.push(p.reconnects === 1 ? '1 reconnexió' : `${p.reconnects} reconnexions`);
-      if (typeof p.levelerGainDb === 'number') parts.push(`Niv. ${signedDb(p.levelerGainDb)} dB`);
     }
     el.details.textContent = parts.join(' · ');
     el.details.title = el.details.textContent;
@@ -259,7 +262,9 @@ export class StreamPanel {
   }
 
   /** Nivells nous (meters): [esquerre, dret] en dBFS i el que abaixen el DSP i el LIM. */
-  updateMeter(/** @type {number[] | undefined} */ levels, /** @type {any} */ reduction) {
+  updateMeter(/** @type {number[] | undefined} */ levels, /** @type {any} */ reduction,
+    /** @type {{ gainDb: number, hold?: boolean } | null | undefined} */ leveler = null) {
+    this.#levelerBar.update(leveler);
     if (levels) this.#meter.update(levels);
     if (reduction && !this.#el.gr.classList.contains('d-none')) {
       const value = Math.max(Number(reduction.processing ?? 0), Number(reduction.limiter ?? 0));
@@ -295,6 +300,7 @@ export class StreamPanel {
     const el = this.#el;
     const target = String(this.#store.settings?.loudness?.targetLufs ?? -12).replace('-', '−');
     const level = !!s.leveler?.enabled;
+    this.#levelerBar.setVisible(level);
     toggleButton(el.level, level, level
       ? `Anivellador ACTIVAT: iguala el volum de la parla cap a ${target} LUFS. Clica per desactivar-lo (de seguida; l'emissió avança 1 s).`
       : `Anivellador desactivat. Clica per igualar el volum de la parla cap a ${target} LUFS (de seguida; l'emissió s'endarrereix 1 s, els oients no ho noten).`);
@@ -402,11 +408,6 @@ function toggleButton(/** @type {HTMLElement} */ button, /** @type {boolean} */ 
 function droppedTime(/** @type {number} */ bytes, /** @type {number} */ kbps) {
   const seconds = bytes * 8 / ((kbps || 128) * 1000);
   return seconds < 1 ? `${Math.max(1, Math.round(seconds * 1000))} ms` : `${seconds.toFixed(1).replace('.', ',')} s`;
-}
-
-/** «+3,5» o «−2,0». */
-function signedDb(/** @type {number} */ db) {
-  return `${db > 0 ? '+' : db < 0 ? '−' : ''}${Math.abs(db).toFixed(1).replace('.', ',')}`;
 }
 
 /** @param {HTMLElement} button @param {boolean} enabled */

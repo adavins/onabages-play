@@ -226,6 +226,7 @@ public class StreamCommandsTests : IDisposable
         var meters = MetersJson.Event([], [], streamer: state.Streamer);
         Assert.Equal(2, meters["stream"]!.AsArray().Count);
         Assert.NotNull(meters["streamReduction"]!["limiter"]);
+        Assert.True(meters.ContainsKey("streamLeveler")); // null: el NIV no treballa
 
         r = Send(router, new() { ["cmd"] = "stream.stop" });
         Assert.Equal("idle", r["stream"]!["state"]!.GetValue<string>());

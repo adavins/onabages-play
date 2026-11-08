@@ -356,6 +356,34 @@ foreach (var b in cartButtons)
 if (cartButtons.Count > 0)
     log.LogInformation("Botonera: {Count} botons", cartButtons.Count);
 
+// Emissor d'streaming (fase 5, pas 31c): cada canvi va a la interfície; al registre, el canvi d'estat, d'error o de connexió.
+{
+    string lastLogged = "";
+    state.Streamer.StateChanged += s =>
+    {
+        string summary = $"{s.State}|{s.ErrorMessage}|{s.ConnectionError}|{s.TitleError}";
+        if (summary != lastLogged)
+        {
+            lastLogged = summary;
+            if (s.State == StreamerState.Error)
+                log.LogWarning("Streaming: error — {Message} (detall: {Detail})", s.ErrorMessage, s.ErrorDetail ?? "cap");
+            else if (s.ConnectionError is not null)
+                log.LogWarning("Streaming: {State} — {Message}", StreamJson.State(s.State), s.ConnectionError);
+            else
+                log.LogInformation("Streaming: {State} {Server}", StreamJson.State(s.State), s.Server is { } srv ? $"{srv.Host}:{srv.SourcePort}" : "");
+            if (s.TitleError is not null)
+                log.LogWarning("Streaming: {Message}", s.TitleError);
+        }
+        var (servers, serverId) = config.Read(c => (c.StreamServers.ToList(), c.Stream.ServerId));
+        Broadcast(StreamJson.StateEvent(s, servers, serverId));
+    };
+}
+
+
+// Emissor d'streaming (fase 5, pas 31c): servidor, qualitat, títol i processament del perfil (la font ja l'ha posada hardware.Start).
+try { CommandRouter.ApplyStreamSettings(config, state.Streamer); }
+catch (Exception ex) { log.LogWarning("Streaming: ajustos desats no vàlids: {Message}", ex.Message); }
+
 // «Netejar Recents en tancar l'aplicació» (fase 5, pas 11a): es fa en arrencar (amb la configuració ja llegida), abans que la interfície vegi la
 // llista (així també es fa si l'ordinador va caure). Només els desats i els no trobats: els no desats es queden.
 if (config.Read(c => c.ClearRecentsOnExit))
@@ -492,6 +520,8 @@ app.Lifetime.ApplicationStopping.Register(() =>
         player.Dispose();
     state.Cue.Dispose();
     state.Cart.Dispose();
+    if (state.IsStreaming) log.LogInformation("Streaming: aturant l'emissió");
+    state.Streamer.Dispose();
     foreach (var player in state.Players)
         SaveLastList(player); // l'última versió de cada llista, per recuperar-la en tornar a arrencar
     analyzer.Dispose();
@@ -557,7 +587,7 @@ _ = Task.Run(async () =>
         while (await timer.WaitForNextTickAsync(stopping))
         {
             if (state.Clients == 0) continue;
-            await hub.BroadcastAsync(MetersJson.Event(state.Players, state.Recorders, state.Cue, state.Cart), stopping);
+            await hub.BroadcastAsync(MetersJson.Event(state.Players, state.Recorders, state.Cue, state.Cart, state.Streamer), stopping);
         }
     }
     catch (OperationCanceledException)
@@ -601,6 +631,8 @@ _ = Task.Run(async () =>
     var lastLost = new Dictionary<Recorder, long>();
     var lastUnderruns = new Dictionary<Player, int>();
     var lastSilenceAlarm = new Dictionary<Recorder, bool>();
+    int lastStreamReconnects = 0;
+    long lastStreamDropped = 0;
 
     try
     {
@@ -675,6 +707,28 @@ _ = Task.Run(async () =>
             catch (Exception ex) { log.LogError("Botonera: error en revisar-la: {Message}", ex.Message); }
             if (state.Cart.Playing.Count > 0)
                 await hub.BroadcastAsync(CartJson.PositionEvent(state.Cart), stopping);
+
+            // Streaming (pas 31c): connexió, reconnexions i font; progrés 1 per segon mentre s'emet.
+            try { state.Streamer.Tick(); }
+            catch (Exception ex) { log.LogError("Streaming: error en revisar-lo: {Message}", ex.Message); }
+            if (state.IsStreaming)
+            {
+                int reconnects = state.Streamer.Reconnects;
+                if (reconnects > lastStreamReconnects)
+                    log.LogWarning("Streaming: s'ha tornat a connectar ({Count} vegades des de l'inici)", reconnects);
+                lastStreamReconnects = reconnects;
+                long dropped = state.Streamer.BytesDropped;
+                if (dropped > lastStreamDropped)
+                    log.LogWarning("Streaming: la xarxa no va prou de pressa, s'han descartat {Bytes} bytes", dropped - lastStreamDropped);
+                lastStreamDropped = dropped;
+                if (tick % 10 == 0)
+                    await hub.BroadcastAsync(StreamJson.ProgressEvent(state.Streamer), stopping);
+            }
+            else
+            {
+                lastStreamReconnects = 0;
+                lastStreamDropped = 0;
+            }
 
             // Reproducció de l'editor: final i errors; posició 10 per segon mentre sona.
             try { state.Editor.Player.Tick(); }

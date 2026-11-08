@@ -12,7 +12,8 @@ public static class MetersJson
     /// </summary>
     /// <param name="cue">La preescolta (opcional: sense, el camp no hi és).</param>
     /// <param name="cart">La botonera (opcional: sense, el camp no hi és).</param>
-    public static JsonObject Event(IEnumerable<Player> players, IEnumerable<Recorder> recorders, CuePlayer? cue = null, CartWall? cart = null)
+    /// <param name="streamer">L'emissor d'streaming (opcional: sense, els camps no hi són).</param>
+    public static JsonObject Event(IEnumerable<Player> players, IEnumerable<Recorder> recorders, CuePlayer? cue = null, CartWall? cart = null, Streamer? streamer = null)
     {
         var playerLevels = new JsonObject();
         // Abaixada del compressor/limitador de cada reproductor (dB, ≥ 0), per a l'indicador de reducció.
@@ -41,6 +42,16 @@ public static class MetersJson
             ev["cue"] = Levels(cue.TakePeaks());
         if (cart is not null)
             ev["cart"] = Levels(cart.Meter.Take());
+        // Emissor d'streaming (fase 5, pas 31c): el que entra, amb el fader; i quant abaixen el DSP i el LIM (dB, ≥ 0).
+        if (streamer is not null)
+        {
+            ev["stream"] = Levels(streamer.Meter.Take());
+            ev["streamReduction"] = new JsonObject
+            {
+                ["processing"] = Math.Round(streamer.TakeDynamicsReductionDb(), 1),
+                ["limiter"] = Math.Round(streamer.TakeLimiterReductionDb(), 1),
+            };
+        }
         return ev;
     }
 

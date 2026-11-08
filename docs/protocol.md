@@ -58,7 +58,8 @@ Tots els missatges són objectes JSON amb el camp `"v": 1`.
 | `bad_state` | L'ordre no es pot fer en l'estat actual (p. ex. Play sense pista carregada). No canvia res |
 | `player_error` | L'ordre s'ha fet, però el reproductor ha quedat en estat `error` (dispositiu no disponible, fitxer il·legible). El missatge n'explica el motiu |
 | `recorder_error` | L'ordre s'ha fet, però l'enregistrador ha quedat en estat `error` (entrada no disponible, carpeta sense permís...). El missatge n'explica el motiu |
-| `recording_active` | `engine.shutdown` sense `force`, amb enregistraments en curs. No s'atura res |
+| `stream_error` | `stream.start`: l'emissor ha quedat en estat `error` (la font no es pot obrir, el codificador no es pot carregar). El missatge n'explica el motiu (fase 5, D-143) |
+| `recording_active` | `engine.shutdown` sense `force`, amb enregistraments en curs o amb una emissió d'streaming activa (fase 5, D-143). No s'atura res |
 | `file_error` | No s'ha pogut llegir o escriure un fitxer de llista (no existeix, és malmès, no hi ha permís...). El missatge n'explica el motiu |
 | `file_exists` | `editor.save`: el fitxer de destinació ja existeix. No s'ha desat res; cal confirmar-ho i tornar-ho a enviar amb `overwrite: true` |
 | `profile_exists` | `profile.import`: ja hi ha un perfil amb el nom del que s'importa. No s'ha importat res; es pot tornar a enviar amb un altre `name` |
@@ -71,8 +72,8 @@ Tots els missatges són objectes JSON amb el camp `"v": 1`.
 |---|---|---|---|
 | `engine.hello` | — | `{ name, version, protocol }` | fase 0 |
 | `engine.ping` | — | `{ pong: true, time }` | fase 0 |
-| `state.get` | — | `{ engine: { version, uptime, clients }, players: [ … ], recorders: [ … ], recordings: [ … ], playlists: [ … ], cue: { … }, hardware: { … } }` (vegeu 4.2 a 4.8) | fase 0 (`players`, `recorders`, `hardware`: fase 1; `playlists`, `recordings`, `cue`: fase 2) |
-| `engine.shutdown` | `force` (opcional, `true`) | `{ stopping: true }` i el motor es tanca. Si hi ha enregistraments en curs, es rebutja amb `recording_active`, tret que s'enviï `force: true`: llavors es tanquen correctament (fitxers vàlids, sense marcador `.rec`) abans d'aturar-se | fase 0 (`force`: fase 1) |
+| `state.get` | — | `{ engine: { version, uptime, clients }, players: [ … ], recorders: [ … ], recordings: [ … ], playlists: [ … ], cue: { … }, cart: { … }, stream: { … }, hardware: { … } }` (vegeu 4.2 a 4.8, 4.15 i 4.16) | fase 0 (`players`, `recorders`, `hardware`: fase 1; `playlists`, `recordings`, `cue`: fase 2) |
+| `engine.shutdown` | `force` (opcional, `true`) | `{ stopping: true }` i el motor es tanca. Si hi ha enregistraments en curs o s'emet per streaming, es rebutja amb `recording_active`, tret que s'enviï `force: true`: llavors es tanquen correctament (fitxers vàlids, sense marcador `.rec`) i s'atura l'emissió abans d'aturar-se | fase 0 (`force`: fase 1) |
 | `devices.list` | `kind`: `"output"`, `"input"` o `"all"` (per defecte); `includeInactive`: `true` per incloure també els desactivats i desconnectats (per defecte, `false`) | `{ devices: [ … ] }` (vegeu 4.1) | fase 1 |
 | `hardware.report` | — | `{ report: { … } }`: resum de l'arrencada (vegeu 4.4) | fase 1 |
 | `settings.get` | — | `{ settings: { profile: { id, name }, ui: { zoom, recordersPerRow, endWarningSeconds, hideIdleRecorderMeters, playlistRowHeight, minPlaylistRowHeight, maxPlaylistRowHeight, playerOrder, recorderOrder }, layout: { players, recorders }, program: { name }, folders: { history, logs }, restartNeeded } }`: ajustos desats a `config.json` i al perfil actiu (vegeu 4.9) | fase 2 (`layout`, `recordersPerRow`, `endWarningSeconds`, `restartNeeded`: pas 9; `program`: pas 10); `profile`: fase 4 |
@@ -214,7 +215,7 @@ El motor desa el dispositiu de cada reproductor i enregistrador a `%APPDATA%\Ona
 - `hasChanges`: `false` si no hi ha res a explicar (la interfície no mostra la finestra «Canvis en el maquinari»).
 - `firstRun`: no hi ha cap dispositiu desat (primera arrencada o configuració perduda). La interfície proposarà una assignació (fase 2).
 - `configProblem`: si `config.json` no s'ha pogut llegir, el motiu. El motor arrenca sense assignacions i en desa una còpia a `config.json.malmes`.
-- `elements`: només els elements que tenien un dispositiu desat. `element` és `player`, `recorder`, `cue` (la preescolta, sempre amb `id: "1"`) o `cart` (la botonera, fase 5, sempre amb `id: "1"`). `device` és el dispositiu trobat ara (format de 4.1) o `null`.
+- `elements`: només els elements que tenien un dispositiu desat. `element` és `player`, `recorder`, `cue` (la preescolta, sempre amb `id: "1"`) `cart` (la botonera, fase 5, sempre amb `id: "1"`) o `stream` (l'emissor d'streaming, fase 5, sempre amb `id: "1"`). `device` és el dispositiu trobat ara (format de 4.1) o `null`.
 - `newDevices`: dispositius actius que no hi eren l'última vegada i no són de cap element. `formatChanges`: dispositius amb el format canviat a Windows.
 - El motor **mai no assigna un dispositiu diferent** del que s'havia triat (D-016). El resum és el de l'arrencada: no canvia fins que el motor es reinicia.
 
@@ -516,6 +517,53 @@ Botons que fan sonar talls curts a l'instant, diversos alhora (com a molt `maxVo
 
 Al perfil (`perfil.json`): `cartDevice` (com `cue`) i `cartWall.buttons` (`[ { page, index, path, name, color, gainDb } ]`; només les rutes, mai l'àudio).
 
+### 4.16. Emissor d'streaming (fase 5, D-140 a D-143)
+
+Un sol emissor (com el BUTT): envia una entrada a un servidor **Shoutcast v2** (mode «legacy»: es connecta al **port del servidor + 1** amb `contrasenya` o `contrasenya:#sid`) o **Icecast 2.4+** (`PUT` al punt de muntatge, amb usuari i contrasenya), en MP3 CBR. La font, els servidors i tots els ajustos són del **perfil** i es desen a cada canvi; la font es recupera en arrencar com la dels altres elements (4.4, `element: "stream"`). La connexió es fa en segon pla: `stream.start` no espera la xarxa. Si no es pot connectar o es talla, **es torna a provar sol** (cada 5 s; 1 s després d'un tall) fins que s'atura. Mentre no està connectat, el so no s'envia (no s'envia so endarrerit). En connectar i en canviar-lo, s'envia el títol.
+
+| Ordre | Paràmetres | Resultat |
+|---|---|---|
+| `stream.get` | — | `{ stream }` |
+| `stream.setDevice` | `deviceId` (una entrada) | `{ stream }`. Una sortida o un identificador que no hi és: `bad_params`. Mentre s'emet: `bad_state` |
+| `stream.saveServer` | `server`: `{ id?, name?, type, host, port, password?, mount?, user?, streamId? }`. Sense `id`, se n'afegeix un de nou (com a molt 20). `type`: `"shoutcast"` o `"icecast"`. `host`: l'adreça (se'n treu `http(s)://` i el camí: es pot enganxar l'adreça dels oients); el port va a part (de 1 a 65535; amb el port dins de l'adreça, `bad_params`). `name`: com a molt 40 caràcters (buit = l'adreça). Sense `password`, es conserva la que hi havia. `mount` (Icecast; per defecte `/stream`), `user` (Icecast; per defecte `source`), `streamId` (Shoutcast v2, de 1 a 999; per defecte 1) | `{ stream, serverId }`. Si encara no n'hi havia cap de triat, el nou queda triat. El servidor triat no es pot canviar mentre s'emet (`bad_state`) |
+| `stream.deleteServer` | `serverId` | `{ stream }`. Si era el triat, es tria el primer que queda. El servidor on s'emet: `bad_state` |
+| `stream.selectServer` | `serverId` | `{ stream }`. Mentre s'emet: `bad_state` |
+| `stream.setQuality` | `bitrateKbps` (`64`, `80`, `96`, `112`, `128`, `160`, `192`, `224`, `256` o `320`), `sampleRate` (`44100` o `48000`), `mono` (bool); els que no hi són es conserven | `{ stream }`. Si la targeta va a una altra freqüència, LAME la converteix. Mentre s'emet: `bad_state` |
+| `stream.setTitle` | `title` (com a molt 120 caràcters; `""` = cap) | `{ stream }`. Si s'emet, s'envia de seguida (si falla, `titleError` ho diu i l'emissió continua) |
+| `stream.setGain` | `db` (de −60 a +12; fora de marge, al límit) | `{ stream }`. De seguida, també mentre s'emet |
+| `stream.setLeveler` | `enabled` | `{ stream }`. Anivellador (NIV), amb l'objectiu de la normalització (`settings.loudness`) i el màxim de `settings.leveler`. De seguida: en activar-lo, l'emissió s'endarrereix 1 s; en desactivar-lo, aquest segon s'envia de cop (no es perd res) |
+| `stream.setProcessing` | `processing` (com a `player.setProcessing`, 4.13) o `preset` | `{ stream }`. Compressor (DSP). De seguida |
+| `stream.setLimiter` | `enabled`, `ceilingDb` (opcional, de −6 a 0; sense, es conserva; per defecte −1) | `{ stream }`. Limitador (LIM). De seguida |
+| `stream.start` | — | `{ stream }` amb `state: "connecting"`. Sense font o sense servidor: `bad_state`. Si la font no es pot obrir: `stream_error` |
+| `stream.stop` | — | `{ stream }`. Envia el que quedava i tanca la connexió. La interfície ha de demanar confirmació abans. Si no s'emet: `bad_state` |
+
+Objecte `stream`:
+
+```json
+{ "state": "streaming", "deviceId": "{0.0.1.00000000}.{...}", "inputActive": true,
+  "serverId": "1",
+  "servers": [ { "id": "1", "name": "Ona Bages", "type": "shoutcast", "host": "onabagescast.radioca.st", "port": 8000,
+                 "mount": "/stream", "user": "source", "streamId": 1, "hasPassword": true } ],
+  "bitrateKbps": 128, "sampleRate": 44100, "mono": false,
+  "title": "Directe des de la plaça", "titleError": null,
+  "gainDb": 0, "leveler": { "enabled": true, "gainDb": 3.5 }, "limiter": { "enabled": true, "ceilingDb": -1 },
+  "processing": { "enabled": false, "inputGainDb": 0, "...": "com a 4.13" },
+  "error": null, "errorDetail": null, "connectionError": null,
+  "startedAt": "2026-11-08T10:00:00+01:00", "connectedAt": "2026-11-08T10:00:01+01:00",
+  "progress": { "elapsed": 61.2, "connectedSeconds": 60.1, "bytesSent": 961234, "bytesDropped": 0, "samplesLost": 0,
+                "reconnects": 0, "levelerGainDb": 3.5 },
+  "options": { "bitrates": [64, 80, 96, 112, 128, 160, 192, 224, 256, 320], "sampleRates": [44100, 48000],
+               "minGainDb": -60, "maxGainDb": 12, "maxServers": 20, "maxTitle": 120 } }
+```
+
+- `state`: `idle` (aturat), `connecting` (s'ha premut Inicia i encara no s'ha connectat mai: es continua provant), `streaming`, `reconnecting` (s'havia connectat i s'ha tallat: es torna a provar sol) o `error` (s'ha perdut la font o ha fallat el codificador: l'emissió s'ha aturat; `error` i `errorDetail` diuen per què).
+- `connectionError`: mentre es connecta o es reconnecta, per què ha fallat l'últim intent (p. ex. «El servidor no accepta la contrasenya.»). Si no, `null`.
+- **Les contrasenyes no s'envien mai a la interfície**: només `hasPassword`.
+- `bytesDropped`: el que no s'ha pogut enviar perquè la xarxa anava massa lenta (la cua és de 10 s). Hauria de ser 0.
+- No es pot canviar de perfil mentre s'emet (`profile.switch`: `bad_state`).
+
+Al perfil (`perfil.json`): `streamDevice` (com `cue`) i `streaming`: `{ servers: [ { id, name, type, host, port, password, mount, user, streamId } ], serverId, bitrateKbps, sampleRate, mono, title, gainDb, leveler, limiter: { enabled, ceilingDb }, processing }`. Les contrasenyes hi són **en text pla** (com al BUTT; D-140), i també en un perfil exportat.
+
 ## 5. Esdeveniments
 
 | Esdeveniment | Camps | Freqüència | Des de |
@@ -534,6 +582,8 @@ Al perfil (`perfil.json`): `cartDevice` (com `cue`) i `cartWall.buttons` (`[ { p
 | `cue.position` | `position`, `duration` (segons), `format` (el de la pista, quan ja es coneix) | 10 per segon, només mentre la preescolta sona | fase 2 |
 | `cart.state` | `cart`: objecte complet (vegeu 4.15) | quan canvia un botó (també quan acaba de llegir-ne l'inici), la sortida, un error o què sona | fase 5 |
 | `cart.position` | `playing`: com el de 4.15 | 10 per segon, només mentre sona algun botó | fase 5 |
+| `stream.state` | `stream`: objecte complet (vegeu 4.16) | quan canvia l'estat, la connexió, un error o un ajust de l'emissor | fase 5 |
+| `stream.progress` | `progress`: com el de 4.16 | cada segon, només mentre s'emet (també connectant o reconnectant) | fase 5 |
 | `editor.changed` | `editor`: objecte complet (vegeu 4.10) | a cada canvi: obrir, editar, desar, reproduir, errors; el progrés d'obrir, desar o fer la forma d'ona, com a molt 4 per segon | fase 3 |
 | `explorer.durations` | `durations`: `{ "<ruta>": segons | null }` (`null`: no s'ha pogut llegir) | a grups (com a molt 100 o cada 0,3 s) mentre es mesuren els àudios de l'última carpeta llistada amb `explorer.list`; si se'n llista una altra, les que faltaven de l'anterior ja no es mesuren | fase 5 (D-104) |
 | `editor.position` | `position` (segons de la versió editada) | 10 per segon, només mentre l'editor reprodueix | fase 3 |
@@ -570,11 +620,14 @@ Al perfil (`perfil.json`): `cartDevice` (com `cue`) i `cartWall.buttons` (`[ { p
   "cue": [-24.1, -23.9],
   "cart": [-90, -90],
   "playerReduction": { "1": 6.4, "2": 0 },
-  "recorderReduction": { "1": 0, "2": 1.2 } }
+  "recorderReduction": { "1": 0, "2": 1.2 },
+  "stream": [-20.5, -20.1],
+  "streamReduction": { "processing": 2.1, "limiter": 0 } }
 ```
 
 - `playerReduction`: quant abaixa el compressor/limitador de cada reproductor (dB, ≥ 0; el màxim des de l'esdeveniment anterior), per a l'indicador de reducció. `0` si està desactivat o no sona (fase 4, 4.13).
 - `recorderReduction`: el mateix per al limitador de cada enregistrador (fase 5, D-083). `0` si està desactivat o no s'enregistra.
+- `stream` i `streamReduction` (fase 5, D-143): el que entra a l'emissor d'streaming, amb el fader aplicat (també quan no s'emet, si `inputActive`), i quant abaixen el compressor (`processing`) i el limitador (`limiter`) mentre s'emet.
 
 - Per a cada element, `[esquerre, dret]` en **dBFS**: el pic més alt des de l'esdeveniment anterior (uns 40 ms). `-90` vol dir silenci.
 - Reproductors: el que surt, **després del volum**. Preescolta: igual, el que surt pels auriculars. Botonera (`cart`, fase 5): tots els talls barrejats, tal com surten. Enregistradors: el que entra, **amb el volum d'enregistrament aplicat**, també quan no s'enregistra (si `inputActive`).

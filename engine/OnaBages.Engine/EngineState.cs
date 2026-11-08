@@ -20,9 +20,11 @@ public sealed class EngineState
     /// <param name="editor">Editor. Les proves en passen un amb la memòria cau en una carpeta temporal.</param>
     /// <param name="durations">Durada dels àudios de l'explorador. Les proves en passen una que no llegeix fitxers.</param>
     /// <param name="cart">Botonera (fase 5, pas 28a). Les proves en passen una amb una sortida falsa.</param>
+    /// <param name="streamer">Emissor d'streaming (fase 5, pas 31c). Les proves en passen un amb una entrada falsa.</param>
     public EngineState(IEnumerable<Player>? players = null, IEnumerable<Recorder>? recorders = null, CuePlayer? cue = null,
-        EditorSession? editor = null, AudioDurations? durations = null, CartWall? cart = null)
+        EditorSession? editor = null, AudioDurations? durations = null, CartWall? cart = null, Streamer? streamer = null)
     {
+        Streamer = streamer ?? new Streamer(StreamerId);
         Cart = cart ?? new CartWall();
         Durations = durations ?? new AudioDurations();
         Editor = editor ?? new EditorSession();
@@ -39,6 +41,15 @@ public sealed class EngineState
 
     /// <summary>Identificador de la botonera a la configuració i als avisos de maquinari (només n'hi ha una).</summary>
     public const string CartId = "1";
+
+    /// <summary>Identificador de l'emissor d'streaming a la configuració i als avisos de maquinari (només n'hi ha un).</summary>
+    public const string StreamerId = "1";
+
+    /// <summary>Emissor d'streaming (fase 5, pas 31c; D-143): un sol, amb entrada pròpia.</summary>
+    public Streamer Streamer { get; }
+
+    /// <summary>S'està emetent (o intentant-ho: connectant o reconnectant)?</summary>
+    public bool IsStreaming => Streamer.IsActive;
 
     /// <summary>Botonera d'instantanis (fase 5, pas 28a; D-127): una sola, amb sortida pròpia.</summary>
     public CartWall Cart { get; }

@@ -159,6 +159,8 @@ public sealed partial class CommandRouter
             busy.Add($"el reproductor {player.Id} sona");
         if (_state.Cue.State == CueState.Playing)
             busy.Add("la preescolta sona");
+        if (_state.IsStreaming)
+            busy.Add("s'està emetent per streaming");
         if (_state.Editor.Busy is not null)
             busy.Add("l'editor està obrint o desant un fitxer");
         else if (_state.Editor.Edit?.IsModified == true)

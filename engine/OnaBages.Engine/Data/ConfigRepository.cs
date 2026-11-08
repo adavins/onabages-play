@@ -684,6 +684,11 @@ public sealed class ConfigRepository
         if (root["cueSettings"]?["volumeDb"] is JsonValue cueVolume && cueVolume.TryGetValue(out double cueDb))
             config.CueVolumeDb = Math.Clamp(cueDb, -60, 0);
 
+        // Streaming (fase 5, pas 31c; camps opcionals, sense canvi de versió).
+        ReadAssignments(root["streamDevice"], config.StreamDevice);
+        if (root["streaming"] is JsonObject streaming)
+            ReadStreaming(streaming, config);
+
         // Fora de marge, el límit més proper.
         if (Int(root["ui"]?["recordersPerRow"]) is { } perRow)
             config.RecordersPerRow = Math.Clamp(perRow, 1, EngineConfig.MaxRecorders);
@@ -975,6 +980,8 @@ public sealed class ConfigRepository
                 ["gainDb"] = b.GainDb,
             }).ToArray()),
         },
+        ["streamDevice"] = WriteAssignments(config.StreamDevice),
+        ["streaming"] = WriteStreaming(config),
         ["cueSettings"] = new JsonObject { ["volumeDb"] = config.CueVolumeDb },
         ["recorderSettings"] = new JsonArray(config.RecorderSettings
             .OrderBy(s => s.Key, StringComparer.Ordinal)
@@ -1035,6 +1042,90 @@ public sealed class ConfigRepository
             ["lists"] = WriteExplorerFolders(config.ListFolders),
         },
     };
+
+    // --- Streaming (fase 5, pas 31c; D-143) ---
+
+    /// <summary>"shoutcast" o "icecast" (al perfil i al protocol).</summary>
+    public static string StreamServerTypeName(StreamServerType type) => type == StreamServerType.Icecast ? "icecast" : "shoutcast";
+
+    public static StreamServerType? ParseStreamServerType(string? text) => text?.ToLowerInvariant() switch
+    {
+        "icecast" => StreamServerType.Icecast,
+        "shoutcast" => StreamServerType.Shoutcast,
+        _ => null,
+    };
+
+    /// <summary>Servidors i ajustos de l'emissor. Un servidor sense id, adreça o port vàlid no compta.</summary>
+    private static void ReadStreaming(JsonObject streaming, EngineConfig config)
+    {
+        if (streaming["servers"] is JsonArray servers)
+        {
+            foreach (var item in servers.OfType<JsonObject>())
+            {
+                if (Text(item["id"]) is not { Length: > 0 } id || config.StreamServers.Any(s => s.Id == id)
+                    || ParseStreamServerType(Text(item["type"])) is not { } type
+                    || Text(item["host"]) is not { Length: > 0 } host
+                    || Int(item["port"]) is not { } port || port is < 1 or > 65535
+                    || config.StreamServers.Count >= EngineConfig.MaxStreamServers)
+                    continue;
+                config.StreamServers.Add(new StreamServerSettings(
+                    id, Text(item["name"]) is { Length: > 0 } name ? name : host, type, host, port, Text(item["password"]) ?? "",
+                    Text(item["mount"]) is { Length: > 0 } mount ? mount : "/stream",
+                    Text(item["user"]) is { Length: > 0 } user ? user : "source",
+                    Int(item["streamId"]) is { } sid && sid >= 1 ? sid : 1));
+            }
+        }
+
+        var s = new StreamSettings();
+        string? serverId = Text(streaming["serverId"]);
+        int bitrate = Int(streaming["bitrateKbps"]) is { } b && Streamer.Bitrates.Contains(b) ? b : s.BitrateKbps;
+        int rate = Int(streaming["sampleRate"]) is { } r && Streamer.SampleRates.Contains(r) ? r : s.SampleRate;
+        double gain = streaming["gainDb"] is JsonValue g && g.TryGetValue(out double gd) && double.IsFinite(gd)
+            ? Math.Clamp(gd, Streamer.MinGainDb, Streamer.MaxGainDb) : 0;
+        double ceiling = streaming["limiter"]?["ceilingDb"] is JsonValue c && c.TryGetValue(out double cd) && double.IsFinite(cd)
+            ? Math.Clamp(cd, Recorder.MinLimiterCeilingDb, Recorder.MaxLimiterCeilingDb) : s.LimiterCeilingDb;
+        string title = Text(streaming["title"]) ?? "";
+        config.Stream = s with
+        {
+            ServerId = config.StreamServers.Any(x => x.Id == serverId) ? serverId : null,
+            BitrateKbps = bitrate,
+            SampleRate = rate,
+            Mono = Bool(streaming["mono"]) ?? false,
+            Title = title.Length > EngineConfig.MaxStreamTitle ? title[..EngineConfig.MaxStreamTitle] : title,
+            GainDb = gain,
+            Leveler = Bool(streaming["leveler"]) ?? false,
+            Limiter = Bool(streaming["limiter"]?["enabled"]) ?? false,
+            LimiterCeilingDb = ceiling,
+            Dynamics = streaming["processing"] is JsonObject processing ? ReadDynamics(processing) : new DynamicsSettings(),
+        };
+    }
+
+    private static JsonObject WriteStreaming(EngineConfig config) => new()
+    {
+        ["servers"] = new JsonArray(config.StreamServers.Select(s => (JsonNode)new JsonObject
+        {
+            ["id"] = s.Id,
+            ["name"] = s.Name,
+            ["type"] = StreamServerTypeName(s.Type),
+            ["host"] = s.Host,
+            ["port"] = s.Port,
+            ["password"] = s.Password,
+            ["mount"] = s.Mount,
+            ["user"] = s.User,
+            ["streamId"] = s.StreamId,
+        }).ToArray()),
+        ["serverId"] = config.Stream.ServerId,
+        ["bitrateKbps"] = config.Stream.BitrateKbps,
+        ["sampleRate"] = config.Stream.SampleRate,
+        ["mono"] = config.Stream.Mono,
+        ["title"] = config.Stream.Title,
+        ["gainDb"] = config.Stream.GainDb,
+        ["leveler"] = config.Stream.Leveler,
+        ["limiter"] = new JsonObject { ["enabled"] = config.Stream.Limiter, ["ceilingDb"] = config.Stream.LimiterCeilingDb },
+        ["processing"] = WriteDynamics(null, config.Stream.Dynamics),
+    };
+
+    private static bool? Bool(JsonNode? node) => node is JsonValue v && v.TryGetValue(out bool b) ? b : null;
 
     /// <summary>Ajustos del compressor/limitador en JSON (els mateixos noms que al protocol).</summary>
     public static JsonObject WriteDynamics(string? id, DynamicsSettings s)

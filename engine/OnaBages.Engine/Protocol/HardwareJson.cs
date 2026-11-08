@@ -37,7 +37,7 @@ public static class HardwareJson
     /// <summary>Una línia del resum: l'element, el dispositiu desat, el que s'ha trobat i què ha passat.</summary>
     public static JsonObject Element(ElementCheck check) => new()
     {
-        ["element"] = check.Kind switch { ElementKind.Player => "player", ElementKind.Recorder => "recorder", ElementKind.Cart => "cart", _ => "cue" },
+        ["element"] = check.Kind switch { ElementKind.Player => "player", ElementKind.Recorder => "recorder", ElementKind.Cart => "cart", ElementKind.Streamer => "stream", _ => "cue" },
         ["id"] = check.ElementId,
         ["result"] = Result(check.Result),
         ["saved"] = new JsonObject { ["id"] = check.Saved.Id, ["name"] = check.Saved.Name },

@@ -140,6 +140,19 @@ public sealed partial class CommandRouter
                 "cart.press" => CartPress(msg),
                 "cart.stop" => CartStop(msg),
                 "cart.stopAll" => CartStopAll(),
+                "stream.get" => StreamResult(),
+                "stream.setDevice" => StreamSetDevice(msg),
+                "stream.saveServer" => StreamSaveServer(msg),
+                "stream.deleteServer" => StreamDeleteServer(msg),
+                "stream.selectServer" => StreamSelectServer(msg),
+                "stream.setQuality" => StreamSetQuality(msg),
+                "stream.setTitle" => StreamSetTitle(msg),
+                "stream.setGain" => StreamSetGain(msg),
+                "stream.setLeveler" => StreamSetLeveler(msg),
+                "stream.setProcessing" => StreamSetProcessing(msg),
+                "stream.setLimiter" => StreamSetLimiter(msg),
+                "stream.start" => StreamStart(),
+                "stream.stop" => StreamStop(),
                 "editor.get" => EditorState(),
                 "editor.open" => EditorOpen(msg),
                 "editor.refresh" => EditorRefresh(),
@@ -189,7 +202,7 @@ public sealed partial class CommandRouter
             return Messages.Error(id, "bad_params", ex.Message);
         }
         catch (Exception ex) when (ex is PlayerCommandException or RecorderCommandException or RecordingCommandException
-                                       or EditorStateException or Mp3EditException or CartCommandException)
+                                       or EditorStateException or Mp3EditException or CartCommandException or StreamerCommandException)
         {
             return Messages.Error(id, "bad_state", ex.Message);
         }
@@ -212,6 +225,10 @@ public sealed partial class CommandRouter
         catch (PlayerFailedException ex)
         {
             return Messages.Error(id, "player_error", ex.Message);
+        }
+        catch (StreamFailedException ex)
+        {
+            return Messages.Error(id, "stream_error", ex.Message);
         }
         catch (Exception ex)
         {
@@ -241,6 +258,7 @@ public sealed partial class CommandRouter
         ["recordings"] = RecordingJson.All(_recordings),
         ["cue"] = CueJson.Cue(_state),
         ["cart"] = CartJson.Cart(_state),
+        ["stream"] = StreamObject(),
         ["playlists"] = PlaylistJson.All(_state.Players),
         ["hardware"] = HardwareJson.Report(_hardware?.Report ?? HardwareReport.Empty),
         ["editor"] = EditorJson.Editor(_state.Editor, _config?.Read(c => c.EditorDevice)),
@@ -1442,6 +1460,9 @@ public sealed partial class CommandRouter
         if (_state.IsRecording && !force)
             throw new RecordingActiveException(
                 "Hi ha enregistraments en curs. Atura'ls primer (o envia \"force\": true per tancar-los i aturar el motor).");
+        if (_state.IsStreaming && !force)
+            throw new RecordingActiveException(
+                "S'està emetent per streaming. Atura l'emissió primer (o envia \"force\": true per aturar-la i aturar el motor).");
 
         _ = Task.Run(async () =>
         {

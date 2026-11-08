@@ -213,8 +213,8 @@ public sealed class Streamer : IDisposable
         RaiseStateChanged();
     }
 
-    /// <summary>Servidor i descripció de l'emissió. Només amb l'emissió aturada.</summary>
-    public void SetServer(StreamServer server, StreamInfo? info = null)
+    /// <summary>Servidor i descripció de l'emissió (null = cap servidor). Només amb l'emissió aturada.</summary>
+    public void SetServer(StreamServer? server, StreamInfo? info = null)
     {
         lock (_sync)
         {

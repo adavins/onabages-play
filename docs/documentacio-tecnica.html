@@ -297,6 +297,28 @@ npm start
       lectura). Una veu només es torna a fer servir quan el fil d'àudio ja l'ha deixat.</li>
   </ul>
 
+  <h3 id="streaming">Emissor d'streaming</h3>
+  <ul>
+    <li><code>Streamer</code> (D-140 a D-143): un sol emissor, com el BUTT. Envia una entrada (<code>IAudioInput</code>) a un
+      servidor <strong>Shoutcast v2</strong> (mode «legacy»: port del servidor + 1, <code>contrasenya:#sid</code>) o
+      <strong>Icecast 2.4+</strong> (<code>PUT</code> al punt de muntatge), en MP3 CBR. És a <code>OnaBages.Audio</code> i no
+      depèn del motor: Ona Bages 24h el podrà fer servir amb una altra font.</li>
+    <li><strong>Tres fils:</strong> la captura (només copia a una memòria de 10 s i al mesurador); la codificació (fader →
+      NIV → DSP → LIM → LAME, que també canvia la freqüència si cal); i l'enviament (<code>StreamConnection</code>, bloquejant
+      amb un temps màxim de 10 s). Entre els dos últims hi ha una cua de 10 s: si la xarxa va lenta, el que no hi cap es
+      descarta i es compta (<code>bytesDropped</code>). La xarxa no pot frenar mai la captura.</li>
+    <li><strong>Reconnexió:</strong> el fil d'enviament es torna a connectar sol (cada 5 s; 1 s després d'un tall) i
+      torna a enviar el títol (<code>StreamMetadata</code>, en una petició HTTP a part). Mentre no hi ha connexió, l'MP3 es
+      descarta: en directe no s'envia so endarrerit.</li>
+    <li>Els fils només escriuen camps; els canvis d'estat (connectat, tallat, font perduda) els recull <code>Tick</code>, 10
+      vegades per segon, com als enregistradors. Si es perd la font, l'emissió s'atura amb un error.</li>
+    <li>Servidors i ajustos: al perfil (<code>streaming</code> i <code>streamDevice</code>), amb les contrasenyes en text
+      pla; el protocol no les envia mai a la interfície (<code>hasPassword</code>). Ordres <code>stream.*</code> (protocol
+      4.16).</li>
+    <li>Prova amb un servidor de debò sense la interfície: <code>OnaBages.ToneCheck emetre shoutcast &lt;servidor&gt;
+      &lt;port&gt; &lt;sid&gt; [segons] [kbps] [Hz]</code> (envia un to en temps real i diu cada segon com va).</li>
+  </ul>
+
   <h3 id="dsp">Processament (DSP)</h3>
   <ul>
     <li><strong>Compressor/limitador</strong> (<code>DynamicsProcessor</code>): com el SqrSoft del Winamp, amb anticipació

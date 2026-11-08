@@ -58,6 +58,19 @@ public sealed class EngineConfig
     /// <summary>Sortida de la botonera (fase 5, pas 28a; del perfil, com la dels reproductors). Clau: "1".</summary>
     public Dictionary<string, DeviceRef> CartDevice { get; } = [];
 
+    /// <summary>Entrada de l'emissor d'streaming (fase 5, pas 31c; del perfil). Clau: "1".</summary>
+    public Dictionary<string, DeviceRef> StreamDevice { get; } = [];
+
+    /// <summary>Servidors d'streaming del perfil, en l'ordre en què es van afegir.</summary>
+    public List<StreamServerSettings> StreamServers { get; set; } = [];
+
+    /// <summary>Ajustos de l'emissor d'streaming (del perfil).</summary>
+    public StreamSettings Stream { get; set; } = new();
+
+    public const int MaxStreamServers = 20;
+    public const int MaxStreamTitle = 120;
+    public const int MaxStreamServerName = 40;
+
     /// <summary>Botons assignats de la botonera (fase 5, pas 28a; del perfil). Només les rutes, mai l'àudio.</summary>
     public List<CartButtonSettings> CartButtons { get; set; } = [];
 
@@ -236,6 +249,36 @@ public sealed class EngineConfig
     public const int MaxEndWarningSeconds = 60;
     public const int MinPlaylistRowHeight = 100;
     public const int MaxPlaylistRowHeight = 200;
+}
+
+/// <summary>
+/// Un servidor d'streaming de la llista del perfil (fase 5, pas 31c; D-143). La contrasenya es desa en text pla, com al
+/// BUTT (D-140), i no s'envia mai a la interfície (només si n'hi ha).
+/// </summary>
+public sealed record StreamServerSettings(
+    string Id, string Name, StreamServerType Type, string Host, int Port, string Password,
+    string Mount = "/stream", string User = "source", int StreamId = 1)
+{
+    /// <summary>Les dades de connexió per a l'emissor.</summary>
+    public StreamServer ToServer() => new()
+    {
+        Type = Type, Host = Host, Port = Port, Password = Password, Mount = Mount, User = User, StreamId = StreamId,
+    };
+}
+
+/// <summary>Ajustos de l'emissor d'streaming (del perfil). Els valors per defecte són els de D-140.</summary>
+public sealed record StreamSettings
+{
+    public string? ServerId { get; init; }
+    public int BitrateKbps { get; init; } = 128;
+    public int SampleRate { get; init; } = 44100;
+    public bool Mono { get; init; }
+    public string Title { get; init; } = "";
+    public double GainDb { get; init; }
+    public bool Leveler { get; init; }
+    public bool Limiter { get; init; }
+    public double LimiterCeilingDb { get; init; } = Streamer.DefaultLimiterCeilingDb;
+    public DynamicsSettings Dynamics { get; init; } = new();
 }
 
 /// <summary>Un botó de la botonera tal com es desa al perfil.</summary>

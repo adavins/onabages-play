@@ -9,6 +9,8 @@ using OnaBages.ToneCheck;
 //   convivencia [minuts] [carpeta]           editor + dos enregistradors alhora (fase 3, pas 5)
 //   processar <entrada> <sortida.wav>        passa un fitxer pel compressor/limitador (fase 4, pas 4a)
 //   sonoritat <fitxer> [fitxer...]           mesura la sonoritat (LUFS) i el pic (fase 4, pas 5a)
+//   emetre <shoutcast|icecast> <servidor> <port> <sid|punt de muntatge> [segons] [kbps] [Hz]
+//                                            envia un to a un servidor d'streaming (fase 5, pas 31b)
 
 Console.OutputEncoding = Encoding.UTF8;
 
@@ -36,6 +38,16 @@ if (args.Length >= 3 && args[0] == "processar")
     return Processar.Run(Path.GetFullPath(args[1]), Path.GetFullPath(args[2]), settings);
 }
 
+if (args.Length >= 5 && args[0] == "emetre")
+{
+    var type = args[1].Equals("icecast", StringComparison.OrdinalIgnoreCase) ? StreamServerType.Icecast : StreamServerType.Shoutcast;
+    if (!int.TryParse(args[3], out int port)) { Console.Error.WriteLine($"Port no vàlid: {args[3]}"); return 2; }
+    int seconds = args.Length >= 6 && int.TryParse(args[5], out int s) ? s : 30;
+    int kbps = args.Length >= 7 && int.TryParse(args[6], out int k) ? k : 128;
+    int hz = args.Length >= 8 && int.TryParse(args[7], out int h) ? h : 44100;
+    return Emetre.Run(type, args[2], port, args[4], seconds, kbps, hz);
+}
+
 Console.WriteLine("""
     Ús:
       OnaBages.ToneCheck generar <fitxer.wav> <minuts>
@@ -43,6 +55,7 @@ Console.WriteLine("""
       OnaBages.ToneCheck convivencia [minuts, per defecte 60] [carpeta]
       OnaBages.ToneCheck processar <entrada> <sortida.wav> [desactivat]   compressor/limitador (SqrSoft de La Central)
       OnaBages.ToneCheck sonoritat <fitxer> [fitxer...]                  sonoritat (LUFS, EBU R128) i pic
+      OnaBages.ToneCheck emetre <shoutcast|icecast> <servidor> <port> <sid|punt de muntatge> [segons=30] [kbps=128] [Hz=44100]
     """);
 return 2;
 

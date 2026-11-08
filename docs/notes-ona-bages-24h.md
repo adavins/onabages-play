@@ -30,6 +30,7 @@ Preparació del motor d'Ona Bages Play perquè es pugui reutilitzar a Ona Bages 
 | `LameEncoder`, `Mp3Frames`, `RecordingRecovery`, `Recorder` | Enregistrament MP3 i recuperació (per si 24h ha de gravar l'emissió) |
 | `ToneGenerator`, `ToneAnalyzer` | To de prova i detecció de talls (proves llargues) |
 | `StreamConnection`, `StreamMetadata` | Emissió cap a un servidor Shoutcast o Icecast i títol de l'emissió (D-140, D-141). Afegit després de la revisió. |
+| `Streamer` | Emissor complet (fader, NIV, DSP, LIM, MP3, reconnexió) des de qualsevol `IAudioInput` (D-142). Per a 24h, que emet les 24 hores: el `Leveler` desa uns pocs bytes per cada 100 ms des del principi (unes desenes de MB al cap de molts dies); caldria limitar-ho a la finestra que fa servir. |
 
 **Pensades per a Play** (es poden aprofitar com a model, però 24h en necessitarà unes de pròpies):
 

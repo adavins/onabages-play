@@ -21,12 +21,14 @@ public sealed class LameEncoder : IDisposable
     private nint _lame;
     private byte[] _mp3Buffer = [];
 
-    /// <param name="sampleRate">Freqüència de les mostres d'entrada (i del MP3: no es remostreja).</param>
+    /// <param name="sampleRate">Freqüència de les mostres d'entrada.</param>
     /// <param name="bitrateKbps">Bitrate constant. Per defecte, 320.</param>
-    /// <param name="mono">MP3 mono (l'entrada continua sent estèreo; LAME la barreja). Per a les proves.</param>
+    /// <param name="mono">MP3 mono (l'entrada continua sent estèreo; LAME la barreja). Per a les proves i l'streaming.</param>
+    /// <param name="outputSampleRate">Freqüència del MP3. Per defecte, la de l'entrada (no es remostreja); si és diferent,
+    /// LAME la converteix (streaming: una targeta a 48 kHz que emet a 44,1 kHz).</param>
     /// <param name="crc">Amb codi de comprovació (CRC) a cada fotograma. Per a les proves.</param>
     /// <exception cref="AudioFileException">Si LAME no es pot carregar o no accepta la configuració.</exception>
-    public LameEncoder(int sampleRate, int bitrateKbps = 320, bool mono = false, bool crc = false)
+    public LameEncoder(int sampleRate, int bitrateKbps = 320, bool mono = false, bool crc = false, int? outputSampleRate = null)
     {
         SampleRate = sampleRate;
         BitrateKbps = bitrateKbps;
@@ -43,7 +45,7 @@ public sealed class LameEncoder : IDisposable
             throw new AudioFileException("No s'ha pogut iniciar el codificador MP3.");
 
         lame_set_in_samplerate(_lame, sampleRate);
-        lame_set_out_samplerate(_lame, sampleRate);
+        lame_set_out_samplerate(_lame, outputSampleRate ?? sampleRate);
         lame_set_num_channels(_lame, 2);
         lame_set_mode(_lame, mono ? Mono : JointStereo);
         if (crc) lame_set_error_protection(_lame, 1);
@@ -57,7 +59,7 @@ public sealed class LameEncoder : IDisposable
         {
             lame_close(_lame);
             _lame = 0;
-            throw new AudioFileException($"El codificador MP3 no accepta {sampleRate} Hz a {bitrateKbps} kbps.");
+            throw new AudioFileException($"El codificador MP3 no accepta {outputSampleRate ?? sampleRate} Hz a {bitrateKbps} kbps.");
         }
     }
 

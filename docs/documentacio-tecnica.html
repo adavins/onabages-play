@@ -257,8 +257,12 @@ npm start
 
   <h3 id="enregistradors">Enregistradors</h3>
   <ul>
-    <li>Captura WASAPI en float → memòria de 10 s → <strong>fil de codificació</strong>: volum → limitador opcional →
-      LAME.</li>
+    <li>Captura WASAPI en float → memòria de 10 s → <strong>fil de codificació</strong>: volum → anivellador opcional →
+      limitador opcional → LAME.</li>
+    <li><strong>Anivellador</strong> (NIV; D-146): el mateix <code>Leveler</code> que els reproductors, però en directe. Com que
+      «estira» el so (1 s endavant), la lectura de la memòria és una funció que espera fins que hi ha so i, mentre espera,
+      continua fent el bolcat al disc; retorna 0 en aturar o en desactivar-lo, i així surt tot el que tenia dins (no es perd
+      ni es repeteix cap mostra). Sense NIV, el camí és exactament el d'abans. El mateix es fa a l'emissor d'streaming.</li>
     <li>MP3 <strong>320 kbps CBR</strong>, sense etiqueta Xing/Info i sense <em>bit reservoir</em>: cada fotograma és
       independent, i el fitxer és vàlid en tot moment (també per tallar-lo a l'editor).</li>
     <li>Un sol fitxer per enregistrament, amb <code>Flush(true)</code> (escriptura física) cada 2 s.</li>
@@ -329,7 +333,11 @@ npm start
     <li><strong>Anivellador</strong> (D-134; <code>Leveler</code>): a sobre de la lectura de la pista (fil de lectura), amb 1 s
       de mirada endavant. Per a cada bloc de 100 ms, la sonoritat d'una finestra de ±1 s mesurada com la integrada (blocs de
       400 ms, filtre K, porta de −50 LUFS i relativa de −10 dB); el guany va cap a l'objectiu a 6 dB/s amunt i 12 dB/s avall,
-      no puja on no hi ha veu, i el limita el pic dels 0,3 s següents (sostre −1 dBFS). Rampa dins de cada bloc.</li>
+      no puja on no hi ha veu, i el limita el pic dels 0,3 s següents (sostre −1 dBFS). Rampa dins de cada bloc.
+      L'objectiu i el màxim es poden canviar mentre treballa (<code>SetLimits</code>, D-147). <code>Holding</code> diu si ara
+      no hi ha veu i manté el guany (D-149). Als enregistradors i a l'streaming, el guany i la pausa van amb
+      <code>meters</code> (<code>recorderLeveler</code>, <code>streamLeveler</code>) per a la barra «Anivellador»
+      (<code>js/ui/leveler-bar.js</code>); el mesurador continua sent l'entrada, abans del NIV (D-148).</li>
     <li><strong>Canal buit</strong> (D-132): l'anàlisi (<code>TrackLoudness.FindEmptyChannel</code>) guarda el pic de cada canal.
       La correcció (<code>ChannelFix</code>) la fa el fil d'àudio (<code>PlayerStream.FixChannels</code>): la de la pista d'ara
       es pot canviar en qualsevol moment, la de la pista que encadena s'hi programa per fotograma

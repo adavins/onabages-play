@@ -1,8 +1,10 @@
 // @ts-check
 // Panell lateral de la dreta (fase 4, pas 2b; D-062).
 //
-// - Plegat: només una franja d'icones (Àudios, Llistes, Botonera, Recents i, a baix, plegar/desplegar).
+// - Plegat: només una franja d'icones (Àudios, Llistes, Botonera, Streaming, Recents i, a baix, plegar/desplegar).
 // - La icona de la Botonera es posa del seu color mentre hi sona alguna cosa (fase 5, pas 28c).
+// - La icona de l'Streaming s'encén en vermell mentre s'emet, i en groc (amb una altra icona) mentre es connecta o
+//   es reconnecta, també amb el panell plegat (fase 5, pas 31d).
 // - Obert: la pestanya triada a dalt i la preescolta sempre a baix.
 // - En obrir-lo, la finestra es fa més ampla (ho fa Electron), perquè els reproductors i els
 //   enregistradors no canviïn de mida. Si no pot créixer, el panell surt per sobre (.side-overlay).
@@ -13,7 +15,15 @@
 /** @type {any} API de preload.js */
 const bridge = /** @type {any} */ (window).onabages;
 
-const TABS = ['audios', 'lists', 'cart', 'recents'];
+const TABS = ['audios', 'lists', 'cart', 'stream', 'recents'];
+
+/** Com es veu la icona de l'Streaming a cada estat: classe, icona i ajuda (color + icona + text). */
+const STREAM_LOOKS = {
+  streaming:    { cls: 'stream-on',   icon: 'bi-broadcast',                 title: 'Streaming: s\'està emetent' },
+  connecting:   { cls: 'stream-warn', icon: 'bi-hourglass-split',           title: 'Streaming: connectant amb el servidor…' },
+  reconnecting: { cls: 'stream-warn', icon: 'bi-arrow-repeat',              title: 'Streaming: s\'ha tallat, es torna a connectar…' },
+  error:        { cls: 'stream-warn', icon: 'bi-exclamation-triangle-fill', title: 'Streaming: error, l\'emissió s\'ha aturat' },
+};
 const TAB_STORAGE_KEY = 'obp.sideTab';
 
 /**
@@ -77,6 +87,18 @@ export function setupSidePanel(store) {
   };
   store.addEventListener('cart', updateCart);
   store.addEventListener('reset', updateCart);
+  // Streaming: la seva icona diu si s'emet, si es connecta o si ha fallat.
+  const streamButton = /** @type {HTMLElement | null} */ (side.querySelector('.side-btn[data-tab="stream"]'));
+  const updateStream = () => {
+    const look = /** @type {Record<string, { cls: string, icon: string, title: string }>} */ (STREAM_LOOKS)[store.stream?.state ?? ''];
+    streamButton?.classList.toggle('stream-on', look?.cls === 'stream-on');
+    streamButton?.classList.toggle('stream-warn', look?.cls === 'stream-warn');
+    const icon = streamButton?.querySelector('i');
+    if (icon) icon.className = `bi ${look?.icon ?? 'bi-broadcast'}`;
+    if (streamButton) streamButton.title = look?.title ?? 'Streaming';
+  };
+  store.addEventListener('stream', updateStream);
+  store.addEventListener('reset', updateStream);
 
   // Qualsevol clic dins del panell (o a les icones) vol dir que l'operador l'està fent servir: ja no es plega sol.
   side.addEventListener('pointerdown', () => { openedByCue = false; });

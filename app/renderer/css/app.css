@@ -28,6 +28,7 @@
   --obp-norm: #2dd4bf;             /* normalització (verd blavós): botó NORM */
   --obp-level: #60a5fa;            /* anivellador (blau): botó NIV */
   --obp-dsp: #8b5cf6;              /* compressor/limitador (lila): botó DSP i reducció */
+  --obp-stream: #e5484d;           /* streaming (vermell, com «en antena»): pestanya i panell mentre s'emet */
 
   /* Mides de la distribució */
   --obp-topbar-h: calc(4rem * var(--obp-ui-scale));
@@ -2216,3 +2217,73 @@ body.engine-offline .side-content {
 .status.status-compact { padding: 0.3rem 0.5rem; }
 .status.status-compact .label { display: none; }
 .engine .details .bi { margin-right: 0.15rem; }
+
+/* Emissor d'streaming (js/ui/stream-panel.js; fase 5, pas 31d; D-140) ------------- */
+
+.side .stream { flex: 1; min-height: 0; }
+.stream .panel-body { overflow-y: auto; }
+.stream .panel-header-right { display: inline-flex; align-items: center; gap: 0.25rem; }
+
+/* Emetent: vora i capçalera vermelles (com un enregistrador que enregistra). Connectant o reconnectant: vora groga. */
+.stream.stream-active { border-color: var(--obp-stream); box-shadow: 0 0 0 1px var(--obp-stream); }
+.stream.stream-active > .panel-header { background: var(--obp-stream); }
+.stream.stream-active > .panel-header .panel-title { color: #fff; }
+.stream.stream-active > .panel-header .state-streaming { background: #fff; color: var(--obp-stream); }
+.stream.stream-trying { border-color: var(--obp-warn); box-shadow: 0 0 0 1px var(--obp-warn); }
+
+.state-streaming { background: var(--obp-stream); }
+
+.stream-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.4rem;
+  min-width: 0;
+}
+.stream-row > select,
+.stream-row > input,
+.stream-device { flex: 1; min-width: 0; }
+.stream-label { flex: none; width: 4.2rem; font-size: 0.8rem; color: var(--bs-secondary-color); }
+.stream-mono { flex: none; margin: 0; font-size: 0.85rem; }
+
+.stream-info { margin-top: 0.5rem; }
+.elapsed.streaming { color: var(--obp-stream); }
+
+.stream-warning { color: var(--obp-warn); font-size: 0.8rem; }
+.stream-warning:empty { display: none; }
+
+.stream .btn-control { flex: 1; font-size: 1rem; white-space: nowrap; }
+.stream .btn-control:disabled { opacity: 0.35; }
+.stream-start { color: #fff; background: var(--obp-stream); border-color: var(--obp-stream); }
+.stream-start:hover:not(:disabled) { color: #fff; filter: brightness(1.1); }
+.stream-start:disabled { color: var(--bs-secondary-color); background: none; border-color: var(--bs-border-color); }
+
+/* Icona de la franja: vermella mentre s'emet; groga i parpellejant mentre es connecta, es reconnecta o ha fallat. */
+.side-btn.stream-on,
+.side-btn.stream-on:hover { color: #fff; background: var(--obp-stream); }
+.side-btn.stream-warn,
+.side-btn.stream-warn:hover {
+  color: #000;
+  background: var(--obp-warn);
+  animation: obp-blink 1s steps(2, start) infinite;
+}
+
+/* Servidors (js/ui/stream-servers-dialog.js) */
+.stream-servers-dialog { min-width: 28rem; }
+.stream-server-list { display: flex; flex-direction: column; gap: 0.35rem; margin: 0.5rem 0; }
+.stream-server {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.3rem;
+}
+.stream-server.selected { border-color: var(--obp-stream); }
+.stream-server-text { flex: 1; min-width: 0; }
+.stream-server-name { font-weight: 600; }
+.stream-server-name .bi { color: var(--obp-stream); }
+.stream-server-detail { font-size: 0.8rem; color: var(--bs-secondary-color); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stream-server-row { display: flex; gap: 0.5rem; }
+.stream-server-host { flex: 1; }
+.stream-server-port { width: 7rem; }

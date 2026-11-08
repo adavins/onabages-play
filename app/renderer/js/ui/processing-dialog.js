@@ -1,5 +1,5 @@
 // @ts-check
-// Finestra del compressor/limitador d'un reproductor (fase 4, pas 4c; D-068).
+// Finestra del compressor/limitador d'un reproductor (fase 4, pas 4c; D-068) o de l'emissor d'streaming (fase 5, pas 31d).
 // Els mateixos paràmetres que el plugin SqrSoft del Winamp. Cada canvi s'aplica de seguida (també
 // mentre sona) i es desa al perfil: no hi ha «Desar» ni «Cancel·lar», només «Tancar».
 
@@ -40,21 +40,66 @@ function fromSlider(field, position) {
 }
 
 /**
+ * A qui s'aplica la finestra: un reproductor o l'emissor d'streaming (fase 5, pas 31d).
+ * @typedef {object} ProcessingTarget
+ * @property {string} title  el que surt al títol («Reproductor 1», «Streaming»)
+ * @property {string | null} playerId  el reproductor (amb les seccions de fos i silencis), o null
+ * @property {() => any} processing  els ajustos actuals
+ * @property {(params: object) => Promise<any>} set  envia { processing } o { preset } i retorna els ajustos nous
+ * @property {() => number} reduction  quant abaixa ara (dB), de l'esdeveniment meters
+ * @property {string} help  l'ordre del processament
+ */
+
+/**
  * @param {Store} store
  * @param {Request} request
  * @param {string} playerId
  */
 export function openProcessingDialog(store, request, playerId) {
+  openDialog(store, request, {
+    title: `Reproductor ${playerId}`,
+    playerId,
+    processing: () => store.players.get(playerId)?.processing,
+    set: async (params) => (await request('player.setProcessing', { player: playerId, ...params })).player.processing,
+    reduction: () => Number(store.meters.playerReduction?.[playerId] ?? 0),
+    help: 'Ordre: pista → compressor → sostre → fader. Els canvis s\'apliquen de seguida i es desen al perfil.',
+  });
+}
+
+/**
+ * El compressor (DSP) de l'emissor d'streaming (fase 5, pas 31d; D-140): el mateix que el dels reproductors.
+ * @param {Store} store
+ * @param {Request} request
+ */
+export function openStreamProcessingDialog(store, request) {
+  openDialog(store, request, {
+    title: 'Streaming',
+    playerId: null,
+    processing: () => store.stream?.processing,
+    set: async (params) => (await request('stream.setProcessing', params)).stream.processing,
+    reduction: () => Number(store.meters.streamReduction?.processing ?? 0),
+    help: 'Ordre: entrada → fader → NIV → compressor → LIM → MP3. Els canvis s\'apliquen de seguida, també mentre s\'emet, i es desen al perfil.',
+  });
+}
+
+/**
+ * @param {Store} store
+ * @param {Request} request
+ * @param {ProcessingTarget} target
+ */
+function openDialog(store, request, target) {
+  const playerId = target.playerId;
   /** Presets de l'aplicació (builtIn) i propis del perfil. Canvien en desar-ne o esborrar-ne un. */
   let presets = /** @type {any[]} */ (store.settings?.processingPresets ?? []);
   /** @type {any} */
-  let current = { ...(store.players.get(playerId)?.processing ?? {}) };
+  let current = { ...(target.processing() ?? {}) };
 
   const dialog = document.createElement('dialog');
   dialog.className = 'obp-dialog proc-dialog';
   dialog.innerHTML = `
     <form method="dialog">
-      <h2 class="obp-dialog-title"><i class="bi bi-sliders"></i> Processament · Reproductor ${escapeHtml(playerId)}</h2>
+      <h2 class="obp-dialog-title"><i class="bi bi-sliders"></i> Processament · ${escapeHtml(target.title)}</h2>
+      ${playerId === null ? '' : `
 
       <!-- Encadenament amb fos (fase 5; D-077). -->
       <h3 class="obp-settings-section">Encadenament entre pistes</h3>
@@ -77,7 +122,7 @@ export function openProcessingDialog(store, request, playerId) {
         <input class="form-check-input js-trim" type="checkbox" role="switch" id="proc-trim">
         <label class="form-check-label" for="proc-trim">Retallar el silenci del principi i del final de cada pista</label>
       </div>
-      <p class="proc-help js-trim-help"></p>
+      <p class="proc-help js-trim-help"></p>`}
 
       <h3 class="obp-settings-section">Compressor/limitador</h3>
       <div class="proc-top">
@@ -116,7 +161,7 @@ export function openProcessingDialog(store, request, playerId) {
         <div class="gr-bar"><div class="gr-fill js-gr-fill"></div></div>
         <span class="gr-value js-gr-value">0,0 dB</span>
       </div>
-      <p class="proc-help js-help">Ordre: pista → compressor → sostre → fader. Els canvis s'apliquen de seguida i es desen al perfil.</p>
+      <p class="proc-help js-help"></p>
 
       <div class="obp-dialog-buttons">
         <button class="btn btn-primary" value="close">Tancar</button>
@@ -129,57 +174,62 @@ export function openProcessingDialog(store, request, playerId) {
   const preset = /** @type {HTMLSelectElement} */ (dialog.querySelector('.js-preset'));
   const link = $('.js-link');
 
-  // --- Retall de silencis ---
-  const trimSwitch = $('.js-trim');
-  const trimHelp = /** @type {HTMLElement} */ (dialog.querySelector('.js-trim-help'));
-  const trimSettings = store.settings?.trim ?? { thresholdDb: -60, leadMs: 10, tailMs: 50 };
-  trimSwitch.checked = !!store.players.get(playerId)?.trim?.enabled;
-  trimHelp.textContent = `Cada pista comença ${trimSettings.leadMs} ms abans del primer so i s'acaba ${trimSettings.tailMs} ms després `
-    + `de l'últim (silenci: per sota de ${String(trimSettings.thresholdDb).replace('-', '−')} dBFS). El fitxer no es toca. `
-    + 'El llindar i els marges es canvien a ⚙ Configuració. S\'aplica a partir de la pista següent.';
-  trimSwitch.addEventListener('change', async () => {
-    try {
-      const result = await request('player.setTrim', { player: playerId, enabled: trimSwitch.checked });
-      trimSwitch.checked = !!result.player.trim.enabled;
-    } catch (err) {
-      trimSwitch.checked = !trimSwitch.checked;
-      $('.js-help').textContent = /** @type {Error} */ (err).message;
-    }
-  });
-
-  // --- Encadenament amb fos ---
-  const crossfade = $('.js-crossfade');
-  const quick = /** @type {HTMLElement} */ (dialog.querySelector('.js-crossfade-quick'));
-  /** Marca el botó del valor habitual que coincideix (si n'hi ha). @param {number} ms */
-  const showCrossfade = (ms) => {
-    crossfade.value = String(ms);
-    for (const b of quick.querySelectorAll('button')) {
-      b.classList.toggle('active', Number(/** @type {HTMLElement} */ (b).dataset.ms) === ms);
-    }
-  };
-  showCrossfade(Number(store.players.get(playerId)?.crossfadeMs ?? 0));
-  /** @type {number | undefined} */
-  let crossfadeTimer;
-  const sendCrossfade = (/** @type {number} */ ms) => {
-    showCrossfade(ms);
-    clearTimeout(crossfadeTimer);
-    crossfadeTimer = window.setTimeout(async () => {
+  // Només als reproductors: retall de silencis i fos entre pistes.
+  if (playerId !== null) {
+    // --- Retall de silencis ---
+    const trimSwitch = $('.js-trim');
+    const trimHelp = /** @type {HTMLElement} */ (dialog.querySelector('.js-trim-help'));
+    const trimSettings = store.settings?.trim ?? { thresholdDb: -60, leadMs: 10, tailMs: 50 };
+    trimSwitch.checked = !!store.players.get(playerId)?.trim?.enabled;
+    trimHelp.textContent = `Cada pista comença ${trimSettings.leadMs} ms abans del primer so i s'acaba ${trimSettings.tailMs} ms després `
+      + `de l'últim (silenci: per sota de ${String(trimSettings.thresholdDb).replace('-', '−')} dBFS). El fitxer no es toca. `
+      + 'El llindar i els marges es canvien a ⚙ Configuració. S\'aplica a partir de la pista següent.';
+    trimSwitch.addEventListener('change', async () => {
       try {
-        const result = await request('player.setCrossfade', { player: playerId, ms });
-        showCrossfade(result.player.crossfadeMs);
+        const result = await request('player.setTrim', { player: playerId, enabled: trimSwitch.checked });
+        trimSwitch.checked = !!result.player.trim.enabled;
       } catch (err) {
+        trimSwitch.checked = !trimSwitch.checked;
         $('.js-help').textContent = /** @type {Error} */ (err).message;
       }
-    }, 300);
-  };
-  crossfade.addEventListener('input', () => {
-    const ms = Math.round(Number(crossfade.value));
-    if (Number.isFinite(ms) && ms >= 0 && ms <= 10000) sendCrossfade(ms);
-  });
-  quick.addEventListener('click', (e) => {
-    const button = /** @type {HTMLElement | null} */ (/** @type {HTMLElement} */ (e.target).closest('[data-ms]'));
-    if (button) sendCrossfade(Number(button.dataset.ms));
-  });
+    });
+  
+    // --- Encadenament amb fos ---
+    const crossfade = $('.js-crossfade');
+    const quick = /** @type {HTMLElement} */ (dialog.querySelector('.js-crossfade-quick'));
+    /** Marca el botó del valor habitual que coincideix (si n'hi ha). @param {number} ms */
+    const showCrossfade = (ms) => {
+      crossfade.value = String(ms);
+      for (const b of quick.querySelectorAll('button')) {
+        b.classList.toggle('active', Number(/** @type {HTMLElement} */ (b).dataset.ms) === ms);
+      }
+    };
+    showCrossfade(Number(store.players.get(playerId)?.crossfadeMs ?? 0));
+    /** @type {number | undefined} */
+    let crossfadeTimer;
+    const sendCrossfade = (/** @type {number} */ ms) => {
+      showCrossfade(ms);
+      clearTimeout(crossfadeTimer);
+      crossfadeTimer = window.setTimeout(async () => {
+        try {
+          const result = await request('player.setCrossfade', { player: playerId, ms });
+          showCrossfade(result.player.crossfadeMs);
+        } catch (err) {
+          $('.js-help').textContent = /** @type {Error} */ (err).message;
+        }
+      }, 300);
+    };
+    crossfade.addEventListener('input', () => {
+      const ms = Math.round(Number(crossfade.value));
+      if (Number.isFinite(ms) && ms >= 0 && ms <= 10000) sendCrossfade(ms);
+    });
+    quick.addEventListener('click', (e) => {
+      const button = /** @type {HTMLElement | null} */ (/** @type {HTMLElement} */ (e.target).closest('[data-ms]'));
+      if (button) sendCrossfade(Number(button.dataset.ms));
+    });
+  }
+
+  $('.js-help').textContent = target.help;
 
   const saveButton = /** @type {HTMLButtonElement} */ (dialog.querySelector('.js-save-preset'));
   const deleteButton = /** @type {HTMLButtonElement} */ (dialog.querySelector('.js-delete-preset'));
@@ -291,9 +341,9 @@ export function openProcessingDialog(store, request, playerId) {
     pendingChanges = {};
     if (Object.keys(changes).length === 0) return;
     try {
-      const result = await request('player.setProcessing', { player: playerId, processing: changes });
+      const processing = await target.set({ processing: changes });
       if (Object.keys(pendingChanges).length === 0) {
-        current = { ...result.player.processing };
+        current = { ...processing };
         show();
       }
     } catch (err) {
@@ -316,8 +366,7 @@ export function openProcessingDialog(store, request, playerId) {
     try {
       clearTimeout(timer);
       pendingChanges = {};
-      const result = await request('player.setProcessing', { player: playerId, preset: preset.value });
-      current = { ...result.player.processing };
+      current = { ...(await target.set({ preset: preset.value })) };
       show();
     } catch (err) {
       $('.js-help').textContent = /** @type {Error} */ (err).message;
@@ -333,7 +382,7 @@ export function openProcessingDialog(store, request, playerId) {
   const value = /** @type {HTMLElement} */ (dialog.querySelector('.js-gr-value'));
   let shown = 0;
   const onMeters = () => {
-    const reduction = Number(store.meters.playerReduction?.[playerId] ?? 0);
+    const reduction = target.reduction();
     shown = Math.max(reduction, shown - 0.4);
     fill.style.width = `${Math.min(100, (shown / 20) * 100)}%`;
     value.textContent = `${shown.toFixed(1).replace('.', ',')} dB`;

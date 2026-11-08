@@ -10,6 +10,7 @@ import { RecorderPanel } from './ui/recorder-panel.js';
 import { RecentsPanel } from './ui/recents-panel.js';
 import { CuePanel } from './ui/cue-panel.js';
 import { CartPanel } from './ui/cart-panel.js';
+import { StreamPanel } from './ui/stream-panel.js';
 import { ExplorerTab } from './ui/explorer-tab.js';
 import { editSettings } from './ui/settings-dialog.js';
 import { setupShortcuts, playKey } from './ui/shortcuts.js';
@@ -43,6 +44,7 @@ const els = {
   recents: $('recents'),
   cue: $('cue'),
   cart: $('cart'),
+  stream: $('stream'),
   settings: $('btn-settings'),
   editor: $('btn-editor'),
   help: /** @type {HTMLButtonElement} */ ($('btn-help')),
@@ -77,6 +79,8 @@ let recentsPanel = null;
 let cuePanel = null;
 /** @type {CartPanel | null} */
 let cartPanel = null;
+/** @type {StreamPanel | null} */
+let streamPanel = null;
 
 startClock();
 setupWindowControls();
@@ -312,6 +316,8 @@ function setupPanels() {
   store.addEventListener('cue', renderAll);
   store.addEventListener('cart', () => cartPanel?.render());
   store.addEventListener('cartPosition', () => cartPanel?.renderPlaying());
+  store.addEventListener('stream', () => streamPanel?.render());
+  store.addEventListener('streamProgress', () => streamPanel?.renderProgress());
   store.addEventListener('cuePosition', () => cuePanel?.render());
   store.addEventListener('devices', renderAll);
   store.addEventListener('meters', () => {
@@ -319,6 +325,7 @@ function setupPanels() {
     for (const [id, panel] of recorderPanels) panel.updateMeter(store.meters.recorders?.[id], store.meters.recorderReduction?.[id]);
     cuePanel?.updateMeter(store.meters.cue);
     cartPanel?.updateMeter(store.meters.cart);
+    streamPanel?.updateMeter(store.meters.stream, store.meters.streamReduction);
   });
 }
 
@@ -329,6 +336,7 @@ function buildPanels() {
   recentsPanel = new RecentsPanel(store, request);
   cuePanel = new CuePanel(store, request);
   cartPanel = new CartPanel(store, request);
+  streamPanel = new StreamPanel(store, request);
 
   els.players.replaceChildren(...[...playerPanels.values()].map((p) => p.element));
   els.recorders.replaceChildren(...[...recorderPanels.values()].map((r) => r.element));
@@ -339,6 +347,8 @@ function buildPanels() {
   els.cue = cuePanel.element;
   els.cart.replaceWith(cartPanel.element);
   els.cart = cartPanel.element;
+  els.stream.replaceWith(streamPanel.element);
+  els.stream = streamPanel.element;
 
   // Explorador del panell lateral (pas 2c): les carpetes són del perfil, i es tornen a llegir en cada connexió.
   const audios = new ExplorerTab('audios', store, request);
@@ -353,6 +363,7 @@ function renderAll() {
   recentsPanel?.render();
   cuePanel?.render();
   cartPanel?.render();
+  streamPanel?.render();
 }
 
 // ---------------------------------------------------------------------------
@@ -559,8 +570,8 @@ async function onCloseRequested() {
     // Sense resposta de l'editor: es continua com sempre.
   }
 
-  const { playing, recording } = store.busy;
-  if (playing.length === 0 && recording.length === 0) {
+  const { playing, recording, streaming } = store.busy;
+  if (playing.length === 0 && recording.length === 0 && !streaming) {
     // No hi ha res actiu: s'atura el motor i es tanca.
     try {
       await client.request('engine.shutdown', {}, 1500);
@@ -575,11 +586,12 @@ async function onCloseRequested() {
   const lines = [];
   if (recording.length > 0) lines.push(`Enregistrant: ${recording.map((id) => `Enregistrador ${id}`).join(', ')}`);
   if (playing.length > 0) lines.push(`Sonant: ${playing.map((id) => `Reproductor ${id}`).join(', ')}`);
+  if (streaming) lines.push('Emetent per streaming');
 
   const choice = await choose({
     title: 'Tancar Ona Bages Play',
     icon: 'bi-exclamation-triangle-fill',
-    message: `${lines.join('\n')}\n\nSi tanques només la finestra, el so i els enregistraments continuen. En tornar a obrir l'aplicació, s'hi tornarà a connectar.`,
+    message: `${lines.join('\n')}\n\nSi tanques només la finestra, el so, els enregistraments i l'emissió continuen. En tornar a obrir l'aplicació, s'hi tornarà a connectar.`,
     buttons: [
       { label: 'Cancel·lar', value: 'cancel' },
       { label: 'Tancar només la finestra', value: 'window', style: 'primary', icon: 'bi-window-x' },
@@ -596,7 +608,7 @@ async function onCloseRequested() {
     const sure = await choose({
       title: 'Aturar-ho tot',
       icon: 'bi-exclamation-octagon-fill',
-      message: 'S\'aturarà el so i es tancaran els enregistraments (els fitxers queden desats).\n\nN\'estàs segur?',
+      message: `S'aturarà el so i es tancaran els enregistraments (els fitxers queden desats)${streaming ? ', i s\'aturarà l\'emissió per streaming' : ''}.\n\nN'estàs segur?`,
       buttons: [
         { label: 'No', value: 'no' },
         { label: 'Sí, aturar-ho tot', value: 'yes', style: 'danger' },

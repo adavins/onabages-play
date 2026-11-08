@@ -23,6 +23,15 @@ export const RECORDER_STATES = {
   error:     { text: 'Error',        icon: 'bi-exclamation-triangle-fill', cls: 'state-error' },
 };
 
+/** Emissor d'streaming (fase 5, pas 31d; docs/protocol.md, 4.16). @type {Record<string, StateLook>} */
+export const STREAM_STATES = {
+  idle:         { text: 'Aturat',       icon: 'bi-circle',                    cls: 'state-idle' },
+  connecting:   { text: 'Connectant',   icon: 'bi-hourglass-split',           cls: 'state-paused' },
+  streaming:    { text: 'Emetent',      icon: 'bi-broadcast',                 cls: 'state-streaming' },
+  reconnecting: { text: 'Reconnectant', icon: 'bi-arrow-repeat',              cls: 'state-paused' },
+  error:        { text: 'Error',        icon: 'bi-exclamation-triangle-fill', cls: 'state-error' },
+};
+
 /** Etiqueta d'estat (color + icona + text) com a HTML. */
 export function stateBadge(/** @type {StateLook | undefined} */ look) {
   const s = look ?? { text: '?', icon: 'bi-question-circle', cls: 'state-idle' };

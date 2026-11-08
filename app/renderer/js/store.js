@@ -15,6 +15,8 @@
 //   'cue'              ha canviat la preescolta (estat, pista, sortida, volum)
 //   'cart'             ha canviat la botonera (botons, sortida, què sona; fase 5, pas 28c)
 //   'cartPosition'     posició del que sona a la botonera (10 per segon)
+//   'stream'           ha canviat l'emissor d'streaming (estat, connexió, servidors, ajustos; fase 5, pas 31d)
+//   'streamProgress'   temps, bytes i reconnexions de l'emissió (1 per segon, mentre s'emet)
 //   'cuePosition'      posició nova de la preescolta (10 per segon, mentre sona)
 //   'meters'           nivells nous dels mesuradors (25 per segon)
 //   'explorerDurations' durades noves d'àudios de l'explorador (detail: { ruta: segons | null }; fase 5, pas 15)
@@ -32,6 +34,8 @@ export class Store extends EventTarget {
   cue = null;
   /** Botonera (docs/protocol.md, 4.15). @type {any} */
   cart = null;
+  /** Emissor d'streaming (docs/protocol.md, 4.16). @type {any} */
+  stream = null;
   /** @type {any[]} */ devices = [];
   /** @type {any} */ hardware = null;
   /** Ajustos (settings.get, docs/protocol.md 4.9). @type {any} */
@@ -86,6 +90,15 @@ export class Store extends EventTarget {
       this.cart.playing = /** @type {any} */ (e).detail.playing;
       this.#emit('cartPosition');
     });
+    client.addEventListener('ev:stream.state', (e) => {
+      this.stream = /** @type {any} */ (e).detail.stream;
+      this.#emit('stream');
+    });
+    client.addEventListener('ev:stream.progress', (e) => {
+      if (!this.stream) return;
+      this.stream.progress = /** @type {any} */ (e).detail.progress;
+      this.#emit('streamProgress');
+    });
     client.addEventListener('ev:meters', (e) => {
       this.meters = /** @type {any} */ (e).detail;
       this.#emit('meters');
@@ -108,6 +121,7 @@ export class Store extends EventTarget {
     this.recordings = state.recordings ?? [];
     this.cue = state.cue ?? null;
     this.cart = state.cart ?? null;
+    this.stream = state.stream ?? null;
     this.devices = devices.devices;
     this.#emit('reset');
   }
@@ -159,11 +173,17 @@ export class Store extends EventTarget {
     return !!id && [...this.players.values()].some((p) => p.deviceId === id);
   }
 
-  /** Hi ha res sonant o enregistrant? (per decidir si cal confirmar en tancar) */
+  /** S'està emetent per streaming (també connectant o reconnectant)? */
+  get streaming() {
+    return ['connecting', 'streaming', 'reconnecting'].includes(this.stream?.state);
+  }
+
+  /** Hi ha res sonant, enregistrant o emetent? (per decidir si cal confirmar en tancar) */
   get busy() {
     return {
       playing: [...this.players.values()].filter((p) => p.state === 'playing').map((p) => p.id),
       recording: [...this.recorders.values()].filter((r) => r.state === 'recording').map((r) => r.id),
+      streaming: this.streaming,
     };
   }
 

@@ -14,13 +14,13 @@ import { requirePin } from './pin-lock.js';
 /** @typedef {{ id: string, name: string, active: boolean, hasPin: boolean }} Profile */
 
 /**
- * @param {{ request: Request, busy: { playing: string[], recording: string[] },
+ * @param {{ request: Request, busy: { playing: string[], recording: string[], streaming: boolean },
  *           onSwitch: (profile: { id: string, name: string }) => Promise<void> }} options
  *   onSwitch: el motor s'està aturant per canviar de perfil; cal tornar-lo a arrencar
  */
 export async function chooseStartupProfile({ request, busy, onSwitch }) {
-  // Si alguna cosa sona o enregistra, no s'interromp res.
-  if (busy.playing.length > 0 || busy.recording.length > 0) return;
+  // Si alguna cosa sona, enregistra o emet, no s'interromp res.
+  if (busy.playing.length > 0 || busy.recording.length > 0 || busy.streaming) return;
 
   /** @type {Profile[]} */
   let profiles;

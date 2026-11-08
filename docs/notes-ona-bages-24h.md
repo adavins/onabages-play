@@ -29,6 +29,7 @@ Preparació del motor d'Ona Bages Play perquè es pugui reutilitzar a Ona Bages 
 | `PeakMeter`, `SampleRingBuffer` | Mesurador de pics i memòria intermèdia sense bloquejos per al fil d'àudio |
 | `LameEncoder`, `Mp3Frames`, `RecordingRecovery`, `Recorder` | Enregistrament MP3 i recuperació (per si 24h ha de gravar l'emissió) |
 | `ToneGenerator`, `ToneAnalyzer` | To de prova i detecció de talls (proves llargues) |
+| `StreamConnection`, `StreamMetadata` | Emissió cap a un servidor Shoutcast o Icecast i títol de l'emissió (D-140, D-141). Afegit després de la revisió. |
 
 **Pensades per a Play** (es poden aprofitar com a model, però 24h en necessitarà unes de pròpies):
 

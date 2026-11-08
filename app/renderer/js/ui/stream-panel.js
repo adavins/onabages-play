@@ -111,6 +111,7 @@ export class StreamPanel {
             <div class="rec-sizes js-details"></div>
           </div>
         </div>
+        <div class="stream-warning js-dropped"></div>
         <div class="stream-warning js-connection" role="status"></div>
 
         <div class="controls">
@@ -240,10 +241,21 @@ export class StreamPanel {
       if (s.state === 'streaming') parts.push(`connectat fa ${formatDuration(p.connectedSeconds ?? 0)}`);
       parts.push(`${formatBytes(p.bytesSent ?? 0)} enviats`);
       if (p.reconnects > 0) parts.push(p.reconnects === 1 ? '1 reconnexió' : `${p.reconnects} reconnexions`);
-      if (p.bytesDropped > 0) parts.push(`${formatBytes(p.bytesDropped)} perduts (xarxa lenta)`);
       if (typeof p.levelerGainDb === 'number') parts.push(`Niv. ${signedDb(p.levelerGainDb)} dB`);
     }
     el.details.textContent = parts.join(' · ');
+    el.details.title = el.details.textContent;
+
+    // Dades que no s'han pogut enviar (la xarxa no ha donat l'abast o la connexió s'ha tallat): línia pròpia, en groc.
+    const dropped = active && p.bytesDropped > 0;
+    el.dropped.innerHTML = dropped
+      ? `<i class="bi bi-exclamation-triangle-fill"></i> ${escapeHtml(formatBytes(p.bytesDropped))} no enviats `
+        + `(≈ ${escapeHtml(droppedTime(p.bytesDropped, s.bitrateKbps))} d'àudio)`
+      : '';
+    el.dropped.title = dropped
+      ? 'So que no ha arribat al servidor perquè la xarxa no anava prou de pressa o la connexió s\'ha tallat. '
+        + 'Si només passa en un tall, és normal; si va pujant sense talls, la connexió no dona l\'abast per a aquest bitrate.'
+      : '';
   }
 
   /** Nivells nous (meters): [esquerre, dret] en dBFS i el que abaixen el DSP i el LIM. */
@@ -384,6 +396,12 @@ function toggleButton(/** @type {HTMLElement} */ button, /** @type {boolean} */ 
   button.setAttribute('aria-pressed', String(on));
   button.title = title;
   /** @type {HTMLElement} */ (button.querySelector('i')).className = on ? 'bi bi-check-lg' : 'd-none';
+}
+
+/** Quant d'àudio són uns bytes d'MP3: «26 ms» o «1,5 s». */
+function droppedTime(/** @type {number} */ bytes, /** @type {number} */ kbps) {
+  const seconds = bytes * 8 / ((kbps || 128) * 1000);
+  return seconds < 1 ? `${Math.max(1, Math.round(seconds * 1000))} ms` : `${seconds.toFixed(1).replace('.', ',')} s`;
 }
 
 /** «+3,5» o «−2,0». */

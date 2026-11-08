@@ -719,7 +719,7 @@ _ = Task.Run(async () =>
                 lastStreamReconnects = reconnects;
                 long dropped = state.Streamer.BytesDropped;
                 if (dropped > lastStreamDropped)
-                    log.LogWarning("Streaming: la xarxa no va prou de pressa, s'han descartat {Bytes} bytes", dropped - lastStreamDropped);
+                    log.LogWarning("Streaming: no s'han pogut enviar {Bytes} bytes (la xarxa no dona l'abast o la connexió s'ha tallat)", dropped - lastStreamDropped);
                 lastStreamDropped = dropped;
                 if (tick % 10 == 0)
                     await hub.BroadcastAsync(StreamJson.ProgressEvent(state.Streamer), stopping);

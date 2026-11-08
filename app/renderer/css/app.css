@@ -2247,6 +2247,8 @@ body.engine-offline .side-content {
 .stream-mono { flex: none; margin: 0; font-size: 0.85rem; }
 
 .stream-info { margin-top: 0.5rem; }
+/* La línia de detalls (connectat, enviats, reconnexions) es parteix si no hi cap, en lloc de tallar-se. */
+.stream-info .rec-sizes { white-space: normal; overflow: visible; }
 .elapsed.streaming { color: var(--obp-stream); }
 
 .stream-warning { color: var(--obp-warn); font-size: 0.8rem; }
